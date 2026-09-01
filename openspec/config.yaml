@@ -14,8 +14,12 @@ context: |
   - frontend/ — Next.js 16 (App Router), React 19, Tailwind 4, Biome, pnpm.
 
   Architectural rule: the frontend never connects to a database directly. The Go
-  backend owns all persistence and is the frontend's only backend; the frontend
-  calls it over HTTP via BACKEND_URL (server-side only).
+  backend owns all persistence and is the frontend's only backend.
+
+  The frontend builds to a static bundle (pnpm build -> frontend/out/) served by
+  a plain static host; there is no frontend server. It ships no backend URL; how
+  the deployed client reaches the backend at runtime is an open decision (see
+  changes/frontend-static-shell/design.md, O1).
 
   Conventions: Conventional Commits. Each package has its own AGENTS.md / README.md.
 

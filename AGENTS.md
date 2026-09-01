@@ -15,8 +15,11 @@ toolchains — there is no root-level task runner.
 ## Architecture
 
 - The frontend **never connects to a database**. The Go backend owns all
-  persistence and is the frontend's only backend; the frontend reaches it over
-  HTTP via `BACKEND_URL` (server-side only).
+  persistence and is the frontend's only backend.
+- The frontend builds to a **static bundle** (`pnpm build` → `frontend/out/`)
+  served by a plain static host — no Node server. It ships no backend URL; how
+  the deployed client reaches the backend at runtime is not yet decided (see
+  `openspec/changes/frontend-static-shell/design.md`, open question O1).
 - Keep the two packages decoupled: no shared build, no shared code.
 
 ## Changes

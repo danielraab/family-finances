@@ -32,7 +32,6 @@ Then the frontend, in a second terminal:
 
 ```bash
 cd frontend
-cp .env.example .env.local
 pnpm install
 pnpm dev                 # http://localhost:3000
 ```
@@ -40,8 +39,12 @@ pnpm dev                 # http://localhost:3000
 ## Architecture
 
 The frontend never connects to a database. The Go backend owns all persistence
-and is the frontend's only backend; the frontend calls it over HTTP via
-`BACKEND_URL` (server-side only).
+and is the frontend's only backend.
+
+The frontend builds to a static bundle (`pnpm build` → `frontend/out/`) served
+by a plain static host — there is no frontend server. It ships no backend URL;
+how the deployed client reaches the backend at runtime is not yet decided (see
+`openspec/changes/frontend-static-shell/design.md`).
 
 ## Working on the code
 

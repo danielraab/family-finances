@@ -16,10 +16,24 @@ Next.js web client for family-finances.
 - **TypeScript**, App Router, React 19. Components are Server Components by
   default; add `"use client"` only when a component needs it.
 
+## Build output
+
+- `pnpm build` produces a **fully static** site in `out/` (`output: "export"` in
+  `next.config.ts`). There is no Node server — `out/` is served by a plain static
+  host (nginx). Preview it locally with `npx serve out`.
+- This rules out server-only Next.js features: route handlers, middleware,
+  request-time Server Component rendering, `next/image` optimization, ISR,
+  rewrites/redirects/headers, server actions. Server Components still run, but at
+  build time only.
+- The app icon must stay a static asset (`app/icon.svg` + `app/favicon.ico`);
+  regenerate the `.ico` from the SVG with `node scripts/generate-favicon.mjs`
+  (pure Node, no deps).
+
 ## Data
 
-- The frontend talks to the Go backend over HTTP via `BACKEND_URL` (see
-  `.env.example`), server-side only.
+- The frontend ships **no backend URL** and currently fetches nothing. How the
+  deployed static client reaches the Go backend at runtime is an open decision —
+  see `../openspec/changes/frontend-static-shell/design.md` (O1).
 - **Never** open a database connection from the frontend. The Go backend owns
   all persistence.
 
