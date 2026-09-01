@@ -1,0 +1,15 @@
+# Binaries
+/backend
+/familyfinances
+*.exe
+
+# Test / coverage output
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Local env (keep the example tracked)
+.env
+!.env.example

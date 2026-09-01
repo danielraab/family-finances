@@ -1,0 +1,30 @@
+schema: spec-driven
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+context: |
+  Monorepo with two independent deployables:
+  - backend/  — Go 1.26 HTTP API, standard library net/http only, no database yet.
+  - frontend/ — Next.js 16 (App Router), React 19, Tailwind 4, Biome, pnpm.
+
+  Architectural rule: the frontend never connects to a database directly. The Go
+  backend owns all persistence and is the frontend's only backend; the frontend
+  calls it over HTTP via BACKEND_URL (server-side only).
+
+  Conventions: Conventional Commits. Each package has its own AGENTS.md / README.md.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
