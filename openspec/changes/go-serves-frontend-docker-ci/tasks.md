@@ -51,22 +51,28 @@
       condition restricting it to pushes on the default branch;
       `permissions: packages: write`; condition uses
       `github.event.repository.default_branch` dynamically rather than a
-      hardcoded branch name (verified this repo's default branch is
-      `master`, not `main`, via `git ls-remote --symref origin HEAD`) —
-      live verification (skipped on PR/non-default push) happens once this
-      workflow is pushed and GitHub Actions runs it
+      hardcoded branch name (this repo's default branch is `master`, not
+      `main` — verified via `git ls-remote --symref origin HEAD`).
+      **Live-verified**: pushed this change's branch and confirmed via the
+      GitHub Actions API that `frontend`/`backend` ran and `publish` was
+      correctly `skipped` (non-default branch) — see run
+      https://github.com/danielraab/family-finances/actions/runs/33577960783.
+      The first push also caught a real bug (`pnpm/action-setup@v4` doesn't
+      honor `defaults.run.working-directory`, needs an explicit
+      `package_json_file:`), fixed and re-verified green in a follow-up
+      commit/push.
 - [x] 3.4 In `publish`, add a step that queries the GHCR tag list
       (`GET https://ghcr.io/v2/<owner>/<repo>/tags/list`) for tags matching
       today's `YYYYMMDD` prefix, treats a 404/empty result as zero existing
       tags, and computes the next `N`; the counting/regex logic was unit
-      tested standalone in bash with both a populated and an empty tag list
-      (see session transcript) — the live HTTP calls can only be verified
-      once this runs in Actions
+      tested standalone in bash with both a populated and an empty tag list.
+      The `publish` job itself (and thus this step) only runs on the default
+      branch, so the live HTTP calls remain unverified until a push there —
+      not exercised by this branch's push by design
 - [x] 3.5 Add `docker/login-action` (ghcr.io, `GITHUB_TOKEN`) and
       `docker/build-push-action` building the root `Dockerfile`, pushing
-      `ghcr.io/<owner>/<repo>:YYYYMMDD-N` and `:latest`; verify by merging to
-      the default branch and confirming the image appears in the repo's GHCR
-      packages with the expected tag
+      `ghcr.io/<owner>/<repo>:YYYYMMDD-N` and `:latest`; not exercised for
+      the same reason as 3.4 — first real run happens on a push to `master`
 
 ## 4. Documentation
 
