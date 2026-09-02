@@ -19,8 +19,9 @@ Next.js web client for family-finances.
 ## Build output
 
 - `pnpm build` produces a **fully static** site in `out/` (`output: "export"` in
-  `next.config.ts`). There is no Node server — `out/` is served by a plain static
-  host (nginx). Preview it locally with `npx serve out`.
+  `next.config.ts`). There is no Node server — in production the Go backend
+  embeds and serves `out/` directly (no nginx, no separate static host).
+  Preview it locally with `npx serve out`.
 - This rules out server-only Next.js features: route handlers, middleware,
   request-time Server Component rendering, `next/image` optimization, ISR,
   rewrites/redirects/headers, server actions. Server Components still run, but at
@@ -31,9 +32,11 @@ Next.js web client for family-finances.
 
 ## Data
 
-- The frontend ships **no backend URL** and currently fetches nothing. How the
-  deployed static client reaches the Go backend at runtime is an open decision —
-  see `../openspec/changes/frontend-static-shell/design.md` (O1).
+- The frontend ships **no backend URL** and currently fetches nothing. At
+  runtime, the Go backend embeds and serves this build directly (same
+  origin) — see `../backend/AGENTS.md` §"Serving the frontend". When code
+  here does start fetching, call relative `/api/...` paths; no base URL, env
+  var, or CORS handling is needed since the backend serves both.
 - **Never** open a database connection from the frontend. The Go backend owns
   all persistence.
 

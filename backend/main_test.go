@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-func TestHandleRoot(t *testing.T) {
+func TestHandleHealthz(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", handleRoot)
+	mux.HandleFunc("GET /api/healthz", handleHealthz)
 
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/healthz", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)

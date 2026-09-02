@@ -1,0 +1,11 @@
+.git
+.github
+openspec
+.claude
+**/*.md
+
+frontend/node_modules
+frontend/out
+frontend/.next
+
+backend/static/out
