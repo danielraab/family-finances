@@ -26,6 +26,11 @@ var (
 	ErrInviteInvalid = errors.New("invite is invalid")
 	// ErrIdentityConflict: the identity is already linked to another account.
 	ErrIdentityConflict = errors.New("identity already linked to another account")
+	// ErrEmailInUse: an OIDC sign-in's address already belongs to another
+	// account, but the provider did not assert it as verified, so the
+	// automatic flow refuses to attach or create — the address can't be
+	// reused for a new account either, since it already belongs to one.
+	ErrEmailInUse = errors.New("provider did not verify this email address, and it already belongs to another account")
 	// ErrInvalidEmail: the address is syntactically invalid.
 	ErrInvalidEmail = errors.New("invalid email address")
 	// ErrOIDCNotConfigured: an OIDC route was hit but no provider is set.
@@ -39,7 +44,7 @@ var (
 var Sentinels = []error{
 	ErrNotFound, ErrSignupDisabled, ErrDomainNotAllowed, ErrTokenInvalid,
 	ErrTokenExpired, ErrTokenConsumed, ErrInviteInvalid, ErrIdentityConflict,
-	ErrInvalidEmail, ErrOIDCNotConfigured, ErrEmailRequired,
+	ErrEmailInUse, ErrInvalidEmail, ErrOIDCNotConfigured, ErrEmailRequired,
 }
 
 // NewUser is the input to account creation.
