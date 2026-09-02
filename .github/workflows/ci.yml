@@ -32,6 +32,24 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: familyfinances
+          POSTGRES_PASSWORD: familyfinances
+          POSTGRES_DB: familyfinances
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U familyfinances -d familyfinances"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Present so the internal/storage/postgres integration tests run rather
+      # than skip. A bare `go test ./...` without this still passes.
+      DATABASE_URL: postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

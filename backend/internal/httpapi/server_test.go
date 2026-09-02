@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,11 +9,19 @@ import (
 	"testing/fstest"
 )
 
+// stubPinger is a DBPinger whose Ping returns err.
+type stubPinger struct{ err error }
+
+func (s stubPinger) Ping(context.Context) error { return s.err }
+
 func testDeps() Deps {
-	return Deps{Static: fstest.MapFS{
-		"index.html": {Data: []byte("<html>home</html>")},
-		"404.html":   {Data: []byte("<html>not found</html>")},
-	}}
+	return Deps{
+		Static: fstest.MapFS{
+			"index.html": {Data: []byte("<html>home</html>")},
+			"404.html":   {Data: []byte("<html>not found</html>")},
+		},
+		DB: stubPinger{},
+	}
 }
 
 func TestRoutesHealthz(t *testing.T) {

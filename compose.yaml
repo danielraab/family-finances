@@ -1,0 +1,44 @@
+# Reference topology for family-finances: the single application image (Go
+# backend serving the embedded frontend) plus its PostgreSQL database.
+#
+# Local development:
+#   docker compose up -d db        # just the database; run `go run .` on the host
+#   docker compose up --build      # the whole stack
+#
+# This same shape is what CI runs (a postgres service container) and what a
+# production deployment mirrors.
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: familyfinances
+      POSTGRES_PASSWORD: familyfinances
+      POSTGRES_DB: familyfinances
+    ports:
+      # Exposed so a host-side `go run .` can use the DATABASE_URL from
+      # backend/.env.example. Not required for the containerised app.
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U familyfinances -d familyfinances"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://familyfinances:familyfinances@db:5432/familyfinances?sslmode=disable
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

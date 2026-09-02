@@ -13,6 +13,7 @@ import (
 
 	"at.draab/familyfinances/internal/config"
 	"at.draab/familyfinances/internal/httpapi"
+	"at.draab/familyfinances/internal/storage/postgres"
 )
 
 func main() {
@@ -22,13 +23,30 @@ func main() {
 
 	cfg := config.Load()
 
+	if cfg.DatabaseURL == "" {
+		slog.Error("DATABASE_URL is required and unset")
+		os.Exit(1)
+	}
+
+	pool, err := postgres.NewPool(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		slog.Error("connect database", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	if err := postgres.Migrate(context.Background(), pool); err != nil {
+		slog.Error("apply migrations", "error", err)
+		os.Exit(1)
+	}
+
 	staticFS, err := fs.Sub(staticFiles, "static/out")
 	if err != nil {
 		slog.Error("sub static fs", "error", err)
 		os.Exit(1)
 	}
 
-	srv := httpapi.New(cfg, httpapi.Deps{Static: staticFS})
+	srv := httpapi.New(cfg, httpapi.Deps{Static: staticFS, DB: pool})
 
 	if err := run(srv); err != nil {
 		slog.Error("server", "error", err)

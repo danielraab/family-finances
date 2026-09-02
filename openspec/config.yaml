@@ -10,7 +10,8 @@ schema: spec-driven
 #     Domain: e-commerce platform
 context: |
   Monorepo with two packages, separate toolchains for local dev:
-  - backend/  — Go 1.26 HTTP API, standard library net/http only, no database yet.
+  - backend/  — Go 1.26 HTTP API on net/http (no web framework/router/ORM);
+    persistence is PostgreSQL via github.com/jackc/pgx/v5 (DATABASE_URL required).
   - frontend/ — Next.js 16 (App Router), React 19, Tailwind 4, Biome, pnpm.
 
   Architectural rule: the frontend never connects to a database directly. The Go
@@ -20,9 +21,12 @@ context: |
   production, the Go backend embeds that bundle via go:embed and serves it
   directly (single Docker image, root Dockerfile) — no Node server, no separate
   static host, no nginx, no BACKEND_URL. The frontend calls the backend
-  same-origin under /api/. CI (.github/workflows/ci.yml) lints/tests both
-  packages and publishes the image to GHCR (tag YYYYMMDD-N) on pushes to the
-  default branch.
+  same-origin under /api/. The single app image runs alongside an external
+  PostgreSQL it does not contain; root compose.yaml (app + postgres:17 + named
+  volume) is the reference topology for local dev, CI, and production. CI
+  (.github/workflows/ci.yml) lints/tests both packages (backend job against a
+  postgres service container) and publishes the image to GHCR (tag YYYYMMDD-N)
+  on pushes to the default branch.
 
   Conventions: Conventional Commits. Each package has its own AGENTS.md / README.md.
 

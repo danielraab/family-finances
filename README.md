@@ -6,7 +6,7 @@ A family finances application: a Go HTTP API and a Next.js web client.
 
 | Path        | What                                                                      |
 | ----------- | ------------------------------------------------------------------------- |
-| `backend/`  | Go HTTP API (standard library `net/http`). Owns all persistence.         |
+| `backend/`  | Go HTTP API (`net/http`, no framework). Owns all persistence (PostgreSQL). |
 | `frontend/` | Next.js 16 web client (App Router, React 19, Tailwind 4, Biome).         |
 | `openspec/` | Change proposals and specs — how non-trivial work is planned.            |
 
@@ -19,13 +19,16 @@ production they ship as a single Docker image — see Architecture below.
 - Go 1.26+
 - Node 20+
 - pnpm 11+ (`corepack enable`)
+- Docker (for the PostgreSQL database)
 
 ## Getting started
 
-Run the backend:
+Start PostgreSQL, then the backend:
 
 ```bash
+docker compose up -d db  # PostgreSQL on localhost:5432
 cd backend
+export DATABASE_URL=postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
 go run .                 # http://localhost:8080
 ```
 
@@ -40,7 +43,10 @@ pnpm dev                 # http://localhost:3000
 ## Architecture
 
 The frontend never connects to a database. The Go backend owns all persistence
-and is the frontend's only backend.
+in **PostgreSQL** (`DATABASE_URL`, required) and is the frontend's only
+backend. The root `compose.yaml` (app + `postgres:17` + a named volume) is the
+reference topology for local development, CI, and production; the single app
+image runs alongside a Postgres it does not contain.
 
 The frontend builds to a static bundle (`pnpm build` → `frontend/out/`). In
 production, the Go backend embeds that bundle and serves it directly — there
@@ -51,13 +57,20 @@ ships no backend URL: it's served same-origin by the backend, so it calls
 ## Build & run the container
 
 ```bash
+docker compose up --build     # app + PostgreSQL; http://localhost:8080
+```
+
+Or build and run the image alone against your own database:
+
+```bash
 docker build -t family-finances .
-docker run -p 8080:8080 family-finances   # http://localhost:8080
+docker run -p 8080:8080 -e DATABASE_URL=... family-finances
 ```
 
 The image is a multi-stage build: it builds the frontend, embeds the result
 into the Go binary, and ships only the compiled binary in a minimal
-non-root runtime image. See the root `Dockerfile`.
+non-root runtime image. See the root `Dockerfile`. It needs a reachable
+`DATABASE_URL` at startup — it applies migrations and then serves.
 
 CI (`.github/workflows/ci.yml`) lints and tests both packages on every push
 and pull request, and publishes this image to the GitHub Container Registry

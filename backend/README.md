@@ -5,10 +5,15 @@ Go HTTP API for family-finances.
 ## Commands (run from `backend/`)
 
 ```bash
+docker compose up -d db   # from the repo root — PostgreSQL on localhost:5432
+export DATABASE_URL=postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
 go run .      # start the server (default port 8080, override with PORT)
-go test ./... # run tests
+go test ./... # run tests (Postgres integration tests skip without DATABASE_URL)
 go build .    # production build
 ```
+
+`go run .` / `go build .` binaries fail fast if `DATABASE_URL` is unset or the
+database is unreachable; they apply embedded migrations at startup.
 
 ## Endpoints
 

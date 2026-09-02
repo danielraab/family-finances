@@ -30,9 +30,15 @@ Architecture below).
   single Docker image (root `Dockerfile`) that fuses the two — that fusion is
   deliberate and confined to the release build; it does not change how you
   develop each package day to day.
+- The backend requires a **PostgreSQL** database (`DATABASE_URL`). The single
+  app image runs alongside a Postgres it does not contain: the root
+  `compose.yaml` (app + `postgres:17` + a named volume) is the reference
+  topology for local development, CI, and production. The frontend still never
+  touches the database — the Go backend remains its only backend.
 - CI (`.github/workflows/ci.yml`) lints and tests both packages on every push
-  and pull request, and publishes the image to GitHub Container Registry
-  (tagged with the pushed git tag, plus `latest`) when a git tag is pushed.
+  and pull request (the backend job runs against a `postgres` service
+  container), and publishes the image to GitHub Container Registry (tagged with
+  the pushed git tag, plus `latest`) when a git tag is pushed.
 
 ## Changes
 

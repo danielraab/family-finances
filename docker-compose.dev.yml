@@ -1,0 +1,57 @@
+# Local development infrastructure: PostgreSQL + Mailpit (SMTP catcher).
+#
+# This file does NOT run the app — start the backend on the host against these:
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   cd backend
+#   export DATABASE_URL=postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
+#   export SMTP_HOST=localhost SMTP_PORT=1025 SMTP_TLS=none
+#   go run .
+#
+# Mailpit web UI: http://localhost:8025 — every email the backend "sends"
+# lands there instead of a real inbox.
+#
+# For the full containerised stack (app image + db) use compose.yaml instead.
+
+name: family-finances-dev
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: familyfinances
+      POSTGRES_PASSWORD: familyfinances
+      POSTGRES_DB: familyfinances
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U familyfinances -d familyfinances"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    environment:
+      # Accept mail with or without auth and over plain connections — this is a
+      # throwaway local catcher, never a real relay.
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "500"
+      MP_DATABASE: /data/mailpit.db
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI + API
+    volumes:
+      - mailpit-dev:/data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata-dev:
+  mailpit-dev:

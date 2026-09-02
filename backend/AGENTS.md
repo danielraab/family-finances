@@ -4,11 +4,13 @@ Go HTTP API for family-finances. Module `at.draab/familyfinances`.
 
 ## Stack
 
-- Go 1.26, **standard library only** (`net/http`, `log/slog`, `os`, `database/sql`
-  when persistence lands). No web framework, no router library, no ORM.
-- Do not add a dependency without an OpenSpec proposal. A database *driver*
-  (e.g. `modernc.org/sqlite`) is the one anticipated exception and still needs
-  the proposal.
+- Go 1.26. `net/http` (Go 1.22+ pattern routing), `log/slog`, `os`.
+  **No web framework, no router library, no ORM.**
+- Third-party dependencies are allowed but deliberate: add one only through an
+  OpenSpec proposal that justifies it, and keep the set small. Current
+  dependencies: `github.com/jackc/pgx/v5` (PostgreSQL driver + pool).
+- Persistence is **PostgreSQL only**, reached through a `pgxpool.Pool` built
+  from `DATABASE_URL` (required, no default). See "Persistence" below.
 
 ## Package layout
 
@@ -39,8 +41,9 @@ backend/
     │   ├── handler.go   #   http.Handler for /api/accounts…; maps HTTP ⇄ service
     │   └── *_test.go
     └── storage/
-        ├── memory/      #   in-memory Store implementations — default for dev and tests
-        └── sqlite/      #   real persistence, added via its own proposal
+        ├── memory/      #   in-memory Store implementations — default for tests
+        └── postgres/    #   real persistence — pgxpool.Pool (NewPool), embedded
+            #   migrations/*.sql applied at startup (Migrate), Store impls
 ```
 
 ### Rules that keep this layout honest
@@ -64,9 +67,11 @@ backend/
   value.
 - **`main.go` is wiring only** — no route strings, no business logic:
   1. `os.Args[1] == "healthcheck"` → run the probe, exit.
-  2. `config.Load()`.
-  3. Build the storage implementation from config.
-  4. Build each domain service + handler; hand them to `httpapi.New`.
+  2. `config.Load()`; fail fast if `DATABASE_URL` is empty.
+  3. `postgres.NewPool(ctx, cfg.DatabaseURL)`, then `postgres.Migrate(ctx, pool)`;
+     either error → log and exit. `defer pool.Close()`.
+  4. Build each domain service + handler with a `storage/postgres` Store; hand
+     them to `httpapi.New` (along with the pool for the health probe).
   5. `fs.Sub` the embedded FS, pass it in.
   6. `http.Server` with SIGINT/SIGTERM → `srv.Shutdown(ctx)`.
 - **Routing lives in `internal/httpapi`.** `Routes()` builds the `*http.ServeMux`
@@ -86,10 +91,28 @@ backend/
 
 - Routing uses Go 1.22+ pattern syntax: `mux.HandleFunc("GET /api/accounts/{id}", h)`.
 - Configuration comes from environment variables, loaded once in
-  `internal/config`. Current vars are in `.env.example` (`PORT`, default
-  `8080`). Go does not auto-load `.env` — export the vars or use direnv.
+  `internal/config`. Current vars are in `.env.example` (`PORT` default `8080`;
+  `DATABASE_URL` required, no default). Go does not auto-load `.env` — export
+  the vars or use direnv.
 - Logging via `log/slog` to stderr; one structured line per request from the
   logging middleware.
+
+## Persistence
+
+- **PostgreSQL only.** `internal/storage/postgres` owns the `pgxpool.Pool`
+  (`NewPool`, connectivity-checked at startup) and the migration runner
+  (`Migrate`): `.sql` files under `migrations/`, embedded with `//go:embed`,
+  named `NNNN_slug.sql`, applied in order at startup inside a transaction each,
+  tracked in `schema_migrations`. Forward-only — a bad migration is fixed by a
+  new one. No migration-tool dependency.
+- `internal/storage/memory` stays as the fast unit/handler-test store.
+- Domain packages still import no `storage` package and no driver: they declare
+  a `Store` interface, `internal/storage/postgres` implements it, `main`
+  injects it.
+- `GET /api/healthz` pings the database; it returns `503` when the DB is down.
+- `internal/storage/postgres` integration tests need a real database: they read
+  `DATABASE_URL` and **skip** when it is unset, so `go test ./...` passes on a
+  bare checkout. CI supplies a `postgres` service container.
 
 ## Serving the frontend
 
@@ -126,11 +149,13 @@ no separate static host in production. The mechanics are load-bearing:
 ## Layout status
 
 The `internal/` layout above is in place (`internal/config`,
-`internal/httpapi`, `internal/storage/memory`). `package main` is
-`main.go` (wiring + graceful shutdown), `healthcheck.go`, and `embed.go`.
-No `internal/<noun>/` domain package exists yet — the first resource
-endpoint adds one (with its `storage/memory` implementation) through
-OpenSpec, following the four-file shape and dependency rules above.
+`internal/httpapi`, `internal/storage/memory`, `internal/storage/postgres`).
+`package main` is `main.go` (wiring + graceful shutdown), `healthcheck.go`, and
+`embed.go`. `internal/storage/postgres` holds the pool + migration runner; it
+has no `Store` implementations yet. No `internal/<noun>/` domain package exists
+yet — the first resource endpoint adds one (with its `storage/postgres`
+implementation and a migration) through OpenSpec, following the four-file shape
+and dependency rules above.
 
 ## Before you're done
 
@@ -143,6 +168,12 @@ go test ./...
 ## Commands
 
 ```bash
+docker compose up -d db          # from the repo root — start PostgreSQL
+export DATABASE_URL=postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
 go run .          # start on :8080 (or $PORT)
 go build .        # production binary (serves an empty site without a frontend build)
 ```
+
+`go run .` / `go build .` fail fast without a reachable `DATABASE_URL`. The
+whole stack (app image + db) comes up with `docker compose up --build` from the
+repo root.

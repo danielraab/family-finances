@@ -25,3 +25,24 @@ func TestLoadPortOverride(t *testing.T) {
 		t.Fatalf("Port = %q, want %q", cfg.Port, "9999")
 	}
 }
+
+func TestLoadDatabaseURLEmptyWhenUnset(t *testing.T) {
+	t.Setenv("DATABASE_URL", "")
+
+	cfg := config.Load()
+
+	if cfg.DatabaseURL != "" {
+		t.Fatalf("DatabaseURL = %q, want empty", cfg.DatabaseURL)
+	}
+}
+
+func TestLoadDatabaseURLFromEnv(t *testing.T) {
+	const dsn = "postgres://u:p@localhost:5432/family_finances?sslmode=disable"
+	t.Setenv("DATABASE_URL", dsn)
+
+	cfg := config.Load()
+
+	if cfg.DatabaseURL != dsn {
+		t.Fatalf("DatabaseURL = %q, want %q", cfg.DatabaseURL, dsn)
+	}
+}
