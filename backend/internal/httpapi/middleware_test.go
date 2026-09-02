@@ -25,8 +25,46 @@ func TestRecoverPanicYields500(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
-	if !strings.Contains(buf.String(), "panic recovered") {
-		t.Fatalf("expected panic log, got: %s", buf.String())
+
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(nonEmptyLines(buf.String())[0]), &entry); err != nil {
+		t.Fatalf("panic log line not JSON: %v", err)
+	}
+	if entry["msg"] != "panic recovered" {
+		t.Fatalf("msg = %v, want %q", entry["msg"], "panic recovered")
+	}
+	if entry["request_id"] == nil || entry["request_id"] == "" {
+		t.Fatalf("panic log missing request_id: %s", buf.String())
+	}
+}
+
+func TestRequestContextSetsHeaderAndLoggerMatch(t *testing.T) {
+	var buf bytes.Buffer
+	restore := swapDefaultLogger(&buf)
+	defer restore()
+
+	var seenID string
+	h := withMiddleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seenID = RequestID(r.Context())
+	}))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+
+	header := rec.Header().Get("X-Request-Id")
+	if header == "" {
+		t.Fatal("X-Request-Id header not set")
+	}
+	if seenID != header {
+		t.Fatalf("RequestID(ctx) = %q, X-Request-Id = %q, want equal", seenID, header)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(nonEmptyLines(buf.String())[0]), &entry); err != nil {
+		t.Fatalf("log line not JSON: %v", err)
+	}
+	if entry["request_id"] != header {
+		t.Fatalf("log request_id = %v, want %q", entry["request_id"], header)
 	}
 }
 

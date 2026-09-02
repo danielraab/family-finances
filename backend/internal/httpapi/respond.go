@@ -3,7 +3,6 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 )
 
@@ -25,13 +24,13 @@ func writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		slog.ErrorContext(r.Context(), "encode json response", "error", err)
+		Logger(r.Context()).ErrorContext(r.Context(), "encode json response", "error", err)
 	}
 }
 
-// writeError maps err to a status code and writes a JSON error body. Unknown
-// errors become 500 and are logged; mapped sentinels use their status and a
-// safe message.
+// writeError maps err to a status code and writes a JSON error body carrying
+// the request id (so a caller can quote it). Unknown errors become 500 and are
+// logged with the full error; mapped sentinels use their status and message.
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusInternalServerError
 	for sentinel, code := range errStatus {
@@ -41,11 +40,13 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		}
 	}
 
+	body := map[string]string{"request_id": RequestID(r.Context())}
 	if status == http.StatusInternalServerError {
-		slog.ErrorContext(r.Context(), "unhandled request error", "error", err)
-		writeJSON(w, r, status, map[string]string{"error": "internal server error"})
-		return
+		Logger(r.Context()).ErrorContext(r.Context(), "unhandled request error", "error", err)
+		body["error"] = "internal server error"
+	} else {
+		body["error"] = err.Error()
 	}
 
-	writeJSON(w, r, status, map[string]string{"error": err.Error()})
+	writeJSON(w, r, status, body)
 }

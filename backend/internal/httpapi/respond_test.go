@@ -3,7 +3,6 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -35,9 +34,15 @@ func TestWriteErrorUnknownIs500(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
-	body, _ := io.ReadAll(rec.Body)
-	if want := `"internal server error"`; !contains(string(body), want) {
-		t.Fatalf("body = %s, want to contain %s", body, want)
+	var got map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got["error"] != "internal server error" {
+		t.Fatalf("error = %q, want %q", got["error"], "internal server error")
+	}
+	if _, ok := got["request_id"]; !ok {
+		t.Fatalf("body missing request_id key: %v", got)
 	}
 }
 
@@ -52,13 +57,4 @@ func TestWriteErrorMappedSentinel(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
-}
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

@@ -11,7 +11,10 @@ import (
 
 type ctxKey int
 
-const requestIDKey ctxKey = 0
+const (
+	requestIDKey ctxKey = iota
+	loggerKey
+)
 
 // RequestID returns the request id attached to ctx by the middleware, or "" if
 // there is none.
@@ -20,25 +23,44 @@ func RequestID(ctx context.Context) string {
 	return id
 }
 
-// withMiddleware wraps h with the standard chain: panic recovery (outermost,
-// so a panic in any inner layer still yields a 500), then a per-request id and
-// structured access log.
+// Logger returns the request-scoped logger (tagged with request_id), or the
+// default logger if none is set. Handlers should log through this so their
+// lines correlate with the access log.
+func Logger(ctx context.Context) *slog.Logger {
+	if l, ok := ctx.Value(loggerKey).(*slog.Logger); ok {
+		return l
+	}
+	return slog.Default()
+}
+
+// withMiddleware wraps h with the standard chain, outermost first:
+// requestContext (assigns the request id, request-scoped logger, and
+// X-Request-Id header), recoverPanic (turns a panic in any inner layer into a
+// 500), then logRequests (one structured access-log line per request).
 func withMiddleware(h http.Handler) http.Handler {
-	return recoverPanic(logRequests(h))
+	return requestContext(recoverPanic(logRequests(h)))
+}
+
+func requestContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := newRequestID()
+		w.Header().Set("X-Request-Id", id)
+
+		ctx := context.WithValue(r.Context(), requestIDKey, id)
+		ctx = context.WithValue(ctx, loggerKey, slog.With("request_id", id))
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := newRequestID()
-		ctx := context.WithValue(r.Context(), requestIDKey, id)
-		logger := slog.With("request_id", id)
-		ctx = withLogger(ctx, logger)
-
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
-		next.ServeHTTP(rec, r.WithContext(ctx))
 
-		logger.LogAttrs(ctx, slog.LevelInfo, "request",
+		next.ServeHTTP(rec, r)
+
+		Logger(r.Context()).LogAttrs(r.Context(), slog.LevelInfo, "request",
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.Int("status", rec.status),
@@ -51,7 +73,7 @@ func recoverPanic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if v := recover(); v != nil {
-				slog.ErrorContext(r.Context(), "panic recovered", "value", v)
+				Logger(r.Context()).ErrorContext(r.Context(), "panic recovered", "value", v)
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 		}()
@@ -85,21 +107,4 @@ func newRequestID() string {
 		return "unknown"
 	}
 	return hex.EncodeToString(b[:])
-}
-
-type loggerCtxKey int
-
-const loggerKey loggerCtxKey = 0
-
-func withLogger(ctx context.Context, l *slog.Logger) context.Context {
-	return context.WithValue(ctx, loggerKey, l)
-}
-
-// Logger returns the request-scoped logger, or the default logger if none is
-// set.
-func Logger(ctx context.Context) *slog.Logger {
-	if l, ok := ctx.Value(loggerKey).(*slog.Logger); ok {
-		return l
-	}
-	return slog.Default()
 }
