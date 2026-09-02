@@ -56,6 +56,7 @@ type Params struct {
 	InviteTTL           time.Duration
 	MagicLinkTTL        time.Duration
 	OIDCIssuer          string
+	OIDCLabel           string
 }
 
 // Service is the auth use-case layer. It depends only on the Store interface
@@ -165,6 +166,17 @@ func (s *Service) CompleteEmailLogin(ctx context.Context, token, currentUserID s
 }
 
 // --- OIDC -----------------------------------------------------------------
+
+// OIDCLogin reports whether OIDC sign-in is available (an OIDC client was
+// constructed at startup) and, if so, its configured button label. The web
+// client reads this via GET /api/auth/config to decide whether to show the
+// provider button on the login page.
+func (s *Service) OIDCLogin() (label string, ok bool) {
+	if s.oidc == nil {
+		return "", false
+	}
+	return s.p.OIDCLabel, true
+}
 
 // StartOIDC creates per-attempt state and returns the provider authorization
 // URL to redirect the browser to. returnTo is a post-login in-app path,

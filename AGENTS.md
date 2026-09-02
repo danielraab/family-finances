@@ -38,8 +38,23 @@ Architecture below).
   touches the database — the Go backend remains its only backend.
 - CI (`.github/workflows/ci.yml`) lints and tests both packages on every push
   and pull request (the backend job runs against a `postgres` service
-  container), and publishes the image to GitHub Container Registry (tagged with
-  the pushed git tag, plus `latest`) when a git tag is pushed.
+  container), runs a **contract** job (see API contract below), and publishes
+  the image to GitHub Container Registry (tagged with the pushed git tag, plus
+  `latest`) when a git tag is pushed.
+
+## API contract
+
+- `openapi/openapi.yaml` is the **hand-written source of truth** for the
+  backend's JSON HTTP API (spec-first; no server code is generated from it). It
+  is served at `GET /api/openapi.yaml`. See `openapi/README.md`.
+- Two generated artifacts are derived from it and **committed**; edit the spec
+  and regenerate both in the same change:
+  - `backend/openapi.yaml` — a synced copy (`//go:embed` can't cross `..`);
+    `cd backend && go generate ./...`.
+  - `frontend/src/api/schema.d.ts` — `cd frontend && pnpm generate:api`.
+- The CI `contract` job lints the spec and fails on any drift in those two
+  files. The Docker build copies `openapi/openapi.yaml` into `backend/` before
+  compiling, so the shipped document is always the source of truth.
 
 ## Changes
 

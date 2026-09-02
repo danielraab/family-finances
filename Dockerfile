@@ -8,10 +8,14 @@ RUN corepack enable && pnpm install --frozen-lockfile
 COPY frontend/ ./
 RUN pnpm build
 
-# ---- backend: embed the static export and compile ----
+# ---- backend: embed the static export + API contract and compile ----
 FROM golang:1.26-alpine AS backend
 WORKDIR /src/backend
 COPY backend/ ./
+# The API contract lives at repo-root openapi/; //go:embed cannot reach a
+# parent dir, so overwrite the committed copy with the source of truth before
+# compiling (the embedded doc is then always current, regardless of drift).
+COPY openapi/openapi.yaml ./openapi.yaml
 RUN rm -rf static/out && mkdir -p static/out
 COPY --from=frontend /src/frontend/out/. static/out/
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/server .

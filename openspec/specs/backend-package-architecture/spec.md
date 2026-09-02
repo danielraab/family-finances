@@ -105,11 +105,12 @@ place.
 package's `http.Handler` under its own `/api/<noun>/` prefix, and route every
 non-`/api/` path to the static handler. Backend routes SHALL always live under
 `/api/`. An unmatched path under `/api/` SHALL receive a JSON `404` rather than
-falling through to the static site. `internal/httpapi` MAY provide
-authentication middleware that resolves a request-scoped user from a session
-token (bearer header or cookie); that middleware SHALL NOT import a storage
-package or database driver, depending instead on an interface satisfied by the
-auth service.
+falling through to the static site. `internal/httpapi` SHALL also serve the
+embedded OpenAPI document at `GET /api/openapi.yaml`. `internal/httpapi` MAY
+provide authentication middleware that resolves a request-scoped user from a
+session token (bearer header or cookie); that middleware SHALL NOT import a
+storage package or database driver, depending instead on an interface satisfied
+by the auth service.
 
 #### Scenario: Health route served under /api/
 
@@ -127,6 +128,12 @@ auth service.
   backend route
 - **THEN** the response is a JSON `404` and contains no frontend HTML/JS
 
+#### Scenario: OpenAPI document route is served by httpapi
+
+- **WHEN** a client requests `GET /api/openapi.yaml`
+- **THEN** `internal/httpapi` returns `200` with `Content-Type: application/yaml`
+  and the embedded document
+
 #### Scenario: Auth middleware stays free of storage imports
 
 - **WHEN** the import graph of `internal/httpapi` is inspected
@@ -142,6 +149,12 @@ that consumes it (`staticHandler` and its SPA-fallback behaviour) SHALL live in
 `internal/httpapi/static.go` and operate on an `fs.FS` value passed in by
 `main.go` via `fs.Sub`.
 
+A second `//go:embed` directive in `package main` at the module root SHALL embed
+`backend/openapi.yaml` — a committed copy of `openapi/openapi.yaml`, kept
+byte-identical by a sync mechanism and a CI check. `main.go` SHALL pass the
+embedded bytes into `internal/httpapi`, which serves them; `internal/httpapi`
+SHALL NOT itself reference `embed` or the file path.
+
 #### Scenario: Embed directive location
 
 - **WHEN** `backend/embed.go` is read
@@ -153,6 +166,18 @@ that consumes it (`staticHandler` and its SPA-fallback behaviour) SHALL live in
 - **WHEN** `internal/httpapi` serves static files
 - **THEN** its `staticHandler` accepts an `fs.FS` parameter and does not
   itself reference `embed` or `static/out`
+
+#### Scenario: OpenAPI document is embedded by package main
+
+- **WHEN** the `package main` files at the `backend/` module root are read
+- **THEN** one of them contains a `//go:embed` directive for `openapi.yaml` and
+  the bytes are handed to `internal/httpapi` for serving
+
+#### Scenario: httpapi serves the document without embedding it itself
+
+- **WHEN** the source of `internal/httpapi` is inspected
+- **THEN** it receives the OpenAPI bytes as a passed-in value and contains no
+  `//go:embed` directive and no reference to `openapi.yaml` on disk
 
 ### Requirement: In-memory storage is the default store home
 

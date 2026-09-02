@@ -11,7 +11,10 @@ Go HTTP API for family-finances. Module `at.draab/familyfinances`.
   dependencies: `github.com/jackc/pgx/v5` (PostgreSQL driver + pool),
   `github.com/coreos/go-oidc/v3` + `golang.org/x/oauth2` (OIDC discovery,
   `id_token` verification, and the authorization-code exchange — see
-  `internal/oidcauth`).
+  `internal/oidcauth`), and `github.com/getkin/kin-openapi` — **test-support
+  only**: `internal/openapicheck` validates handler-test responses against
+  `openapi/openapi.yaml`. A guard test (`openapi_guard_test.go`) asserts it
+  never enters the server binary's dependency graph.
 - Persistence is **PostgreSQL only**, reached through a `pgxpool.Pool` built
   from `DATABASE_URL` (required, no default). See "Persistence" below.
 
@@ -98,7 +101,8 @@ to status codes in the one place — `httpapi/respond.go`.
   4. Build each domain service + handler with a `storage/postgres` Store; hand
      them to `httpapi.New` (along with the pool for the health probe). For auth
      that means: `postgres.NewAuthStore(pool)`, `mailer.New(cfg.SMTP)`, an
-     `oidcauth.New(ctx, …)` client **only when `OIDC_ISSUER` is set**,
+     `oidcauth.New(ctx, …)` client **only when `OIDC_ISSUER` and
+     `OIDC_CLIENT_ID` are both set**,
      `auth.NewService(…)`, `auth.NewHandler(svc, RenderError: httpapi.WriteError)`;
      pass the service as `Deps.Auth` (the `Authenticator`) and the handler as
      `Deps.AuthHandler` (mounted at `/api/auth/`).
@@ -164,6 +168,10 @@ to status codes in the one place — `httpapi/respond.go`.
   (`GET /api/auth/oidc/start` → code + PKCE + nonce). They link to the same
   `user` by verified email (magic link always proves it; OIDC only on
   `email_verified: true`), or explicitly while authenticated.
+- **`GET /api/auth/config`** — unauthenticated; reports which sign-in methods
+  the client should show. Today: `{ "oidc": { "label", "start_path" } }` when an
+  OIDC provider is configured, else `{ "oidc": null }`. `label` is `OIDC_LABEL`.
+  `Service.OIDCLogin() (label string, ok bool)` is the accessor.
 - **Registration policy, all env-driven** (`config.AuthConfig`): `AUTH_SIGNUP_ENABLED`,
   `AUTH_ALLOWED_EMAIL_DOMAINS` (comma list, empty = any, checked only at account
   creation), `AUTH_INVITE_ENABLED` (only bites once signup is off; any
@@ -178,9 +186,12 @@ to status codes in the one place — `httpapi/respond.go`.
   `AUTH_COOKIE_SECURE`, `AUTH_SIGNUP_ENABLED`, `AUTH_ALLOWED_EMAIL_DOMAINS`,
   `AUTH_INVITE_ENABLED`, `AUTH_INVITE_TTL`, `AUTH_MAGIC_LINK_TTL`;
   `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_FROM`/`SMTP_TLS`
-  (`starttls|implicit|none`); `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_SCOPES`.
-  OIDC is optional — an empty `OIDC_ISSUER` disables the `/api/auth/oidc/*`
-  routes.
+  (`starttls|implicit|none`);
+  `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_SCOPES`/`OIDC_LABEL`
+  (button text, default `Single sign-on`).
+  OIDC is optional — the client is built only when `OIDC_ISSUER` **and**
+  `OIDC_CLIENT_ID` are both set; otherwise the `/api/auth/oidc/*` routes are
+  disabled and `/api/auth/config` reports `oidc: null`.
 
 ## Serving the frontend
 
@@ -219,6 +230,19 @@ mechanics are load-bearing:
   request) still returns `404` — the embedded `404.html` if the bundle ships
   one, otherwise the default. Add new backend endpoints under `/api/` so they
   never collide with a frontend route.
+
+## Serving the API contract
+
+`embed.go` carries a **second** `//go:embed` — `openapi.yaml` — plus a
+`//go:generate cp ../openapi/openapi.yaml ./openapi.yaml` that syncs the
+committed copy from the repo-root source of truth (`//go:embed` can't cross
+`..`; run `go generate ./...` after editing the spec, and CI fails on drift).
+`main.go` passes the bytes to `httpapi.Deps.OpenAPISpec`; `internal/httpapi`
+serves them verbatim at `GET /api/openapi.yaml` (`application/yaml`, no auth),
+registered ahead of the `/api/` catch-all. See root `AGENTS.md` and
+`openapi/README.md`. New JSON endpoints are added to `openapi/openapi.yaml` in
+the same change, with a response-conformance assertion
+(`internal/openapicheck.AssertResponse`) in their handler test.
 
 ## Layout status
 

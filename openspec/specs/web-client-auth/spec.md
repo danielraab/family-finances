@@ -11,7 +11,10 @@ the result through a single shared context (`useAuth`). The context state SHALL
 be one of: `loading` (the request is in flight or has not started), `anonymous`
 (the request returned `401` or failed), or `authenticated` (the request
 returned `200`, carrying the user record — `id`, `email`, optional
-`display_name`, `is_admin`).
+`display_name`, `is_admin`). The TypeScript type of that user record SHALL be
+derived from the generated OpenAPI schema (`frontend/src/api/schema.d.ts`), not a
+separately hand-declared interface, and the `GET /api/auth/me` call SHALL go
+through the typed API client.
 
 Because the client is a static bundle and the session cookie is `HttpOnly`, the
 client MUST NOT attempt to read the cookie or infer the state any other way.
@@ -38,6 +41,12 @@ The context MUST NOT poll or re-fetch on window focus.
 - **WHEN** the app has mounted and `useAuth` has left the `loading` state
 - **THEN** no further `GET /api/auth/me` request is made on tab focus or route
   change
+
+#### Scenario: User record type comes from the generated schema
+
+- **WHEN** `frontend/src/components/AuthProvider.tsx` is inspected
+- **THEN** the user record type is taken from the generated OpenAPI schema and
+  the `/api/auth/me` request is issued via the typed API client
 
 ### Requirement: Sidebar user control
 
@@ -144,8 +153,17 @@ address. A network or `5xx` failure on the request SHALL show a non-blocking
 "please try again" message with the form intact.
 
 The view SHALL NOT reveal whether an account exists for the address. It SHALL
-NOT offer a password field. An OIDC / "sign in with a provider" option is out
-of scope for this capability.
+NOT offer a password field.
+
+The view SHALL also offer OIDC sign-in when the backend reports it is available.
+On mount the client SHALL call `GET /api/auth/config` through the typed API
+client. When the response's `oidc` field is a non-null object, the view SHALL
+render, **above** the email field, a control labelled with `oidc.label` that is a
+link to `oidc.start_path` (a full-page navigation, not a `fetch`), followed by a
+visual "or" divider separating it from the email form. When `oidc` is `null`, or
+the request fails, the view SHALL render exactly the email form described above
+with no OIDC control and no divider. While the request is in flight the email
+form SHALL already be usable.
 
 #### Scenario: Submitting an address
 
@@ -169,6 +187,27 @@ of scope for this capability.
 - **WHEN** the visitor submits an address with no account
 - **THEN** the confirmation panel is identical to the one shown for an address
   that does have an account
+
+#### Scenario: OIDC provider button shown above the form when available
+
+- **WHEN** `/login` mounts and `GET /api/auth/config` returns
+  `{ "oidc": { "label": "Continue with Google", "start_path": "/api/auth/oidc/start" } }`
+- **THEN** the view renders a "Continue with Google" link to
+  `/api/auth/oidc/start` above the email field, with an "or" divider between it
+  and the email form
+
+#### Scenario: No OIDC button when unavailable
+
+- **WHEN** `/login` mounts and `GET /api/auth/config` returns `{ "oidc": null }`
+  or the request fails
+- **THEN** the view shows only the email form, with no OIDC control and no
+  divider
+
+#### Scenario: OIDC control is a navigation, not a fetch
+
+- **WHEN** the visitor activates the OIDC sign-in control
+- **THEN** the browser performs a full-page navigation to
+  `/api/auth/oidc/start` (the client does not `fetch` it)
 
 ### Requirement: Login route redirects an already-authenticated visitor
 

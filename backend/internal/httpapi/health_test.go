@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"at.draab/familyfinances/internal/openapicheck"
 )
 
 func TestHealthHandlerHealthyDB(t *testing.T) {
@@ -19,6 +21,7 @@ func TestHealthHandlerHealthyDB(t *testing.T) {
 	if string(body) != "ok" {
 		t.Fatalf("body = %q, want %q", body, "ok")
 	}
+	openapicheck.AssertResponse(t, "GET", "/api/healthz", rec.Code, rec.Header(), rec.Body.Bytes())
 }
 
 func TestHealthHandlerDBDown(t *testing.T) {
@@ -33,6 +36,7 @@ func TestHealthHandlerDBDown(t *testing.T) {
 	if string(body) == "ok" {
 		t.Fatalf("body = %q, want a failure message", body)
 	}
+	openapicheck.AssertResponse(t, "GET", "/api/healthz", rec.Code, rec.Header(), rec.Body.Bytes())
 }
 
 func TestHealthHandlerNilDB(t *testing.T) {

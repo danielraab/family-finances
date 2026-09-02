@@ -122,10 +122,12 @@ func (c *clock) advance(d time.Duration) {
 type svcConfig struct {
 	clock *clock
 	oidc  auth.OIDCClient
+	label string
 }
 type svcOpt func(*svcConfig)
 
 func withOIDC(o auth.OIDCClient) svcOpt { return func(c *svcConfig) { c.oidc = o } }
+func withOIDCLabel(label string) svcOpt { return func(c *svcConfig) { c.label = label } }
 
 // signInEmail runs a full magic-link sign-in and returns the resulting user
 // and session token.
@@ -509,5 +511,20 @@ func TestSetAndListAdmins(t *testing.T) {
 
 	if err := svc.SetAdmin(context.Background(), "nobody@example.com", true); !errors.Is(err, auth.ErrNotFound) {
 		t.Fatalf("SetAdmin(unknown) = %v, want ErrNotFound", err)
+	}
+}
+
+func TestServiceOIDCLogin(t *testing.T) {
+	p := baseParams()
+	p.OIDCLabel = "Continue with Google"
+
+	on, _, _, _ := newSvc(t, p, withOIDC(&stubOIDC{}))
+	if label, ok := on.OIDCLogin(); !ok || label != "Continue with Google" {
+		t.Fatalf("OIDCLogin() = (%q, %v), want (%q, true)", label, ok, "Continue with Google")
+	}
+
+	off, _, _, _ := newSvc(t, p) // no OIDC client constructed
+	if label, ok := off.OIDCLogin(); ok || label != "" {
+		t.Fatalf(`OIDCLogin() with no provider = (%q, %v), want ("", false)`, label, ok)
 	}
 }

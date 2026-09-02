@@ -75,7 +75,8 @@ function ThemeGlyph({ choice }: { choice: Theme }) {
 
 export function ThemeToggle({ iconOnly = false }: { iconOnly?: boolean }) {
   const { theme, setTheme } = useTheme();
-  const next = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length];
+  const next: Theme =
+    ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length] ?? "system";
 
   return (
     <button

@@ -1,0 +1,373 @@
+openapi: 3.0.3
+
+info:
+  title: family-finances API
+  version: 0.1.0
+  description: >-
+    The JSON HTTP API of the family-finances backend. This document is
+    hand-written and is the source of truth for the API surface (see
+    openapi/README.md). Operations tagged `browser-flow` and marked
+    `x-internal: true` are browser-navigation redirects, not part of the
+    generated typed client.
+
+servers:
+  - url: /
+    description: Same-origin — the Go backend serves both the API and the SPA.
+
+tags:
+  - name: health
+    description: Liveness / readiness.
+  - name: auth
+    description: Sign-in, session, and invites.
+  - name: browser-flow
+    description: >-
+      Endpoints a browser reaches by full-page navigation, not fetch. Documented
+      for completeness; excluded from the generated client.
+  - name: meta
+    description: The API describing itself.
+
+paths:
+  /api/healthz:
+    get:
+      operationId: getHealthz
+      summary: Readiness probe — pings the database
+      tags: [health]
+      security: []
+      responses:
+        "200":
+          description: The database answered a bounded ping.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: ok
+        "503":
+          description: No database is configured or it did not answer.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/openapi.yaml:
+    get:
+      operationId: getOpenAPIDocument
+      summary: This OpenAPI document
+      tags: [meta]
+      security: []
+      responses:
+        "200":
+          description: The OpenAPI document.
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /api/auth/config:
+    get:
+      operationId: getAuthConfig
+      summary: Sign-in methods the client should offer
+      description: >-
+        Unauthenticated. Reports the sign-in affordances the web client should
+        render on the login page. Exposes no provider secrets.
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: The available sign-in affordances.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthConfig"
+
+  /api/auth/me:
+    get:
+      operationId: getAuthMe
+      summary: The authenticated user
+      tags: [auth]
+      responses:
+        "200":
+          description: The current user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/logout:
+    post:
+      operationId: postAuthLogout
+      summary: Revoke the current session
+      tags: [auth]
+      responses:
+        "204":
+          description: Session revoked. For a browser the ff_session cookie is cleared.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/email/start:
+    post:
+      operationId: postAuthEmailStart
+      summary: Start a magic-link sign-in
+      description: >-
+        Always returns 200 regardless of whether an account exists or a mail was
+        sent, to prevent account enumeration.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailStartRequest"
+      responses:
+        "200":
+          description: Request accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          description: Malformed request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/invites:
+    post:
+      operationId: postAuthInvites
+      summary: Invite an email address
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteRequest"
+      responses:
+        "201":
+          description: Invite created and an acceptance email sent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invite"
+        "400":
+          description: Malformed request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Inviting is disabled on this instance.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/email/callback:
+    get:
+      operationId: getAuthEmailCallback
+      summary: Complete a magic-link sign-in
+      description: >-
+        Browser clients get a 302 with the ff_session cookie set. A client
+        sending `Accept: application/json` (or `?client=api`) instead gets 200
+        with a session token in the body.
+      tags: [browser-flow]
+      x-internal: true
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Signed in; redirect to a safe in-app path.
+        "400":
+          description: The token is missing, invalid, expired, or already used.
+
+  /api/auth/oidc/start:
+    get:
+      operationId: getAuthOidcStart
+      summary: Begin the OIDC authorization-code flow
+      tags: [browser-flow]
+      x-internal: true
+      security: []
+      parameters:
+        - name: redirect_to
+          in: query
+          required: false
+          description: Safe same-origin relative path to return to after sign-in.
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to the identity provider.
+        "404":
+          description: OIDC is not configured on this instance.
+
+  /api/auth/oidc/callback:
+    get:
+      operationId: getAuthOidcCallback
+      summary: Complete the OIDC authorization-code flow
+      description: >-
+        Browser clients get a 302 with the ff_session cookie set. A client
+        sending `Accept: application/json` instead gets 200 with a session token
+        in the body.
+      tags: [browser-flow]
+      x-internal: true
+      security: []
+      parameters:
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Signed in; redirect to a safe in-app path.
+        "400":
+          description: Missing/unknown state, provider error, or id_token verification failed.
+
+  /api/auth/invites/accept:
+    get:
+      operationId: getAuthInvitesAccept
+      summary: Accept an invite
+      description: >-
+        Browser clients get a 302 with the ff_session cookie set. A client
+        sending `Accept: application/json` instead gets 200 with a session token
+        in the body.
+      tags: [browser-flow]
+      x-internal: true
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Account created / signed in; redirect to a safe in-app path.
+        "400":
+          description: The invite token is missing, invalid, expired, or already used.
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: ff_session
+    bearerToken:
+      type: http
+      scheme: bearer
+
+  responses:
+    Unauthorized:
+      description: No valid session was presented.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    User:
+      type: object
+      required: [id, email, is_admin, created_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        is_admin:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        request_id:
+          type: string
+
+    StatusOk:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    EmailStartRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    InviteRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    Invite:
+      type: object
+      required: [id, email, expires_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        expires_at:
+          type: string
+          format: date-time
+
+    OidcLogin:
+      type: object
+      additionalProperties: false
+      required: [label, start_path]
+      properties:
+        label:
+          type: string
+        start_path:
+          type: string
+
+    AuthConfig:
+      type: object
+      additionalProperties: false
+      required: [oidc]
+      properties:
+        oidc:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/OidcLogin"
+
+security:
+  - sessionCookie: []
+  - bearerToken: []

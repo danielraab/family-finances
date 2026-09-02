@@ -62,6 +62,7 @@ func TestLoadAuthDefaults(t *testing.T) {
 		"AUTH_SESSION_TTL", "AUTH_SESSION_MAX_TTL", "AUTH_INVITE_TTL",
 		"AUTH_MAGIC_LINK_TTL", "AUTH_COOKIE_SECURE", "AUTH_SIGNUP_ENABLED",
 		"AUTH_INVITE_ENABLED", "AUTH_ALLOWED_EMAIL_DOMAINS", "SMTP_TLS", "OIDC_SCOPES",
+		"OIDC_LABEL",
 	} {
 		t.Setenv(k, "")
 	}
@@ -100,6 +101,16 @@ func TestLoadAuthDefaults(t *testing.T) {
 	}
 	if want := []string{"openid", "email", "profile"}; !equal(cfg.OIDC.Scopes, want) {
 		t.Errorf("OIDC.Scopes = %v, want %v", cfg.OIDC.Scopes, want)
+	}
+	if cfg.OIDC.Label != "Single sign-on" {
+		t.Errorf("OIDC.Label = %q, want %q", cfg.OIDC.Label, "Single sign-on")
+	}
+}
+
+func TestLoadOIDCLabelOverride(t *testing.T) {
+	t.Setenv("OIDC_LABEL", "Continue with Google")
+	if cfg := load(t); cfg.OIDC.Label != "Continue with Google" {
+		t.Errorf("OIDC.Label = %q, want %q", cfg.OIDC.Label, "Continue with Google")
 	}
 }
 

@@ -37,6 +37,11 @@ type Deps struct {
 	// AuthHandler is the auth domain package's http.Handler, mounted at
 	// /api/auth/. Nil leaves the prefix unrouted.
 	AuthHandler http.Handler
+
+	// OpenAPISpec is the raw bytes of the hand-written API contract
+	// (openapi/openapi.yaml), served verbatim at GET /api/openapi.yaml. Nil
+	// leaves that route unregistered (it 404s as any other unknown /api/ path).
+	OpenAPISpec []byte
 }
 
 // Routes builds the request multiplexer: backend routes live under /api/,
@@ -44,6 +49,9 @@ type Deps struct {
 func Routes(deps Deps) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/healthz", healthHandler(deps.DB))
+	if deps.OpenAPISpec != nil {
+		mux.HandleFunc("GET /api/openapi.yaml", openAPIHandler(deps.OpenAPISpec))
+	}
 	if deps.AuthHandler != nil {
 		// More specific than the "/api/" fallback below, so ServeMux routes
 		// every /api/auth/... path here.

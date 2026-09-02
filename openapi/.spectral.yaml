@@ -1,0 +1,14 @@
+extends: ["spectral:oas"]
+
+# The API is same-origin and served by the Go binary; a description on the
+# single `/` server and contact/licence metadata add noise without value here.
+rules:
+  oas3-api-servers: off
+  info-contact: off
+  info-license: off
+  license-url: off
+  oas3-server-not-example.com: off
+  operation-tag-defined: error
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-description: off

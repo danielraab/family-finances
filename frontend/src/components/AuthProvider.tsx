@@ -5,14 +5,11 @@ import {
   useEffect,
   useState,
 } from "react";
+import { api } from "../api/client";
+import type { components } from "../api/schema";
 
 /** The authenticated user, as returned by `GET /api/auth/me`. */
-export type User = {
-  id: string;
-  email: string;
-  display_name?: string;
-  is_admin: boolean;
-};
+export type User = components["schemas"]["User"];
 
 export type AuthStatus = "loading" | "anonymous" | "authenticated";
 
@@ -40,11 +37,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    fetch("/api/auth/me", { credentials: "same-origin" })
-      .then(async (res) => {
+    api
+      .GET("/api/auth/me")
+      .then(({ data }) => {
         if (cancelled) return;
-        if (res.ok) {
-          setUser((await res.json()) as User);
+        if (data) {
+          setUser(data);
           setStatus("authenticated");
         } else {
           setUser(null);
@@ -64,10 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "same-origin",
-      });
+      await api.POST("/api/auth/logout");
     } finally {
       setUser(null);
       setStatus("anonymous");

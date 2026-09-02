@@ -94,6 +94,10 @@ type OIDCConfig struct {
 	ClientID     string
 	ClientSecret string
 	Scopes       []string
+
+	// Label is the human-facing text for the OIDC sign-in button on the login
+	// page (e.g. "Continue with Google"). Defaults to "Single sign-on".
+	Label string
 }
 
 // Load reads configuration from the environment, applying documented defaults
@@ -124,6 +128,7 @@ func Load() (Config, error) {
 			ClientID:     os.Getenv("OIDC_CLIENT_ID"),
 			ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
 			Scopes:       splitListDefault(os.Getenv("OIDC_SCOPES"), []string{"openid", "email", "profile"}),
+			Label:        getenv("OIDC_LABEL", "Single sign-on"),
 		},
 	}
 

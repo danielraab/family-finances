@@ -11,8 +11,16 @@ import (
 
 	"at.draab/familyfinances/internal/auth"
 	"at.draab/familyfinances/internal/httpapi"
+	"at.draab/familyfinances/internal/openapicheck"
 	"at.draab/familyfinances/internal/storage/memory"
 )
+
+// conforms asserts the recorded response matches the operation documented for
+// method+target in openapi/openapi.yaml.
+func conforms(t *testing.T, method, target string, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	openapicheck.AssertResponse(t, method, target, rec.Code, rec.Header(), rec.Body.Bytes())
+}
 
 type harness struct {
 	h      *auth.Handler
@@ -29,7 +37,9 @@ func newHarness(t *testing.T, opts ...svcOpt) *harness {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	svc := auth.NewService(store, mailer, cfg.oidc, baseParams(), auth.WithClock(cfg.clock.Now))
+	p := baseParams()
+	p.OIDCLabel = cfg.label
+	svc := auth.NewService(store, mailer, cfg.oidc, p, auth.WithClock(cfg.clock.Now))
 	h := auth.NewHandler(svc, auth.HandlerOptions{RenderError: httpapi.WriteError, CookieSecure: true})
 	return &harness{h: h, svc: svc, store: store, mailer: mailer}
 }
@@ -52,12 +62,15 @@ func TestHandlerEmailStartAlways200(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
+	conforms(t, "POST", "/api/auth/email/start", rec)
 
 	// Malformed body is the one case that is not 200.
 	bad := httptest.NewRequest("POST", "/api/auth/email/start", strings.NewReader(`not json`))
-	if rec := hr.do(t, bad, nil); rec.Code != http.StatusBadRequest {
-		t.Fatalf("bad body status = %d, want 400", rec.Code)
+	badRec := hr.do(t, bad, nil)
+	if badRec.Code != http.StatusBadRequest {
+		t.Fatalf("bad body status = %d, want 400", badRec.Code)
 	}
+	conforms(t, "POST", "/api/auth/email/start", badRec)
 }
 
 func TestHandlerEmailCallbackBrowserSetsCookieAndRedirects(t *testing.T) {
@@ -123,12 +136,57 @@ func TestHandlerEmailCallbackBadToken(t *testing.T) {
 	}
 }
 
+func TestHandlerConfig(t *testing.T) {
+	// Unconfigured -> oidc: null, 200, no session required.
+	unset := newHarness(t)
+	rec := unset.do(t, httptest.NewRequest("GET", "/api/auth/config", nil), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	conforms(t, "GET", "/api/auth/config", rec)
+
+	var body struct {
+		OIDC *struct {
+			Label     string `json:"label"`
+			StartPath string `json:"start_path"`
+		} `json:"oidc"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.OIDC != nil {
+		t.Fatalf("oidc = %+v, want null when unconfigured", body.OIDC)
+	}
+
+	// Configured -> oidc object with the label and the start path.
+	on := newHarness(t, withOIDC(&stubOIDC{}), withOIDCLabel("Continue with Google"))
+	rec = on.do(t, httptest.NewRequest("GET", "/api/auth/config", nil), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("configured status = %d, want 200", rec.Code)
+	}
+	conforms(t, "GET", "/api/auth/config", rec)
+
+	body.OIDC = nil
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.OIDC == nil || body.OIDC.Label != "Continue with Google" ||
+		body.OIDC.StartPath != "/api/auth/oidc/start" {
+		t.Fatalf("oidc = %+v, want {Continue with Google, /api/auth/oidc/start}", body.OIDC)
+	}
+	if s := rec.Body.String(); strings.Contains(s, "idp.example") {
+		t.Fatalf("config leaked provider detail: %s", s)
+	}
+}
+
 func TestHandlerMe(t *testing.T) {
 	hr := newHarness(t)
 
-	if rec := hr.do(t, httptest.NewRequest("GET", "/api/auth/me", nil), nil); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("anon status = %d, want 401", rec.Code)
+	anon := hr.do(t, httptest.NewRequest("GET", "/api/auth/me", nil), nil)
+	if anon.Code != http.StatusUnauthorized {
+		t.Fatalf("anon status = %d, want 401", anon.Code)
 	}
+	conforms(t, "GET", "/api/auth/me", anon)
 
 	user := auth.User{ID: "u1", Email: "me@example.com"}
 	rec := hr.do(t, httptest.NewRequest("GET", "/api/auth/me", nil), &user)
@@ -139,15 +197,18 @@ func TestHandlerMe(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || got.Email != "me@example.com" {
 		t.Fatalf("body = %s err %v", rec.Body.String(), err)
 	}
+	conforms(t, "GET", "/api/auth/me", rec)
 }
 
 func TestHandlerLogout(t *testing.T) {
 	hr := newHarness(t)
 	user, tok := signInEmail(t, hr.svc, hr.mailer, "logmeout@example.com")
 
-	if rec := hr.do(t, httptest.NewRequest("POST", "/api/auth/logout", nil), nil); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("anon logout = %d, want 401", rec.Code)
+	anon := hr.do(t, httptest.NewRequest("POST", "/api/auth/logout", nil), nil)
+	if anon.Code != http.StatusUnauthorized {
+		t.Fatalf("anon logout = %d, want 401", anon.Code)
 	}
+	conforms(t, "POST", "/api/auth/logout", anon)
 
 	req := httptest.NewRequest("POST", "/api/auth/logout", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -155,6 +216,7 @@ func TestHandlerLogout(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
+	conforms(t, "POST", "/api/auth/logout", rec)
 	if _, err := hr.svc.Authenticate(context.Background(), tok); err == nil {
 		t.Fatal("session still valid after logout")
 	}
@@ -164,15 +226,18 @@ func TestHandlerCreateInvite(t *testing.T) {
 	hr := newHarness(t)
 	inviter, _ := signInEmail(t, hr.svc, hr.mailer, "host@example.com")
 
-	if rec := hr.do(t, httptest.NewRequest("POST", "/api/auth/invites", strings.NewReader(`{"email":"g@example.com"}`)), nil); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("anon invite = %d, want 401", rec.Code)
+	anon := hr.do(t, httptest.NewRequest("POST", "/api/auth/invites", strings.NewReader(`{"email":"g@example.com"}`)), nil)
+	if anon.Code != http.StatusUnauthorized {
+		t.Fatalf("anon invite = %d, want 401", anon.Code)
 	}
+	conforms(t, "POST", "/api/auth/invites", anon)
 
 	req := httptest.NewRequest("POST", "/api/auth/invites", strings.NewReader(`{"email":"guest@example.com"}`))
 	rec := hr.do(t, req, &inviter)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body %s", rec.Code, rec.Body.String())
 	}
+	conforms(t, "POST", "/api/auth/invites", rec)
 	if strings.Contains(strings.ToLower(rec.Body.String()), "token") {
 		t.Fatalf("invite response leaked a token: %s", rec.Body.String())
 	}

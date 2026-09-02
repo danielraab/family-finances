@@ -3,9 +3,9 @@ import { colorFor, initials } from "../lib/monogram";
 type AvatarProps = {
   id: string;
   email: string;
-  displayName?: string;
+  displayName?: string | undefined;
   /** Rendered diameter in pixels. */
-  size?: number;
+  size?: number | undefined;
 };
 
 /**

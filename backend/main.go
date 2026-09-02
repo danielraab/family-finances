@@ -72,6 +72,7 @@ func main() {
 		DB:          pool,
 		Auth:        authSvc,
 		AuthHandler: authHandler,
+		OpenAPISpec: openAPISpec,
 	})
 
 	if err := run(srv); err != nil {
@@ -96,7 +97,9 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool) (*au
 	})
 
 	var oidcClient auth.OIDCClient
-	if cfg.OIDC.Issuer != "" {
+	// Both are required for a working flow; an issuer without a client id
+	// discovers fine but fails at token exchange, so treat it as unconfigured.
+	if cfg.OIDC.Issuer != "" && cfg.OIDC.ClientID != "" {
 		c, err := oidcauth.New(ctx, oidcauth.Config{
 			Issuer:       cfg.OIDC.Issuer,
 			ClientID:     cfg.OIDC.ClientID,
@@ -120,6 +123,7 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool) (*au
 		InviteTTL:           cfg.Auth.InviteTTL,
 		MagicLinkTTL:        cfg.Auth.MagicLinkTTL,
 		OIDCIssuer:          cfg.OIDC.Issuer,
+		OIDCLabel:           cfg.OIDC.Label,
 	})
 
 	handler := auth.NewHandler(svc, auth.HandlerOptions{

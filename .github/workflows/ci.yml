@@ -27,6 +27,33 @@ jobs:
       - run: pnpm lint
       - run: pnpm build
 
+  # Lints the OpenAPI contract and fails if the generated artifacts
+  # (frontend types, backend embedded copy) are stale relative to it.
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Lint openapi/openapi.yaml
+        run: pnpm dlx @stoplight/spectral-cli lint openapi/openapi.yaml --ruleset openapi/.spectral.yaml
+      - name: Install frontend deps
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Regenerate the frontend API types
+        working-directory: frontend
+        run: pnpm generate:api
+      - name: Sync the backend copy of the contract
+        run: cp openapi/openapi.yaml backend/openapi.yaml
+      - name: Fail on contract drift
+        run: git diff --exit-code -- frontend/src/api/schema.d.ts backend/openapi.yaml
+
   backend:
     runs-on: ubuntu-latest
     defaults:
@@ -69,7 +96,7 @@ jobs:
   # Builds and publishes the combined image. Only runs when a new git tag is
   # pushed, using that tag as the image tag.
   publish:
-    needs: [frontend, backend]
+    needs: [frontend, backend, contract]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:

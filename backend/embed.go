@@ -17,3 +17,16 @@ import "embed"
 //
 //go:embed all:static/out
 var staticFiles embed.FS
+
+// openAPISpec is the hand-written API contract (openapi/openapi.yaml), served
+// verbatim at GET /api/openapi.yaml.
+//
+// Same parent-directory constraint as staticFiles: //go:embed cannot reach
+// ../openapi/, so a synced copy lives at backend/openapi.yaml (kept identical
+// by `go generate ./...` and a CI check; the Docker build overwrites it from
+// the real openapi/openapi.yaml before compiling). The serving logic lives in
+// internal/httpapi and takes the bytes as a value.
+//
+//go:generate cp ../openapi/openapi.yaml ./openapi.yaml
+//go:embed openapi.yaml
+var openAPISpec []byte

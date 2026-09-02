@@ -48,7 +48,8 @@ matches no file SHALL still receive `404`.
 
 The backend SHALL reserve the `/api/` path prefix for its own routes,
 distinct from static frontend paths, so future API endpoints cannot collide
-with frontend routes.
+with frontend routes. The OpenAPI document SHALL be served as one such route at
+`GET /api/openapi.yaml`.
 
 #### Scenario: Health check under the reserved namespace
 
@@ -60,6 +61,12 @@ with frontend routes.
 - **WHEN** a client requests a path under `/api/` that is not a defined
   backend route
 - **THEN** the backend does not return frontend HTML/JS content for it
+
+#### Scenario: OpenAPI document served under the reserved namespace
+
+- **WHEN** a client requests `GET /api/openapi.yaml`
+- **THEN** the backend returns `200` with `Content-Type: application/yaml` and
+  the OpenAPI document body, not the SPA shell and not a JSON `404`
 
 ### Requirement: Backend builds and tests without a built frontend present
 

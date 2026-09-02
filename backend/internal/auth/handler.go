@@ -48,6 +48,7 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("GET /api/auth/email/callback", h.emailCallback)
 	h.mux.HandleFunc("GET /api/auth/oidc/start", h.oidcStart)
 	h.mux.HandleFunc("GET /api/auth/oidc/callback", h.oidcCallback)
+	h.mux.HandleFunc("GET /api/auth/config", h.config)
 	h.mux.HandleFunc("GET /api/auth/me", h.me)
 	h.mux.HandleFunc("POST /api/auth/logout", h.logout)
 	h.mux.HandleFunc("POST /api/auth/invites", h.createInvite)
@@ -126,6 +127,24 @@ func (h *Handler) oidcCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- session endpoints ------------------------------------------------
+
+// config reports which sign-in methods the client should offer. It needs no
+// authentication — the login page is viewed by anonymous visitors. The only
+// field today is oidc: an object with the button label and the start path when
+// an OIDC provider is configured, or null. It exposes no provider secrets.
+func (h *Handler) config(w http.ResponseWriter, r *http.Request) {
+	type oidcLogin struct {
+		Label     string `json:"label"`
+		StartPath string `json:"start_path"`
+	}
+	body := struct {
+		OIDC *oidcLogin `json:"oidc"`
+	}{}
+	if label, ok := h.svc.OIDCLogin(); ok {
+		body.OIDC = &oidcLogin{Label: label, StartPath: "/api/auth/oidc/start"}
+	}
+	writeJSON(w, http.StatusOK, body)
+}
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())

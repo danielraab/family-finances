@@ -26,7 +26,17 @@ git-ignored. Build-script allow-listing lives in `pnpm-workspace.yaml`
   `vite.config.ts`.
 - **Tailwind 4**, CSS-first via `@import "tailwindcss"` in `src/styles.css`.
   No `tailwind.config.js`.
-- **TypeScript**, strict. `pnpm exec tsc` type-checks (no emit).
+- **TypeScript**, strict — plus `noUncheckedIndexedAccess`,
+  `exactOptionalPropertyTypes`, `noPropertyAccessFromIndexSignature`.
+  `pnpm exec tsc` type-checks (no emit).
+- **API types** — `pnpm generate:api` runs `scripts/generate-api.mjs`, which
+  reads the repo-root `openapi/openapi.yaml` (the hand-written contract), drops
+  `x-internal` browser-redirect operations, and writes
+  `src/api/schema.d.ts` via `openapi-typescript`. That file is **generated and
+  committed** — never edit it (excluded from Biome, like `routeTree.gen.ts`);
+  CI regenerates it and fails on a diff. `src/api/client.ts` wraps it in an
+  `openapi-fetch` client (`api.GET("/api/...")`, typed paths + responses).
+  See root `AGENTS.md` and `openapi/README.md`.
 
 ## Routing & layout
 
@@ -57,18 +67,25 @@ the top bar (`src/components/TopBar.tsx`). Fonts
 
 ## Data & auth
 
-- The app ships **no backend URL**. Call the Go backend at relative
-  `/api/...` paths with `credentials: "same-origin"` so the `ff_session`
-  cookie is sent. In dev the Vite proxy forwards `/api` to `:8080`; in
-  production the Go binary serves both same-origin.
+- The app ships **no backend URL**. Call the Go backend through the typed
+  client `api` from `src/api/client.ts` (`openapi-fetch`, `baseUrl: "/"`,
+  `credentials: "same-origin"` so the `ff_session` cookie is sent). In dev the
+  Vite proxy forwards `/api` to `:8080`; in production the Go binary serves both
+  same-origin. Types come from the committed, generated `src/api/schema.d.ts`
+  (see Tooling).
 - `src/components/AuthProvider.tsx` resolves the session once on mount via
-  `GET /api/auth/me` and exposes `useAuth() → { status, user, logout }`
-  (`status ∈ loading | anonymous | authenticated`). No polling, no
-  focus-refetch. `logout()` calls `POST /api/auth/logout` and flips to
-  `anonymous` in place.
+  `api.GET("/api/auth/me")` and exposes `useAuth() → { status, user, logout }`
+  (`status ∈ loading | anonymous | authenticated`; `user` is the generated
+  `components["schemas"]["User"]`). No polling, no focus-refetch. `logout()`
+  calls `api.POST("/api/auth/logout")` and flips to `anonymous` in place.
 - `src/components/SidebarUser.tsx` renders the footer user control (initials
   monogram + sign-out menu via `@headlessui/react`).
-- Data fetching is plain `fetch` in effects — no query library yet.
+- `src/routes/login.tsx` is the magic-link form. On mount it calls
+  `api.GET("/api/auth/config")`; when the response's `oidc` is non-null it
+  renders a provider button (a plain `<a href={oidc.start_path}>` — a full-page
+  navigation, not `fetch`) above the email field with an "or" divider. A null
+  `oidc` or a failed request just shows the email form.
+- Data fetching is plain `fetch`/`api` calls in effects — no query library yet.
 - **Never** open a database connection from the frontend.
 
 ## Build output

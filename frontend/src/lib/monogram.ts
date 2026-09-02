@@ -23,12 +23,12 @@ export function initials(
 ): string {
   const name = displayName?.trim();
   if (name) {
-    const parts = name.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
+    const [first, second] = name.split(/\s+/).filter(Boolean);
+    if (first && second) {
+      return (first.charAt(0) + second.charAt(0)).toUpperCase();
     }
-    if (parts.length === 1) {
-      return parts[0].slice(0, 2).toUpperCase();
+    if (first) {
+      return first.slice(0, 2).toUpperCase();
     }
   }
   const local = email.split("@")[0] ?? "";
@@ -40,5 +40,5 @@ export function colorFor(id: string): string {
   for (let i = 0; i < id.length; i++) {
     hash = (hash * 31 + id.charCodeAt(i)) | 0;
   }
-  return PALETTE[Math.abs(hash) % PALETTE.length];
+  return PALETTE[Math.abs(hash) % PALETTE.length] ?? PALETTE[0];
 }
