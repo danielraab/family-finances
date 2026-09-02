@@ -39,31 +39,24 @@ request, independent of whether an image is published for that run.
 - **WHEN** CI runs for a pull request
 - **THEN** no container image is built or pushed to the registry
 
-### Requirement: Successful builds on the default branch publish a versioned image
+#### Scenario: Ordinary branch pushes do not publish
 
-WHEN all checks pass for a push to the repository's default branch, CI SHALL
-build the container image and push it to the GitHub Container Registry
-tagged `YYYYMMDD-N`, where `YYYYMMDD` is the current UTC date and `N` is a
-counter starting at `1` for the first image published that day and
-incrementing for each subsequent image published the same day. `N` SHALL be
-computed from images already present in the registry, not from a build-run
-counter, so it stays gap-free and collision-free across reruns.
+- **WHEN** CI runs for a push that is not a git tag
+- **THEN** no container image is built or pushed to the registry
 
-#### Scenario: First image of the day
+### Requirement: Pushing a git tag publishes an image tagged with that tag
 
-- **WHEN** no image tagged with today's date prefix exists in the registry
-  yet and CI publishes
-- **THEN** the new image is tagged `YYYYMMDD-1`
+WHEN all checks pass for a push of a git tag, CI SHALL build the container
+image and push it to the GitHub Container Registry tagged with that git
+tag's name, plus `latest`.
 
-#### Scenario: Subsequent image the same day
+#### Scenario: Tag push publishes
 
-- **WHEN** an image tagged `YYYYMMDD-N` already exists in the registry and CI
-  publishes again the same day
-- **THEN** the new image is tagged with `N` incremented by one
+- **WHEN** a git tag is pushed and the frontend and backend checks pass
+- **THEN** CI builds the container image and pushes it to the registry
+  tagged with the pushed tag's name and with `latest`
 
-#### Scenario: Tag computation reflects the registry, not the run count
+#### Scenario: Failing checks block a tag publish
 
-- **WHEN** CI has run more times than images have actually been published for
-  the current date (e.g. an earlier run's checks failed before publishing)
-- **THEN** the computed tag's `N` matches the count of images actually present
-  in the registry for today, not the number of CI runs
+- **WHEN** a git tag is pushed but the frontend or backend checks fail
+- **THEN** CI reports failure and does not build or push a container image

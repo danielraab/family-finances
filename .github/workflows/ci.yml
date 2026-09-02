@@ -48,11 +48,11 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
-  # Builds and publishes the combined image. Only runs for pushes to the
-  # repository's default branch, after both lint/test jobs succeed.
+  # Builds and publishes the combined image. Only runs when a new git tag is
+  # pushed, using that tag as the image tag.
   publish:
     needs: [frontend, backend]
-    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,43 +72,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute next daily tag
+      - name: Set image name
         id: version
-        env:
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-
           IMAGE_PATH="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
-          IMAGE="ghcr.io/${IMAGE_PATH}"
-          DATE="$(date -u +%Y%m%d)"
-
-          # Mint a scoped pull token the same way `docker login`/`docker pull`
-          # would, so this works whether or not the package has been pushed
-          # to yet (a brand-new package still resolves a token; the
-          # tags/list call below 404s until the first push).
-          TOKEN="$(curl -fsSL -u "${GHCR_USER}:${GHCR_TOKEN}" \
-            "https://ghcr.io/token?scope=repository:${IMAGE_PATH}:pull" | jq -r .token)"
-
-          TAGS="$(curl -fsSL -H "Authorization: Bearer ${TOKEN}" \
-            "https://ghcr.io/v2/${IMAGE_PATH}/tags/list" 2>/dev/null | jq -r '.tags[]?' || true)"
-
-          MAX=0
-          while IFS= read -r t; do
-            [ -z "$t" ] && continue
-            if [[ "$t" =~ ^${DATE}-([0-9]+)$ ]]; then
-              n="${BASH_REMATCH[1]}"
-              if [ "$n" -gt "$MAX" ]; then MAX="$n"; fi
-            fi
-          done <<< "$TAGS"
-
-          NEXT=$((MAX + 1))
-          TAG="${DATE}-${NEXT}"
-
-          echo "Computed tag: ${TAG} (existing tags today: ${MAX})"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${IMAGE_PATH}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -116,5 +84,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.tag }}
+            ${{ steps.version.outputs.image }}:${{ github.ref_name }}
             ${{ steps.version.outputs.image }}:latest

@@ -32,7 +32,7 @@ Architecture below).
   develop each package day to day.
 - CI (`.github/workflows/ci.yml`) lints and tests both packages on every push
   and pull request, and publishes the image to GitHub Container Registry
-  (tagged `YYYYMMDD-N`) on successful pushes to the default branch.
+  (tagged with the pushed git tag, plus `latest`) when a git tag is pushed.
 
 ## Changes
 
