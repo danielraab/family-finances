@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Providers } from "./components/Providers";
 import { Sidebar } from "./components/Sidebar";
 import "./globals.css";
 
@@ -22,11 +23,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full">
-        <Sidebar />
-        <main className="flex-1 overflow-x-hidden">{children}</main>
+        <Providers>
+          <Sidebar />
+          <main className="flex-1 overflow-x-hidden">{children}</main>
+        </Providers>
       </body>
     </html>
   );

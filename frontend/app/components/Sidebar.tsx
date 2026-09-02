@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
+import { ThemeToggle } from "./ThemeToggle";
 
 const STORAGE_KEY = "ff:sidebar-collapsed";
 
@@ -122,7 +123,8 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-black/10 px-2 py-2 dark:border-white/10">
+      <div className="flex flex-col gap-1 border-t border-black/10 px-2 py-2 dark:border-white/10">
+        <ThemeToggle collapsed={collapsed} />
         <button
           type="button"
           onClick={toggle}

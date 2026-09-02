@@ -15,6 +15,14 @@ Next.js web client for family-finances.
   `app/globals.css`. There is no `tailwind.config.js`.
 - **TypeScript**, App Router, React 19. Components are Server Components by
   default; add `"use client"` only when a component needs it.
+- **Theming** is class-based, not media-query-based. `app/globals.css` declares
+  `@custom-variant dark (&:where(.dark, .dark *));`, so every `dark:` utility
+  keys off a `.dark` class on `<html>`. `next-themes` (`app/components/Providers.tsx`)
+  owns that class: three states (system / light / dark), persisted to
+  `localStorage` under `ff:theme`, with an inline pre-paint script it injects to
+  avoid a flash. `<html>` carries `suppressHydrationWarning` for that reason.
+  The user-facing control is `app/components/ThemeToggle.tsx` in the sidebar
+  footer.
 
 ## Build output
 
