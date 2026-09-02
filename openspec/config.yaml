@@ -9,17 +9,20 @@ schema: spec-driven
 #     We use conventional commits
 #     Domain: e-commerce platform
 context: |
-  Monorepo with two independent deployables:
+  Monorepo with two packages, separate toolchains for local dev:
   - backend/  — Go 1.26 HTTP API, standard library net/http only, no database yet.
   - frontend/ — Next.js 16 (App Router), React 19, Tailwind 4, Biome, pnpm.
 
   Architectural rule: the frontend never connects to a database directly. The Go
   backend owns all persistence and is the frontend's only backend.
 
-  The frontend builds to a static bundle (pnpm build -> frontend/out/) served by
-  a plain static host; there is no frontend server. It ships no backend URL; how
-  the deployed client reaches the backend at runtime is an open decision (see
-  changes/frontend-static-shell/design.md, O1).
+  The frontend builds to a static bundle (pnpm build -> frontend/out/). In
+  production, the Go backend embeds that bundle via go:embed and serves it
+  directly (single Docker image, root Dockerfile) — no Node server, no separate
+  static host, no nginx, no BACKEND_URL. The frontend calls the backend
+  same-origin under /api/. CI (.github/workflows/ci.yml) lints/tests both
+  packages and publishes the image to GHCR (tag YYYYMMDD-N) on pushes to the
+  default branch.
 
   Conventions: Conventional Commits. Each package has its own AGENTS.md / README.md.
 

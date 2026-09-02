@@ -10,8 +10,9 @@ A family finances application: a Go HTTP API and a Next.js web client.
 | `frontend/` | Next.js 16 web client (App Router, React 19, Tailwind 4, Biome).         |
 | `openspec/` | Change proposals and specs — how non-trivial work is planned.            |
 
-The two packages are independent deployables with separate toolchains. There is
-no root-level task runner; `cd` into a package before running its tools.
+The two packages have separate toolchains for local development. There is no
+root-level task runner; `cd` into a package before running its tools. In
+production they ship as a single Docker image — see Architecture below.
 
 ## Prerequisites
 
@@ -41,10 +42,26 @@ pnpm dev                 # http://localhost:3000
 The frontend never connects to a database. The Go backend owns all persistence
 and is the frontend's only backend.
 
-The frontend builds to a static bundle (`pnpm build` → `frontend/out/`) served
-by a plain static host — there is no frontend server. It ships no backend URL;
-how the deployed client reaches the backend at runtime is not yet decided (see
-`openspec/changes/frontend-static-shell/design.md`).
+The frontend builds to a static bundle (`pnpm build` → `frontend/out/`). In
+production, the Go backend embeds that bundle and serves it directly — there
+is no frontend server, no separate static host, and no nginx. The frontend
+ships no backend URL: it's served same-origin by the backend, so it calls
+`/api/...` directly with no CORS or base-URL configuration.
+
+## Build & run the container
+
+```bash
+docker build -t family-finances .
+docker run -p 8080:8080 family-finances   # http://localhost:8080
+```
+
+The image is a multi-stage build: it builds the frontend, embeds the result
+into the Go binary, and ships only the compiled binary in a minimal
+non-root runtime image. See the root `Dockerfile`.
+
+CI (`.github/workflows/ci.yml`) lints and tests both packages on every push
+and pull request, and publishes this image to the GitHub Container Registry
+(tagged `YYYYMMDD-N`) on successful pushes to the default branch.
 
 ## Working on the code
 

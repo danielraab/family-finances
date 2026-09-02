@@ -1,8 +1,10 @@
 # AGENTS.md
 
 Monorepo for **family-finances**: a Go HTTP API (`backend/`) and a Next.js web
-client (`frontend/`). The two are independent deployables with separate
-toolchains — there is no root-level task runner.
+client (`frontend/`). The two have separate toolchains for local development —
+there is no root-level task runner — but ship as a **single Docker image** in
+production: the Go backend embeds and serves the built frontend (see
+Architecture below).
 
 ## Working in this repo
 
@@ -16,11 +18,21 @@ toolchains — there is no root-level task runner.
 
 - The frontend **never connects to a database**. The Go backend owns all
   persistence and is the frontend's only backend.
-- The frontend builds to a **static bundle** (`pnpm build` → `frontend/out/`)
-  served by a plain static host — no Node server. It ships no backend URL; how
-  the deployed client reaches the backend at runtime is not yet decided (see
-  `openspec/changes/frontend-static-shell/design.md`, open question O1).
-- Keep the two packages decoupled: no shared build, no shared code.
+- The frontend builds to a **static bundle** (`pnpm build` → `frontend/out/`).
+  In production, the Go backend embeds that bundle at compile time
+  (`//go:embed`) and serves it directly — no Node server, no separate static
+  host, no nginx. See `backend/AGENTS.md` for the embed mechanism.
+- The frontend ships no backend URL: the backend serves it same-origin, so
+  frontend code calls the backend via relative `/api/...` paths, with no CORS
+  or base-URL configuration needed.
+- Local development keeps the two toolchains separate (`cd backend` /
+  `cd frontend`, no shared build). The **production release artifact** is a
+  single Docker image (root `Dockerfile`) that fuses the two — that fusion is
+  deliberate and confined to the release build; it does not change how you
+  develop each package day to day.
+- CI (`.github/workflows/ci.yml`) lints and tests both packages on every push
+  and pull request, and publishes the image to GitHub Container Registry
+  (tagged `YYYYMMDD-N`) on successful pushes to the default branch.
 
 ## Changes
 

@@ -26,8 +26,9 @@ pnpm build        # writes ./out (static HTML/CSS/JS)
 npx serve out     # preview the static bundle, no Node server
 ```
 
-`out/` is what gets deployed — serve it from any static host (e.g. nginx in a
-container).
+`out/` is what gets deployed — in production, the Go backend embeds it at
+compile time and serves it directly (see `../backend/AGENTS.md`); there is no
+separate static host or nginx.
 
 ## Scripts
 
@@ -40,8 +41,8 @@ container).
 
 ## Backend
 
-The client ships no backend URL and currently fetches nothing. How the deployed
-static bundle reaches the Go backend at runtime is not yet decided — see
-[`../openspec/changes/frontend-static-shell/design.md`](../openspec/changes/frontend-static-shell/design.md).
-The frontend never opens a database connection; the Go backend owns all
-persistence.
+The client ships no backend URL and currently fetches nothing. The Go backend
+serves this static build directly (same origin), so when fetching starts it
+should call relative `/api/...` paths — no base URL or CORS config needed. See
+[`../backend/AGENTS.md`](../backend/AGENTS.md). The frontend never opens a
+database connection; the Go backend owns all persistence.

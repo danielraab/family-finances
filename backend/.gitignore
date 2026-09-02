@@ -13,3 +13,8 @@ go.work.sum
 # Local env (keep the example tracked)
 .env
 !.env.example
+
+# Embedded frontend build (populated by the Docker build; keep the
+# placeholder so `go build`/`go test` work without it)
+/static/out/*
+!/static/out/.gitkeep
