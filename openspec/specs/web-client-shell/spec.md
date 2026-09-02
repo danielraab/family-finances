@@ -4,8 +4,9 @@
 
 The client-only web app (Vite + React + TanStack Router) — its build-output
 contract (static bundle, no server, embedded and served by the Go backend),
-the application layout (collapsible sidebar with Home navigation and a footer
-user / theme / collapse control), the home placeholder, the colour theme, the
+the application layout (collapsible sidebar with Home navigation and a
+user control in its footer, plus a top bar holding the sidebar-collapse and
+colour-theme controls), the home placeholder, the colour theme, the
 app icon / favicon, and the no-`BACKEND_URL` rule.
 
 ## Requirements
@@ -47,17 +48,26 @@ image-optimization server. `frontend/` MUST NOT contain `next`, `next.config.*`,
 ### Requirement: Application layout with collapsible sidebar
 
 The web client SHALL render every route inside a shared layout consisting of a
-left sidebar and a main content region. The sidebar SHALL contain, from top to
-bottom: the application icon with a "Family Finances" wordmark, a navigation
-list, and a footer holding, in order, a user / sign-in control, a colour-theme
-control, and a control to collapse or expand the sidebar.
+left sidebar, a top bar spanning the main content region, and a main content
+region below the top bar.
 
-When collapsed, the sidebar SHALL show only the icon, the navigation item
-glyphs, and the footer control glyphs (the user control rendering as its glyph
-or avatar alone); the main content region SHALL expand to use the reclaimed
-width. The collapsed/expanded state SHALL persist across page loads in the
-browser via `localStorage`, and the layout MUST render correctly on first load
-when no stored value exists.
+The sidebar SHALL contain, from top to bottom: the application icon with a
+"Family Finances" wordmark, a navigation list, and a footer holding the user /
+sign-in control alone.
+
+The top bar SHALL span the full width of the main content region, above the
+active route's content. It SHALL hold the control to collapse or expand the
+sidebar pinned to its left edge (visually adjacent to the sidebar), and the
+colour-theme control pinned to its right edge. The top bar SHALL be present on
+every route.
+
+When collapsed, the sidebar SHALL show only the icon and the navigation item
+glyphs (the footer user control rendering as its glyph or avatar alone); the
+main content region SHALL expand to use the reclaimed width. The top bar and its
+controls SHALL remain visible and functional regardless of the collapsed state.
+The collapsed/expanded state SHALL persist across page loads in the browser via
+`localStorage`, and the layout MUST render correctly on first load when no
+stored value exists.
 
 The layout SHALL be composed with the router's root route and an `<Outlet>` for
 the active route; all components render in the browser (there are no
@@ -67,29 +77,39 @@ server-rendered components).
 
 - **WHEN** a visitor opens the site in a browser with no stored sidebar state
 - **THEN** the sidebar renders expanded, showing the icon, the "Family Finances"
-  wordmark, the navigation list with labels, the user / sign-in control, the
-  theme control, and the collapse control
+  wordmark, the navigation list with labels, and the user / sign-in control in
+  the footer
+- **AND** the top bar renders with the collapse control at its left edge and the
+  theme control at its right edge
 
 #### Scenario: Collapsing the sidebar
 
-- **WHEN** the visitor activates the collapse control
-- **THEN** the sidebar narrows to show only the icon, navigation glyphs, and the
-  user, theme, and collapse control glyphs
+- **WHEN** the visitor activates the collapse control in the top bar
+- **THEN** the sidebar narrows to show only the icon and navigation glyphs, with
+  the footer user control shown as its glyph or avatar alone
 - **AND** the main content region widens to fill the reclaimed space
+- **AND** the top bar and its controls remain visible
 
 #### Scenario: State persists across reloads
 
 - **WHEN** the visitor collapses the sidebar and then reloads the page
 - **THEN** the sidebar is still collapsed after the reload
 
+#### Scenario: Controls are not in the sidebar footer
+
+- **WHEN** the sidebar footer renders in either the expanded or collapsed state
+- **THEN** it contains only the user / sign-in control
+- **AND** neither the collapse control nor the theme control appears inside the
+  sidebar
+
 ### Requirement: Selectable colour theme
 
 The web client SHALL let the visitor choose one of three colour-theme states —
-**System**, **Light**, or **Dark** — via a control in the sidebar footer. The
-control SHALL be a single button that cycles through the three states in a fixed
-order on activation, and its glyph SHALL indicate the currently selected state
-(including distinguishing **System** from the resolved light or dark
-appearance).
+**System**, **Light**, or **Dark** — via a control at the right edge of the top
+bar. The control SHALL be a single button that cycles through the three states
+in a fixed order on activation, and its glyph SHALL indicate the currently
+selected state (including distinguishing **System** from the resolved light or
+dark appearance).
 
 The selected state SHALL persist in the browser via `localStorage` under the
 key `ff:theme`. When no stored value exists, the state SHALL be **System**.
@@ -110,7 +130,7 @@ variant keys off a `.dark` class on `<html>`).
 
 - **WHEN** a visitor opens the site with no stored theme value
 - **THEN** the page renders in the scheme matching the OS `prefers-color-scheme`
-- **AND** the theme control indicates the **System** state
+- **AND** the theme control in the top bar indicates the **System** state
 
 #### Scenario: Explicit choice overrides the OS
 
@@ -136,6 +156,12 @@ variant keys off a `.dark` class on `<html>`).
 
 - **WHEN** the visitor has **Dark** stored and loads the site
 - **THEN** the first painted frame is already dark, with no visible light flash
+
+#### Scenario: Theme control available when the sidebar is collapsed
+
+- **WHEN** the visitor collapses the sidebar
+- **THEN** the theme control remains visible and operable at the right edge of
+  the top bar
 
 #### Scenario: Static build is preserved
 

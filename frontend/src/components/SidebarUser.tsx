@@ -94,7 +94,7 @@ function SelectorGlyph() {
  * - anonymous → a "Log in" link to /login;
  * - authenticated → the initials avatar + name/email, opening a menu whose one
  *   item signs out.
- * Mirrors ThemeToggle's `collapsed` prop.
+ * Takes the sidebar's `collapsed` state to switch to a glyph/avatar-only row.
  */
 export function SidebarUser({ collapsed }: { collapsed: boolean }) {
   const { status, user, logout } = useAuth();

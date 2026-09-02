@@ -31,8 +31,11 @@ git-ignored. Build-script allow-listing lives in `pnpm-workspace.yaml`
 ## Routing & layout
 
 - `src/routes/__root.tsx` is the app shell: `ThemeProvider` + `AuthProvider`
-  wrap `<Sidebar />` + `<main><Outlet /></main>`. Router devtools render only
-  in dev.
+  wrap `<Sidebar />` beside a column of `<TopBar />` + `<main><Outlet /></main>`.
+  `__root.tsx` owns the sidebar `collapsed` state (persisted to `localStorage`
+  under `ff:sidebar-collapsed`); `TopBar` holds the collapse toggle (left edge)
+  and the theme control (right edge), and `Sidebar` is presentational. Router
+  devtools render only in dev.
 - `src/routes/index.tsx` → `/`. `src/routes/login.tsx` → `/login`.
 - Navigate with `@tanstack/react-router`'s `<Link to="…">` / `useNavigate()`;
   read the path with `useLocation()`. `to` is type-checked against the route
@@ -47,7 +50,8 @@ Class-based (`.dark` on `<html>`), not media-query. `src/styles.css` declares
 `@custom-variant dark (&:where(.dark, .dark *))`. `src/lib/theme.tsx` owns the
 class: three states (system / light / dark), persisted to `localStorage` under
 `ff:theme`, with an inline pre-paint script in `index.html` to avoid a flash.
-The control is `src/components/ThemeToggle.tsx` in the sidebar footer. Fonts
+The control is `src/components/ThemeToggle.tsx`, rendered at the right edge of
+the top bar (`src/components/TopBar.tsx`). Fonts
 (Geist / Geist Mono) are self-hosted via `@fontsource-variable/*`, imported in
 `src/main.tsx`.
 

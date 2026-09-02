@@ -73,7 +73,7 @@ function ThemeGlyph({ choice }: { choice: Theme }) {
   return <MonitorGlyph />;
 }
 
-export function ThemeToggle({ collapsed }: { collapsed: boolean }) {
+export function ThemeToggle({ iconOnly = false }: { iconOnly?: boolean }) {
   const { theme, setTheme } = useTheme();
   const next = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length];
 
@@ -82,15 +82,15 @@ export function ThemeToggle({ collapsed }: { collapsed: boolean }) {
       type="button"
       onClick={() => setTheme(next)}
       aria-label={`Theme: ${LABEL[theme]}. Switch to ${LABEL[next]}.`}
-      title={collapsed ? `Theme: ${LABEL[theme]}` : undefined}
-      className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06] ${
-        collapsed ? "justify-center" : ""
+      title={iconOnly ? `Theme: ${LABEL[theme]}` : undefined}
+      className={`flex items-center rounded-md text-sm font-medium text-zinc-600 transition-colors hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06] ${
+        iconOnly ? "p-2" : "w-full gap-3 px-3 py-2"
       }`}
     >
       <span className="shrink-0">
         <ThemeGlyph choice={theme} />
       </span>
-      {!collapsed && <span className="truncate">{LABEL[theme]}</span>}
+      {!iconOnly && <span className="truncate">{LABEL[theme]}</span>}
     </button>
   );
 }

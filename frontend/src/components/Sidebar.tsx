@@ -1,10 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
 import { SidebarUser } from "./SidebarUser";
-import { ThemeToggle } from "./ThemeToggle";
-
-const STORAGE_KEY = "ff:sidebar-collapsed";
 
 const NAV = [{ to: "/", label: "Home" }] as const;
 
@@ -28,57 +24,14 @@ function HomeGlyph() {
   );
 }
 
-function ChevronGlyph({ pointing }: { pointing: "left" | "right" }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      width={20}
-      height={20}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {pointing === "left" ? (
-        <path d="M15 6l-6 6 6 6" />
-      ) : (
-        <path d="M9 6l6 6-6 6" />
-      )}
-    </svg>
-  );
-}
-
-function readCollapsed(): boolean {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-export function Sidebar() {
+export function Sidebar({
+  collapsed,
+  mounted,
+}: {
+  collapsed: boolean;
+  mounted: boolean;
+}) {
   const pathname = useLocation({ select: (l) => l.pathname });
-  const [collapsed, setCollapsed] = useState(readCollapsed);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  function toggle() {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(STORAGE_KEY, String(next));
-      } catch {
-        // ignore persistence failure
-      }
-      return next;
-    });
-  }
 
   return (
     <aside
@@ -126,22 +79,6 @@ export function Sidebar() {
 
       <div className="flex flex-col gap-1 border-t border-black/10 px-2 py-2 dark:border-white/10">
         <SidebarUser collapsed={collapsed} />
-        <ThemeToggle collapsed={collapsed} />
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-pressed={collapsed}
-          title={collapsed ? "Expand sidebar" : undefined}
-          className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06] ${
-            collapsed ? "justify-center" : ""
-          }`}
-        >
-          <span className="shrink-0">
-            <ChevronGlyph pointing={collapsed ? "right" : "left"} />
-          </span>
-          {!collapsed && <span className="truncate">Collapse</span>}
-        </button>
       </div>
     </aside>
   );
