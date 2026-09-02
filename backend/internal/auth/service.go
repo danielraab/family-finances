@@ -470,6 +470,14 @@ func (s *Service) resolveIdentity(ctx context.Context, in identityInput) (User, 
 		if !in.allowCreate {
 			return User{}, ErrNotFound
 		}
+		if emailMatchUserID != "" {
+			// ResolveLink chose Create only because the incoming identity
+			// wasn't verified enough to attach (an unverified OIDC email
+			// matching an existing account) — creating would collide on
+			// that account's email, which is unique per user. Surface a
+			// clear, actionable error instead of a doomed insert.
+			return User{}, ErrEmailInUse
+		}
 		if err := s.checkCreatePolicy(ctx, in); err != nil {
 			return User{}, err
 		}

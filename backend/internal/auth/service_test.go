@@ -425,10 +425,12 @@ func TestOIDCUnverifiedEmailDoesNotMerge(t *testing.T) {
 	// Unverified OIDC email that collides with an existing account is not
 	// merged and not silently duplicated: the automatic flow refuses it, and
 	// the person must sign in and link explicitly (or use a different email).
+	// It must fail with a clear ErrEmailInUse, not the misleading
+	// ErrIdentityConflict a doomed create used to produce.
 	redirect, _ := svc.StartOIDC(context.Background(), "")
 	state := redirect[strings.Index(redirect, "state=")+len("state="):]
-	if _, _, _, err := svc.CompleteOIDC(context.Background(), state, "code", "", auth.SessionContext{}); err == nil {
-		t.Fatal("unverified OIDC email must not auto-merge into the existing account")
+	if _, _, _, err := svc.CompleteOIDC(context.Background(), state, "code", "", auth.SessionContext{}); !errors.Is(err, auth.ErrEmailInUse) {
+		t.Fatalf("err = %v, want ErrEmailInUse", err)
 	}
 }
 
