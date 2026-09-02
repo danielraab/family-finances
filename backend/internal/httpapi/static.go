@@ -1,13 +1,9 @@
-package main
+package httpapi
 
 import (
-	"embed"
 	"io/fs"
 	"net/http"
 )
-
-//go:embed all:static/out
-var embeddedStatic embed.FS
 
 // staticHandler serves the frontend's static export from fsys. Unlike
 // http.FileServerFS's default plain-text 404, a request for a path with no

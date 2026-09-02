@@ -1,12 +1,18 @@
 package main
 
 import (
-	"io"
+	"context"
+	"errors"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
+
+	"at.draab/familyfinances/internal/config"
+	"at.draab/familyfinances/internal/httpapi"
 )
 
 func main() {
@@ -14,57 +20,44 @@ func main() {
 		os.Exit(healthcheck())
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/healthz", handleHealthz)
+	cfg := config.Load()
 
-	static, err := fs.Sub(embeddedStatic, "static/out")
+	staticFS, err := fs.Sub(staticFiles, "static/out")
 	if err != nil {
-		log.Fatalf("static sub fs: %v", err)
+		slog.Error("sub static fs", "error", err)
+		os.Exit(1)
 	}
-	mux.Handle("/", staticHandler(static))
 
-	addr := ":" + port()
-	log.Printf("listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatal(err)
-	}
-}
+	srv := httpapi.New(cfg, httpapi.Deps{Static: staticFS})
 
-func handleHealthz(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	if _, err := w.Write([]byte("ok")); err != nil {
-		log.Printf("write response: %v", err)
+	if err := run(srv); err != nil {
+		slog.Error("server", "error", err)
+		os.Exit(1)
 	}
 }
 
-// healthcheck probes the running server's health endpoint and returns a
-// process exit code. It backs the Docker HEALTHCHECK: the distroless runtime
-// image has no shell or curl, so the server binary itself is the probe
-// (`/app/server healthcheck`).
-func healthcheck() int {
-	return healthcheckURL("http://127.0.0.1:" + port() + "/api/healthz")
-}
+// run starts srv and blocks until SIGINT/SIGTERM, then shuts it down
+// gracefully.
+func run(srv *http.Server) error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-func healthcheckURL(url string) int {
-	client := http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		log.Printf("healthcheck: %v", err)
-		return 1
-	}
-	defer resp.Body.Close()
+	errc := make(chan error, 1)
+	go func() {
+		slog.Info("listening", "addr", srv.Addr)
+		errc <- srv.ListenAndServe()
+	}()
 
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK || string(body) != "ok" {
-		log.Printf("healthcheck: status=%d body=%q", resp.StatusCode, body)
-		return 1
+	select {
+	case err := <-errc:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		slog.Info("shutting down")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return srv.Shutdown(shutdownCtx)
 	}
-	return 0
-}
-
-func port() string {
-	if p := os.Getenv("PORT"); p != "" {
-		return p
-	}
-	return "8080"
 }

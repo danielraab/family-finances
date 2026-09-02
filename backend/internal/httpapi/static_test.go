@@ -1,4 +1,4 @@
-package main
+package httpapi
 
 import (
 	"io"
@@ -42,6 +42,9 @@ func TestStaticHandler(t *testing.T) {
 
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+		}
+		if ct := rec.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
+			t.Fatalf("Content-Type = %q, want %q", ct, "text/html; charset=utf-8")
 		}
 		assertBody(t, rec, "<html>not found</html>")
 	})
