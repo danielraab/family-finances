@@ -1,4 +1,4 @@
-// Regenerates app/favicon.ico from the same geometry as app/icon.svg.
+// Regenerates public/favicon.ico from the same geometry as public/icon.svg.
 // Pure Node (zlib only) — no dependencies, no build step.
 //
 //   node scripts/generate-favicon.mjs
@@ -165,10 +165,10 @@ function encodeICO(frames) {
   return Buffer.concat([header, ...bodies]);
 }
 
-const outDir = join(dirname(fileURLToPath(import.meta.url)), "..", "app");
+const outDir = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 const frames = SIZES.map((size) => ({
   size,
   png: encodePNG(size, renderRGBA(size)),
 }));
 writeFileSync(join(outDir, "favicon.ico"), encodeICO(frames));
-console.log(`wrote app/favicon.ico (${SIZES.join(", ")} px)`);
+console.log(`wrote public/favicon.ico (${SIZES.join(", ")} px)`);

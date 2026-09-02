@@ -9,15 +9,17 @@ for all application code, one-way imports (`main` → `httpapi`/`config`/`storag
 `internal/httpapi` under `/api/`, and the `//go:embed` directive pinned to
 `package main` at the module root. These rules keep the package layout
 documented in `backend/AGENTS.md` enforceable as the backend grows.
-
 ## Requirements
-
 ### Requirement: Application code lives under internal/
 
 All backend application code SHALL live under `backend/internal/` so that no
 module outside `at.draab/familyfinances` can import it. `package main` at the
-module root SHALL contain only process wiring, the Docker healthcheck probe,
-and the `//go:embed` directive.
+module root SHALL contain only process wiring: configuration and dependency
+construction, HTTP server start/stop, and dispatch of CLI subcommands to their
+implementations. The Docker healthcheck probe SHALL remain in
+`healthcheck.go`; every other CLI subcommand (for example `admin …`) SHALL be
+implemented in `internal/cli`. The `//go:embed` directive SHALL remain in
+`package main` at the module root.
 
 #### Scenario: Root package contains only wiring files
 
@@ -30,8 +32,14 @@ and the `//go:embed` directive.
 
 - **WHEN** `backend/main.go` is read
 - **THEN** it constructs config, storage, services, and the HTTP server and
-  starts/stops it, and contains no HTTP route pattern strings and no
-  request-handling logic
+  starts/stops it, dispatches recognised subcommands, and contains no HTTP
+  route pattern strings and no request-handling logic
+
+#### Scenario: CLI subcommands live in internal/cli
+
+- **WHEN** `main.go` handles an `admin` subcommand
+- **THEN** it parses which subcommand was requested and delegates to
+  `internal/cli`, which contains the command logic
 
 ### Requirement: Dependencies flow one way
 
@@ -97,7 +105,11 @@ place.
 package's `http.Handler` under its own `/api/<noun>/` prefix, and route every
 non-`/api/` path to the static handler. Backend routes SHALL always live under
 `/api/`. An unmatched path under `/api/` SHALL receive a JSON `404` rather than
-falling through to the static site.
+falling through to the static site. `internal/httpapi` MAY provide
+authentication middleware that resolves a request-scoped user from a session
+token (bearer header or cookie); that middleware SHALL NOT import a storage
+package or database driver, depending instead on an interface satisfied by the
+auth service.
 
 #### Scenario: Health route served under /api/
 
@@ -115,19 +127,26 @@ falling through to the static site.
   backend route
 - **THEN** the response is a JSON `404` and contains no frontend HTML/JS
 
+#### Scenario: Auth middleware stays free of storage imports
+
+- **WHEN** the import graph of `internal/httpapi` is inspected
+- **THEN** it imports neither `internal/storage/...` nor a database driver,
+  even though it can resolve an authenticated user
+
 ### Requirement: The go:embed directive is pinned to package main at the module root
 
-The `//go:embed all:static/out` directive SHALL remain in a `package main`
-file at the `backend/` module root. The serving logic that consumes it
-(`staticHandler`, `notFoundInterceptor`) SHALL live in
+The `//go:embed` directive for the frontend bundle SHALL remain in a
+`package main` file at the `backend/` module root, embedding `static/out` (the
+directory the Docker build populates from `frontend/out/`). The serving logic
+that consumes it (`staticHandler` and its SPA-fallback behaviour) SHALL live in
 `internal/httpapi/static.go` and operate on an `fs.FS` value passed in by
 `main.go` via `fs.Sub`.
 
 #### Scenario: Embed directive location
 
 - **WHEN** `backend/embed.go` is read
-- **THEN** it is in `package main`, contains `//go:embed all:static/out`, and
-  exports the resulting `embed.FS`
+- **THEN** it is in `package main`, contains a `//go:embed` directive for
+  `static/out`, and exports the resulting `embed.FS`
 
 #### Scenario: Static handler takes an fs.FS
 
@@ -138,10 +157,31 @@ file at the `backend/` module root. The serving logic that consumes it
 ### Requirement: In-memory storage is the default store home
 
 `internal/storage/memory/` SHALL be the location for in-memory `Store`
-implementations, used as the default for local development and for tests. A
-`sqlite` sibling MAY be added later through its own change.
+implementations, used as the default for local development and for tests.
+`internal/storage/postgres/` SHALL be the location for the real,
+PostgreSQL-backed `Store` implementations, injected by `main.go` for
+production. No third store engine SHALL be added and no cross-engine
+abstraction SHALL be built.
+
+Third-party dependencies are permitted where they earn their place: the backend
+SHALL use **no web framework, no router library, and no ORM**, but vetted
+libraries (for example the PostgreSQL driver `github.com/jackc/pgx/v5`) MAY be
+added, each through its own OpenSpec proposal that justifies it. Domain
+packages SHALL still import no storage package and no database driver.
 
 #### Scenario: Memory storage package exists and builds
 
 - **WHEN** `go build ./...` runs in `backend/`
 - **THEN** `internal/storage/memory` compiles
+
+#### Scenario: Postgres storage package exists and builds
+
+- **WHEN** `go build ./...` runs in `backend/`
+- **THEN** `internal/storage/postgres` compiles
+
+#### Scenario: Domain package still imports no storage or driver
+
+- **WHEN** the import graph of any `internal/<noun>/` domain package is
+  inspected
+- **THEN** it imports neither `internal/storage/...` nor `github.com/jackc/pgx/...`
+

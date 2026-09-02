@@ -1,11 +1,10 @@
 # syntax=docker/dockerfile:1
 
-# ---- frontend: build the static export ----
+# ---- frontend: build the static SPA bundle (Vite → frontend/out/) ----
 FROM node:22-alpine AS frontend
 WORKDIR /src/frontend
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
-RUN corepack enable && corepack prepare pnpm@11.5.3 --activate \
-    && pnpm install --frozen-lockfile
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
 COPY frontend/ ./
 RUN pnpm build
 

@@ -1,7 +1,8 @@
 # AGENTS.md
 
-Monorepo for **family-finances**: a Go HTTP API (`backend/`) and a Next.js web
-client (`frontend/`). The two have separate toolchains for local development —
+Monorepo for **family-finances**: a Go HTTP API (`backend/`) and a client-only
+web app (`frontend/` — Vite + React + TanStack Router). The two have separate
+toolchains for local development —
 there is no root-level task runner — but ship as a **single Docker image** in
 production: the Go backend embeds and serves the built frontend (see
 Architecture below).

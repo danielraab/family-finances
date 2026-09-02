@@ -14,7 +14,11 @@ import (
 // image has no shell or curl, so the server binary itself is the probe
 // (`/app/server healthcheck`).
 func healthcheck() int {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("healthcheck: load config: %v", err)
+		return 1
+	}
 	return healthcheckURL("http://127.0.0.1:" + cfg.Port + "/api/healthz")
 }
 

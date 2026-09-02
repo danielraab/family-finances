@@ -34,6 +34,40 @@ func TestMigrateFreshDatabase(t *testing.T) {
 	}
 }
 
+func TestMigrate0002AuthSchema(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	// 0002 builds on 0001: gen_random_uuid() and citext (from 0001) must both
+	// be usable, which they are only if 0002 applied cleanly on top.
+	for _, table := range []string{
+		"users", "identities", "sessions", "magic_link_tokens", "invites", "oidc_login_state",
+	} {
+		if !tableExists(t, ctx, pool, table) {
+			t.Errorf("table %q missing after Migrate", table)
+		}
+	}
+
+	// A second Migrate must not choke on the already-applied 0002.
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("second Migrate: %v", err)
+	}
+
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM schema_migrations WHERE version = '0002'`,
+	).Scan(&n); err != nil {
+		t.Fatalf("count 0002 rows: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("schema_migrations has %d rows for 0002, want 1", n)
+	}
+}
+
 func TestMigrateIsIdempotent(t *testing.T) {
 	pool := newTestPool(t)
 	ctx := context.Background()

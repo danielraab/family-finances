@@ -1,13 +1,14 @@
 # family-finances
 
-A family finances application: a Go HTTP API and a Next.js web client.
+A family finances application: a Go HTTP API and a client-only web app
+(Vite + React + TanStack Router).
 
 ## Layout
 
 | Path        | What                                                                      |
 | ----------- | ------------------------------------------------------------------------- |
 | `backend/`  | Go HTTP API (`net/http`, no framework). Owns all persistence (PostgreSQL). |
-| `frontend/` | Next.js 16 web client (App Router, React 19, Tailwind 4, Biome).         |
+| `frontend/` | Static SPA — Vite, React 19, TanStack Router, Tailwind 4, Biome.          |
 | `openspec/` | Change proposals and specs — how non-trivial work is planned.            |
 
 The two packages have separate toolchains for local development. There is no
@@ -48,11 +49,13 @@ backend. The root `compose.yaml` (app + `postgres:17` + a named volume) is the
 reference topology for local development, CI, and production; the single app
 image runs alongside a Postgres it does not contain.
 
-The frontend builds to a static bundle (`pnpm build` → `frontend/out/`). In
-production, the Go backend embeds that bundle and serves it directly — there
-is no frontend server, no separate static host, and no nginx. The frontend
-ships no backend URL: it's served same-origin by the backend, so it calls
-`/api/...` directly with no CORS or base-URL configuration.
+The frontend is a client-only SPA that builds to a static bundle (`pnpm build`
+→ `frontend/out/`). In production, the Go backend embeds that bundle and serves
+it directly — there is no frontend server, no separate static host, and no
+nginx. Unmatched non-`/api/` routes are served `index.html` so client-side
+routing handles deep links and refreshes. The frontend ships no backend URL:
+it's served same-origin by the backend, so it calls `/api/...` directly with no
+CORS or base-URL configuration.
 
 ## Build & run the container
 

@@ -1,14 +1,12 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, useLocation } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
+import { SidebarUser } from "./SidebarUser";
 import { ThemeToggle } from "./ThemeToggle";
 
 const STORAGE_KEY = "ff:sidebar-collapsed";
 
-const NAV = [{ href: "/", label: "Home" }];
+const NAV = [{ to: "/", label: "Home" }] as const;
 
 function HomeGlyph() {
   return (
@@ -53,17 +51,20 @@ function ChevronGlyph({ pointing }: { pointing: "left" | "right" }) {
   );
 }
 
+function readCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 export function Sidebar() {
-  const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const pathname = useLocation({ select: (l) => l.pathname });
+  const [collapsed, setCollapsed] = useState(readCollapsed);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    try {
-      setCollapsed(window.localStorage.getItem(STORAGE_KEY) === "true");
-    } catch {
-      // localStorage unavailable — keep the expanded default.
-    }
     setMounted(true);
   }, []);
 
@@ -101,11 +102,11 @@ export function Sidebar() {
 
       <nav className="flex flex-1 flex-col gap-1 px-2 py-2">
         {NAV.map((item) => {
-          const active = pathname === item.href;
+          const active = pathname === item.to;
           return (
             <Link
-              key={item.href}
-              href={item.href}
+              key={item.to}
+              to={item.to}
               aria-current={active ? "page" : undefined}
               title={collapsed ? item.label : undefined}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -124,6 +125,7 @@ export function Sidebar() {
       </nav>
 
       <div className="flex flex-col gap-1 border-t border-black/10 px-2 py-2 dark:border-white/10">
+        <SidebarUser collapsed={collapsed} />
         <ThemeToggle collapsed={collapsed} />
         <button
           type="button"

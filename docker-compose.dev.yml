@@ -10,6 +10,8 @@
 #
 # Mailpit web UI: http://localhost:8025 — every email the backend "sends"
 # lands there instead of a real inbox.
+# Adminer:        http://localhost:8081 — database browser (server "db",
+#                 user/password/database all "familyfinances").
 #
 # For the full containerised stack (app image + db) use compose.yaml instead.
 
@@ -31,6 +33,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  adminer:
+    image: adminer:latest
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "8081:8080" # web UI (8080 on the host is the app's port)
+    depends_on:
+      db:
+        condition: service_healthy
 
   mailpit:
     image: axllent/mailpit:latest

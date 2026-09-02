@@ -18,7 +18,11 @@ import (
 func newTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	adminURL := config.Load().DatabaseURL
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	adminURL := cfg.DatabaseURL
 	if adminURL == "" {
 		t.Skip("DATABASE_URL not set; skipping Postgres integration test")
 	}

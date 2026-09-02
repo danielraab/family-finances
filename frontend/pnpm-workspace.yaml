@@ -1,0 +1,5 @@
+# pnpm 10+ reads build-script allow-listing here, not from package.json.
+onlyBuiltDependencies:
+  - esbuild
+  - "@tailwindcss/oxide"
+  - lightningcss

@@ -17,6 +17,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Pool is the connection pool type, aliased so callers (package main, the CLI)
+// can name it without importing the pgx module directly.
+type Pool = pgxpool.Pool
+
 // pingTimeout bounds the connectivity check NewPool performs before returning.
 const pingTimeout = 5 * time.Second
 

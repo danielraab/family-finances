@@ -12,7 +12,8 @@ context: |
   Monorepo with two packages, separate toolchains for local dev:
   - backend/  — Go 1.26 HTTP API on net/http (no web framework/router/ORM);
     persistence is PostgreSQL via github.com/jackc/pgx/v5 (DATABASE_URL required).
-  - frontend/ — Next.js 16 (App Router), React 19, Tailwind 4, Biome, pnpm.
+  - frontend/ — client-only SPA: Vite, React 19, TanStack Router (file-based),
+    Tailwind 4, Biome, pnpm. No SSR, no framework server.
 
   Architectural rule: the frontend never connects to a database directly. The Go
   backend owns all persistence and is the frontend's only backend.
@@ -20,13 +21,23 @@ context: |
   The frontend builds to a static bundle (pnpm build -> frontend/out/). In
   production, the Go backend embeds that bundle via go:embed and serves it
   directly (single Docker image, root Dockerfile) — no Node server, no separate
-  static host, no nginx, no BACKEND_URL. The frontend calls the backend
-  same-origin under /api/. The single app image runs alongside an external
+  static host, no nginx, no BACKEND_URL. The backend serves index.html for any
+  unmatched non-/api/ route so client-side routing owns deep links. The
+  frontend calls the backend same-origin under /api/. The single app image runs alongside an external
   PostgreSQL it does not contain; root compose.yaml (app + postgres:17 + named
   volume) is the reference topology for local dev, CI, and production. CI
   (.github/workflows/ci.yml) lints/tests both packages (backend job against a
   postgres service container) and publishes the image to GHCR (tag YYYYMMDD-N)
   on pushes to the default branch.
+
+  Authentication (internal/auth, first domain package): user accounts with
+  multiple linkable sign-in identities (email magic link over SMTP + one
+  OIDC/OAuth provider). Sessions are opaque 256-bit tokens stored hashed,
+  carried by an HttpOnly ff_session cookie for browsers and as
+  Authorization: Bearer for API/mobile clients — one sessions table, one
+  middleware. Registration policy (signup toggle, email-domain allow-list,
+  invites, zero-users bootstrap admin) is env-driven. internal/cli provides
+  `admin grant|revoke|list`, dispatched from main.go beside `healthcheck`.
 
   Conventions: Conventional Commits. Each package has its own AGENTS.md / README.md.
 

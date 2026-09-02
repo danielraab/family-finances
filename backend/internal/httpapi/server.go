@@ -29,6 +29,14 @@ type Deps struct {
 
 	// DB backs the /api/healthz connectivity probe.
 	DB DBPinger
+
+	// Auth resolves a session token to a user for the request-scoped auth
+	// middleware. Nil disables the middleware (no user is ever attached).
+	Auth Authenticator
+
+	// AuthHandler is the auth domain package's http.Handler, mounted at
+	// /api/auth/. Nil leaves the prefix unrouted.
+	AuthHandler http.Handler
 }
 
 // Routes builds the request multiplexer: backend routes live under /api/,
@@ -36,6 +44,11 @@ type Deps struct {
 func Routes(deps Deps) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/healthz", healthHandler(deps.DB))
+	if deps.AuthHandler != nil {
+		// More specific than the "/api/" fallback below, so ServeMux routes
+		// every /api/auth/... path here.
+		mux.Handle("/api/auth/", deps.AuthHandler)
+	}
 	// Unmatched /api/ paths get a JSON 404 — the reserved namespace never
 	// falls through to the static site. More specific than "/", so it wins
 	// for /api/... only.
@@ -49,8 +62,12 @@ func Routes(deps Deps) *http.ServeMux {
 // New builds the HTTP server: the route mux wrapped in the standard
 // middleware chain, listening on the configured port.
 func New(cfg config.Config, deps Deps) *http.Server {
+	var handler http.Handler = Routes(deps)
+	if deps.Auth != nil {
+		handler = authResolve(deps.Auth, handler)
+	}
 	return &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: withMiddleware(Routes(deps)),
+		Handler: withMiddleware(handler),
 	}
 }

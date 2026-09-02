@@ -19,6 +19,21 @@ func registerErrStatus(err error, status int) {
 	errStatus[err] = status
 }
 
+// WriteJSON encodes v as a JSON response with the given status code. It is the
+// exported entry point domain handlers are wired to use for success bodies so
+// every JSON response is shaped and logged the same way (they cannot import
+// this package, so package main passes this function in).
+func WriteJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
+	writeJSON(w, r, status, v)
+}
+
+// WriteError maps err to a status code (see registerErrStatus) and writes the
+// standard JSON error body. Domain handlers are wired to call this so their
+// sentinel errors become status codes in one place.
+func WriteError(w http.ResponseWriter, r *http.Request, err error) {
+	writeError(w, r, err)
+}
+
 // writeJSON encodes v as a JSON response with the given status code.
 func writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

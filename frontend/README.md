@@ -1,48 +1,55 @@
 # frontend
 
-Next.js 16 web client for family-finances (App Router, React 19, Tailwind 4,
-Biome, TypeScript). Builds to a **static bundle** — no Node server in
-production.
+Client-only web app for family-finances: **Vite + React 19 + TanStack Router**,
+Tailwind 4, Biome, TypeScript. Builds to a **static bundle** in `out/` — no
+Node server in production (the Go backend embeds and serves it).
 
 ## Prerequisites
 
-- Node 20+
+- Node 22+
 - pnpm 11+ (`corepack enable`)
 
 ## Getting started
 
 ```bash
 pnpm install
-pnpm dev
+pnpm dev            # Vite dev server on http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Edit `app/page.tsx` — the
-page hot-reloads.
-
-## Building
-
-```bash
-pnpm build        # writes ./out (static HTML/CSS/JS)
-npx serve out     # preview the static bundle, no Node server
-```
-
-`out/` is what gets deployed — in production, the Go backend embeds it at
-compile time and serves it directly (see `../backend/AGENTS.md`); there is no
-separate static host or nginx.
+The app calls the backend at relative `/api/...` paths; `pnpm dev` proxies
+those to `http://localhost:8080`, so **run the Go backend too** (see
+`../backend/README.md`). For the auth flows also start Mailpit
+(`docker compose -f ../docker-compose.dev.yml up -d`) and set the backend's
+`AUTH_BASE_URL=http://localhost:3000` so emailed sign-in links come back
+through the dev origin.
 
 ## Scripts
 
-| Command       | Description                        |
-| ------------- | --------------------------------- |
-| `pnpm dev`    | Start the dev server              |
-| `pnpm build`  | Static export to `out/`           |
-| `pnpm lint`   | Biome check                       |
-| `pnpm format` | Biome format (writes changes)     |
+| Command                | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| `pnpm dev`             | Vite dev server (port 3000, `/api` proxied)   |
+| `pnpm build`           | Static build to `out/`                        |
+| `pnpm preview`         | Serve the built `out/` locally                |
+| `pnpm lint`            | Biome check (lint + format + import order)    |
+| `pnpm format`          | Biome format (writes changes)                 |
+| `pnpm generate-routes` | Regenerate `src/routeTree.gen.ts`             |
+| `pnpm exec tsc`        | Type-check (no emit)                          |
+
+## Routing
+
+File-based (`src/routes/`), via `@tanstack/router-plugin`.
+`src/routeTree.gen.ts` is generated — don't edit it. Add a route by adding a
+file; navigate with `<Link to="…">` from `@tanstack/react-router`.
 
 ## Backend
 
-The client ships no backend URL and currently fetches nothing. The Go backend
-serves this static build directly (same origin), so when fetching starts it
-should call relative `/api/...` paths — no base URL or CORS config needed. See
-[`../backend/AGENTS.md`](../backend/AGENTS.md). The frontend never opens a
-database connection; the Go backend owns all persistence.
+Ships no backend URL. In production the Go backend embeds this build and serves
+it same-origin, returning `index.html` for any unmatched client route so deep
+links and refreshes work. See [`../backend/AGENTS.md`](../backend/AGENTS.md).
+The frontend never opens a database connection.
+
+## Docker image
+
+Built from the repo root, not here — the root `Dockerfile` builds this bundle
+and embeds it into the Go binary. `docker build -t family-finances .` from the
+repo root.

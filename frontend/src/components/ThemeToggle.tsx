@@ -1,13 +1,8 @@
-"use client";
+import { type Theme, useTheme } from "../lib/theme";
 
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+const ORDER: Theme[] = ["system", "light", "dark"];
 
-type ThemeChoice = "system" | "light" | "dark";
-
-const ORDER: ThemeChoice[] = ["system", "light", "dark"];
-
-const LABEL: Record<ThemeChoice, string> = {
+const LABEL: Record<Theme, string> = {
   system: "System",
   light: "Light",
   dark: "Dark",
@@ -72,7 +67,7 @@ function MonitorGlyph() {
   );
 }
 
-function ThemeGlyph({ choice }: { choice: ThemeChoice }) {
+function ThemeGlyph({ choice }: { choice: Theme }) {
   if (choice === "light") return <SunGlyph />;
   if (choice === "dark") return <MoonGlyph />;
   return <MonitorGlyph />;
@@ -80,34 +75,22 @@ function ThemeGlyph({ choice }: { choice: ThemeChoice }) {
 
 export function ThemeToggle({ collapsed }: { collapsed: boolean }) {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Before mount, `theme` is not resolved — render a stable placeholder that
-  // matches the server output so hydration doesn't mismatch.
-  const current: ThemeChoice =
-    mounted && (theme === "light" || theme === "dark" || theme === "system")
-      ? theme
-      : "system";
-  const next = ORDER[(ORDER.indexOf(current) + 1) % ORDER.length];
+  const next = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length];
 
   return (
     <button
       type="button"
       onClick={() => setTheme(next)}
-      aria-label={`Theme: ${LABEL[current]}. Switch to ${LABEL[next]}.`}
-      title={collapsed ? `Theme: ${LABEL[current]}` : undefined}
+      aria-label={`Theme: ${LABEL[theme]}. Switch to ${LABEL[next]}.`}
+      title={collapsed ? `Theme: ${LABEL[theme]}` : undefined}
       className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06] ${
         collapsed ? "justify-center" : ""
       }`}
     >
       <span className="shrink-0">
-        <ThemeGlyph choice={current} />
+        <ThemeGlyph choice={theme} />
       </span>
-      {!collapsed && <span className="truncate">{LABEL[current]}</span>}
+      {!collapsed && <span className="truncate">{LABEL[theme]}</span>}
     </button>
   );
 }
