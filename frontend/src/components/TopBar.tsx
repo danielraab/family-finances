@@ -1,5 +1,4 @@
 import { useMediaQuery } from "../lib/useMediaQuery";
-import { ThemeToggle } from "./ThemeToggle";
 
 function ChevronGlyph({ pointing }: { pointing: "left" | "right" }) {
   return (
@@ -90,7 +89,7 @@ export function TopBar({
       : "Open sidebar";
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-black/10 px-2 dark:border-white/10">
+    <header className="flex h-14 shrink-0 items-center border-b border-black/10 px-2 dark:border-white/10">
       <button
         type="button"
         onClick={onToggle}
@@ -106,8 +105,6 @@ export function TopBar({
           <ChevronGlyph pointing={collapsed ? "right" : "left"} />
         </span>
       </button>
-
-      <ThemeToggle iconOnly />
     </header>
   );
 }

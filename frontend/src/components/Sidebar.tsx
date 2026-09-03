@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { Icon } from "./Icon";
 import { SidebarUser } from "./SidebarUser";
+import { ThemeToggle } from "./ThemeToggle";
 
 const NAV = [{ to: "/", label: "Home" }] as const;
 
@@ -121,6 +122,9 @@ export function Sidebar({
         </nav>
 
         <div className="flex flex-col gap-1 border-t border-black/10 px-2 py-2 dark:border-white/10">
+          <div className={`flex ${effectiveCollapsed ? "justify-center" : ""}`}>
+            <ThemeToggle iconOnly />
+          </div>
           <SidebarUser collapsed={effectiveCollapsed} />
         </div>
       </aside>
