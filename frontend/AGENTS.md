@@ -84,9 +84,17 @@ English. `src/routes/__root.tsx` keeps `<html lang>` (statically `"en"` in
 `index.html`) in sync with the resolved language at runtime. A per-user,
 account-level language setting is a planned follow-up once a settings
 surface exists — it will take priority over browser detection, not replace
-it. Use `useTranslation()` / `t()` (and `<Trans>` for strings with embedded
-markup) rather than literal strings for any new user-facing text; the
-"Family Finances" brand name itself stays untranslated.
+it.
+
+Every hardcoded user-facing string (labels, titles, `aria-label`/`title`
+text, etc.) MUST go through `useTranslation()` / `t()` (or `<Trans>` for
+strings with embedded markup) instead of a literal — the "Family Finances"
+brand name is the one exception. `src/i18n/locales/en.json` is the source of
+truth: a key MUST exist there before or at the same time it's added to any
+other locale file. Other locale files are allowed to temporarily lag
+`en.json` — CI's `i18n-coverage` job (`scripts/i18n-coverage.mjs`) reports
+each locale's coverage against it as a job summary and a PR comment, but
+that check is informational only and never blocks merging.
 
 ## Data & auth
 
