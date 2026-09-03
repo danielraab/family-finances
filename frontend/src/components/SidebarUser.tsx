@@ -2,7 +2,6 @@ import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { Link } from "@tanstack/react-router";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
-import { ThemeMenuItems } from "./ThemeMenu";
 
 const ROW =
   "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]";
@@ -170,8 +169,6 @@ export function SidebarUser({ collapsed }: { collapsed: boolean }) {
         anchor={{ to: collapsed ? "right end" : "top start", gap: 8 }}
         className="z-50 w-52 rounded-md border border-black/10 bg-white p-1 shadow-lg focus:outline-none dark:border-white/10 dark:bg-neutral-900"
       >
-        <ThemeMenuItems />
-        <div className="my-1 h-px bg-black/10 dark:bg-white/10" />
         <MenuItem>
           {({ focus }) => (
             <button

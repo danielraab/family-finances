@@ -62,11 +62,13 @@ Class-based (`.dark` on `<html>`), not media-query. `src/styles.css` declares
 `@custom-variant dark (&:where(.dark, .dark *))`. `src/lib/theme.tsx` owns the
 class: three states (system / light / dark), persisted to `localStorage` under
 `ff:theme`, with an inline pre-paint script in `index.html` to avoid a flash.
-The control is `src/components/ThemeMenu.tsx` (`ThemeMenuItems`, three
-explicit choices with a checkmark on the active one) — not a standalone
-button, since it isn't clicked often; it's folded into the account dropdown
-in `src/components/SidebarUser.tsx`, above "Log out". Fonts (Geist / Geist
-Mono) are self-hosted via `@fontsource-variable/*`, imported in `src/main.tsx`.
+The control is `src/components/ThemeSwitch.tsx`, rendered in `Sidebar`'s
+footer above `SidebarUser` — a device preference, not an account setting, so
+it's visible to anonymous and authenticated visitors alike, unlike
+`SidebarUser`'s own dropdown. Expanded it's a single-row segmented pill
+(System/Light/Dark); collapsed to icon-only sidebar width it falls back to
+one button that cycles the three. Fonts (Geist / Geist Mono) are self-hosted
+via `@fontsource-variable/*`, imported in `src/main.tsx`.
 
 ## Data & auth
 
