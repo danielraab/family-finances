@@ -1,0 +1,43 @@
+{
+  "nav": {
+    "home": "Home"
+  },
+  "sidebar": {
+    "closeSidebar": "Close sidebar"
+  },
+  "topbar": {
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "openSidebar": "Open sidebar",
+    "closeSidebar": "Close sidebar"
+  },
+  "user": {
+    "logIn": "Log in",
+    "logOut": "Log out"
+  },
+  "theme": {
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark",
+    "current": "Theme: {{label}}",
+    "switchTo": "Theme: {{current}}. Switch to {{next}}."
+  },
+  "login": {
+    "title": "Sign in",
+    "subtitle": "We'll email you a single-use link to sign in — no password.",
+    "or": "or",
+    "emailLabel": "Email",
+    "invalidEmail": "Enter a valid email address.",
+    "sendError": "Something went wrong sending the link. Please try again.",
+    "submit": "Send me a sign-in link",
+    "submitting": "Sending…",
+    "checkInbox": "Check your inbox",
+    "sentTo": "We sent a sign-in link to <bold>{{email}}</bold>. Open it on this device to finish signing in.",
+    "useDifferentAddress": "Use a different address"
+  },
+  "home": {
+    "tagline": "Track the household's money in one place.",
+    "emptyTitle": "Nothing here yet",
+    "emptyBody": "This is a placeholder. Real content will land here soon."
+  }
+}

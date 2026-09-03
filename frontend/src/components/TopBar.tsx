@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useMediaQuery } from "../lib/useMediaQuery";
 
 function ChevronGlyph({ pointing }: { pointing: "left" | "right" }) {
@@ -80,13 +81,14 @@ export function TopBar({
   onToggle: () => void;
 }) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const { t } = useTranslation();
   const label = isDesktop
     ? collapsed
-      ? "Expand sidebar"
-      : "Collapse sidebar"
+      ? t("topbar.expandSidebar")
+      : t("topbar.collapseSidebar")
     : mobileOpen
-      ? "Close sidebar"
-      : "Open sidebar";
+      ? t("topbar.closeSidebar")
+      : t("topbar.openSidebar");
 
   return (
     <header className="flex h-14 shrink-0 items-center border-b border-black/10 px-2 dark:border-white/10">

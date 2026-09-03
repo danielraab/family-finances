@@ -1,11 +1,12 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { Icon } from "./Icon";
 import { SidebarUser } from "./SidebarUser";
 import { ThemeSwitch } from "./ThemeSwitch";
 
-const NAV = [{ to: "/", label: "Home" }] as const;
+const NAV = [{ to: "/", labelKey: "nav.home" }] as const;
 
 function HomeGlyph() {
   return (
@@ -48,6 +49,7 @@ export function Sidebar({
   const pathname = useLocation({ select: (l) => l.pathname });
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const effectiveCollapsed = isDesktop && collapsed;
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!mobileOpen) {
@@ -67,7 +69,7 @@ export function Sidebar({
       {mobileOpen && (
         <button
           type="button"
-          aria-label="Close sidebar"
+          aria-label={t("sidebar.closeSidebar")}
           onClick={onCloseMobile}
           className="fixed inset-0 z-40 bg-black/40 md:hidden"
         />
@@ -97,13 +99,14 @@ export function Sidebar({
         <nav className="flex flex-1 flex-col gap-1 px-2 py-2">
           {NAV.map((item) => {
             const active = pathname === item.to;
+            const label = t(item.labelKey);
             return (
               <Link
                 key={item.to}
                 to={item.to}
                 onClick={onCloseMobile}
                 aria-current={active ? "page" : undefined}
-                title={effectiveCollapsed ? item.label : undefined}
+                title={effectiveCollapsed ? label : undefined}
                 className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   active
                     ? "bg-black/[.06] text-black dark:bg-white/10 dark:text-white"
@@ -114,7 +117,7 @@ export function Sidebar({
                   <HomeGlyph />
                 </span>
                 {!effectiveCollapsed && (
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate">{label}</span>
                 )}
               </Link>
             );

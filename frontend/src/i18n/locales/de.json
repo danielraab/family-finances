@@ -1,0 +1,43 @@
+{
+  "nav": {
+    "home": "Start"
+  },
+  "sidebar": {
+    "closeSidebar": "Seitenleiste schließen"
+  },
+  "topbar": {
+    "expandSidebar": "Seitenleiste ausklappen",
+    "collapseSidebar": "Seitenleiste einklappen",
+    "openSidebar": "Seitenleiste öffnen",
+    "closeSidebar": "Seitenleiste schließen"
+  },
+  "user": {
+    "logIn": "Anmelden",
+    "logOut": "Abmelden"
+  },
+  "theme": {
+    "system": "System",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "current": "Design: {{label}}",
+    "switchTo": "Design: {{current}}. Wechseln zu {{next}}."
+  },
+  "login": {
+    "title": "Anmelden",
+    "subtitle": "Wir schicken dir einen einmaligen Anmeldelink per E-Mail — ohne Passwort.",
+    "or": "oder",
+    "emailLabel": "E-Mail",
+    "invalidEmail": "Gib eine gültige E-Mail-Adresse ein.",
+    "sendError": "Beim Senden des Links ist etwas schiefgelaufen. Bitte versuche es erneut.",
+    "submit": "Anmeldelink senden",
+    "submitting": "Wird gesendet…",
+    "checkInbox": "Prüfe dein Postfach",
+    "sentTo": "Wir haben einen Anmeldelink an <bold>{{email}}</bold> gesendet. Öffne ihn auf diesem Gerät, um die Anmeldung abzuschließen.",
+    "useDifferentAddress": "Andere Adresse verwenden"
+  },
+  "home": {
+    "tagline": "Behalte die Finanzen der Familie an einem Ort im Blick.",
+    "emptyTitle": "Hier ist noch nichts",
+    "emptyBody": "Dies ist ein Platzhalter. Echte Inhalte folgen hier bald."
+  }
+}
