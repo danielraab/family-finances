@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
@@ -15,6 +16,7 @@ type OidcLogin = components["schemas"]["OidcLogin"];
 function LoginPage() {
   const { status } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [email, setEmail] = useState("");
   const [phase, setPhase] = useState<"form" | "sent">("form");
@@ -58,7 +60,7 @@ function LoginPage() {
     const value = email.trim();
 
     if (!EMAIL_RE.test(value)) {
-      setError("Enter a valid email address.");
+      setError(t("login.invalidEmail"));
       return;
     }
     setError(null);
@@ -73,7 +75,7 @@ function LoginPage() {
       setSentTo(value);
       setPhase("sent");
     } catch {
-      setError("Something went wrong sending the link. Please try again.");
+      setError(t("login.sendError"));
     } finally {
       setSubmitting(false);
     }
@@ -82,9 +84,11 @@ function LoginPage() {
   return (
     <section className="mx-auto flex w-full max-w-md flex-col gap-6 px-6 py-12 sm:px-10">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t("login.title")}
+        </h1>
         <p className="text-zinc-600 dark:text-zinc-400">
-          We&rsquo;ll email you a single-use link to sign in — no password.
+          {t("login.subtitle")}
         </p>
       </header>
 
@@ -100,7 +104,7 @@ function LoginPage() {
               </a>
               <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
                 <span className="h-px flex-1 bg-black/10 dark:bg-white/10" />
-                or
+                {t("login.or")}
                 <span className="h-px flex-1 bg-black/10 dark:bg-white/10" />
               </div>
             </div>
@@ -111,7 +115,7 @@ function LoginPage() {
             className="flex flex-col gap-4 rounded-lg border border-black/15 p-6 dark:border-white/15"
           >
             <label className="flex flex-col gap-1.5 text-sm font-medium">
-              Email
+              {t("login.emailLabel")}
               <input
                 type="email"
                 name="email"
@@ -132,19 +136,23 @@ function LoginPage() {
               disabled={submitting}
               className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
-              {submitting ? "Sending…" : "Send me a sign-in link"}
+              {submitting ? t("login.submitting") : t("login.submit")}
             </button>
           </form>
         </>
       ) : (
         <div className="flex flex-col gap-3 rounded-lg border border-black/15 p-6 dark:border-white/15">
-          <p className="font-medium">Check your inbox</p>
+          <p className="font-medium">{t("login.checkInbox")}</p>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            We sent a sign-in link to{" "}
-            <span className="font-medium text-zinc-900 dark:text-zinc-100">
-              {sentTo}
-            </span>
-            . Open it on this device to finish signing in.
+            <Trans
+              i18nKey="login.sentTo"
+              values={{ email: sentTo }}
+              components={{
+                bold: (
+                  <span className="font-medium text-zinc-900 dark:text-zinc-100" />
+                ),
+              }}
+            />
           </p>
           <button
             type="button"
@@ -155,7 +163,7 @@ function LoginPage() {
             }}
             className="self-start text-sm text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
           >
-            Use a different address
+            {t("login.useDifferentAddress")}
           </button>
         </div>
       )}

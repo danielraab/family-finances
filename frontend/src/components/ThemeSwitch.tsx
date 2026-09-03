@@ -1,11 +1,12 @@
+import { useTranslation } from "react-i18next";
 import { type Theme, useTheme } from "../lib/theme";
 
 const ORDER: Theme[] = ["system", "light", "dark"];
 
-const LABEL: Record<Theme, string> = {
-  system: "System",
-  light: "Light",
-  dark: "Dark",
+const LABEL_KEY: Record<Theme, string> = {
+  system: "theme.system",
+  light: "theme.light",
+  dark: "theme.dark",
 };
 
 function SunGlyph() {
@@ -82,6 +83,7 @@ function ThemeGlyph({ choice }: { choice: Theme }) {
  */
 export function ThemeSwitch({ collapsed }: { collapsed: boolean }) {
   const { theme, setTheme } = useTheme();
+  const { t } = useTranslation();
 
   if (collapsed) {
     const next = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length] ?? "system";
@@ -89,8 +91,11 @@ export function ThemeSwitch({ collapsed }: { collapsed: boolean }) {
       <button
         type="button"
         onClick={() => setTheme(next)}
-        aria-label={`Theme: ${LABEL[theme]}. Switch to ${LABEL[next]}.`}
-        title={`Theme: ${LABEL[theme]}`}
+        aria-label={t("theme.switchTo", {
+          current: t(LABEL_KEY[theme]),
+          next: t(LABEL_KEY[next]),
+        })}
+        title={t("theme.current", { label: t(LABEL_KEY[theme]) })}
         className="flex items-center justify-center rounded-md p-2 text-zinc-600 transition-colors hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
       >
         <ThemeGlyph choice={theme} />
@@ -105,8 +110,8 @@ export function ThemeSwitch({ collapsed }: { collapsed: boolean }) {
           key={choice}
           type="button"
           aria-pressed={theme === choice}
-          aria-label={`Theme: ${LABEL[choice]}`}
-          title={LABEL[choice]}
+          aria-label={t("theme.current", { label: t(LABEL_KEY[choice]) })}
+          title={t(LABEL_KEY[choice])}
           onClick={() => setTheme(choice)}
           className={`flex flex-1 items-center justify-center rounded p-1.5 transition-colors ${
             theme === choice

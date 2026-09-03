@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AuthProvider } from "../components/AuthProvider";
 import { Sidebar } from "../components/Sidebar";
 import { TopBar } from "../components/TopBar";
+import i18n from "../i18n";
 import { ThemeProvider } from "../lib/theme";
 import "../styles.css";
 
@@ -29,6 +30,17 @@ function RootComponent() {
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    function syncHtmlLang() {
+      document.documentElement.lang = i18n.resolvedLanguage ?? "en";
+    }
+    syncHtmlLang();
+    i18n.on("languageChanged", syncHtmlLang);
+    return () => {
+      i18n.off("languageChanged", syncHtmlLang);
+    };
   }, []);
 
   // Any navigation dismisses the mobile drawer, including links that don't

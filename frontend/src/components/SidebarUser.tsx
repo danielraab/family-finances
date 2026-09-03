@@ -1,5 +1,6 @@
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "./AuthProvider";
 import { Avatar } from "./Avatar";
 
@@ -98,6 +99,7 @@ function SelectorGlyph() {
  */
 export function SidebarUser({ collapsed }: { collapsed: boolean }) {
   const { status, user, logout } = useAuth();
+  const { t } = useTranslation();
 
   if (status === "loading" || (status === "authenticated" && !user)) {
     return (
@@ -121,13 +123,13 @@ export function SidebarUser({ collapsed }: { collapsed: boolean }) {
     return (
       <Link
         to="/login"
-        title={collapsed ? "Log in" : undefined}
+        title={collapsed ? t("user.logIn") : undefined}
         className={`${ROW} ${collapsed ? "justify-center" : ""}`}
       >
         <span className="shrink-0">
           <LogInGlyph />
         </span>
-        {!collapsed && <span className="truncate">Log in</span>}
+        {!collapsed && <span className="truncate">{t("user.logIn")}</span>}
       </Link>
     );
   }
@@ -181,7 +183,7 @@ export function SidebarUser({ collapsed }: { collapsed: boolean }) {
               <span className="shrink-0">
                 <PowerGlyph />
               </span>
-              Log out
+              {t("user.logOut")}
             </button>
           )}
         </MenuItem>

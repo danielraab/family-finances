@@ -70,6 +70,24 @@ it's visible to anonymous and authenticated visitors alike, unlike
 one button that cycles the three. Fonts (Geist / Geist Mono) are self-hosted
 via `@fontsource-variable/*`, imported in `src/main.tsx`.
 
+## i18n
+
+`i18next` + `react-i18next`, initialized in `src/i18n/index.ts` (imported
+once, at the top of `src/main.tsx`). Two languages ship today: **English**
+(default/fallback) and **German**; resources live in
+`src/i18n/locales/{en,de}.json` as one flat `translation` namespace. The
+active language is resolved purely from the browser
+(`i18next-browser-languagedetector`, `order: ["navigator"]`, `caches: []`) —
+every load re-detects fresh, with no persistence and no manual switcher yet;
+a `de*` browser language renders German, everything else falls back to
+English. `src/routes/__root.tsx` keeps `<html lang>` (statically `"en"` in
+`index.html`) in sync with the resolved language at runtime. A per-user,
+account-level language setting is a planned follow-up once a settings
+surface exists — it will take priority over browser detection, not replace
+it. Use `useTranslation()` / `t()` (and `<Trans>` for strings with embedded
+markup) rather than literal strings for any new user-facing text; the
+"Family Finances" brand name itself stays untranslated.
+
 ## Data & auth
 
 - The app ships **no backend URL**. Call the Go backend through the typed
