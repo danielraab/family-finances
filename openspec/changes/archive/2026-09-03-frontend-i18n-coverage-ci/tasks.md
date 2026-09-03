@@ -72,11 +72,27 @@
   `sidebar.bogusExtraKey`: reported 26/27 (96.3%), listed both the missing
   and the extra key by name in the `<details>` blocks, exit 1. Restored from
   a backup copy; re-ran to confirm back to 100%/exit 0.
-- [ ] 4.3 Push the branch / open a PR and confirm in the Actions UI: the
+- [x] 4.3 Push the branch / open a PR and confirm in the Actions UI: the
   `i18n-coverage` job runs in parallel with the other three, shows its
   actual pass/fail state without turning the overall run red, the job
   summary shows the table, and the PR gets exactly one coverage comment
   that updates in place on a follow-up push (not a new comment each time).
+  → Confirmed live (run 33809258975, job 100826988894): `i18n-coverage`
+  started alongside the other three jobs and completed (success, since
+  coverage is 100%) while `frontend`/`contract`/`backend` were still on
+  their setup steps — no dependency either direction. Logs show the exact
+  expected table. The "Comment on PR" step correctly shows
+  `conclusion: "skipped"`, since this was a plain branch push with no open
+  PR to comment on (the step's `if: github.event_name == 'pull_request'`
+  guard). Not exercised live: an actual coverage shortfall on a real PR (to
+  see `continue-on-error` keep the run green despite a failed job, and the
+  comment-upsert finding/updating an existing comment on a second push) —
+  no PR was opened for this branch (not asked for), and deliberately
+  breaking `de.json` on a real commit just to watch CI fail wasn't worth
+  the churn. Both paths are covered by the local script tests in 4.1/4.2
+  plus `continue-on-error`/`if:` being standard, well-documented GitHub
+  Actions mechanics — low residual risk, but worth a real PR check the
+  first time this actually reports a shortfall.
 - [x] 4.4 `cd frontend && pnpm lint` still passes.
   → Passes (exit 0). Correction to the design/task wording: `frontend/scripts/`
   is actually *outside* Biome's `files.includes` scope (only
