@@ -49,6 +49,8 @@ git-ignored. Build-script allow-listing lives in `pnpm-workspace.yaml`
   open/close the off-canvas drawer below it). `Sidebar` is presentational.
   Router devtools render only in dev.
 - `src/routes/index.tsx` → `/`. `src/routes/login.tsx` → `/login`.
+  `src/routes/settings.tsx` (+ `settings.index.tsx`, `settings.users.tsx`) →
+  `/settings` and `/settings/users` — see "Settings" below.
 - Navigate with `@tanstack/react-router`'s `<Link to="…">` / `useNavigate()`;
   read the path with `useLocation()`. `to` is type-checked against the route
   tree.
@@ -76,15 +78,25 @@ via `@fontsource-variable/*`, imported in `src/main.tsx`.
 once, at the top of `src/main.tsx`). Two languages ship today: **English**
 (default/fallback) and **German**; resources live in
 `src/i18n/locales/{en,de}.json` as one flat `translation` namespace. The
-active language is resolved purely from the browser
+active language is resolved from the browser
 (`i18next-browser-languagedetector`, `order: ["navigator"]`, `caches: []`) —
-every load re-detects fresh, with no persistence and no manual switcher yet;
-a `de*` browser language renders German, everything else falls back to
+every load re-detects fresh from `navigator.language`, no `localStorage`; a
+`de*` browser language renders German, everything else falls back to
 English. `src/routes/__root.tsx` keeps `<html lang>` (statically `"en"` in
-`index.html`) in sync with the resolved language at runtime. A per-user,
-account-level language setting is a planned follow-up once a settings
-surface exists — it will take priority over browser detection, not replace
-it.
+`index.html`) in sync with the resolved language at runtime.
+
+An authenticated visitor's account-level language preference — set on the
+Common tab of `/settings`, per `user-settings` — takes priority over browser
+detection: `AuthProvider` calls `i18n.changeLanguage(user.language)` once
+`GET /api/auth/me` resolves with a non-null `language` (the *raw* preference,
+distinct from `GET /api/settings`'s resolved value — see
+`backend/internal/settings`'s design note on why). No preference set means
+browser detection still applies, same as for an anonymous visitor. Because
+this depends on an async request, a visitor whose browser and account
+language disagree can see a brief flash of the browser-detected language
+before the account preference applies — accepted, not solved the way the
+colour theme's pre-paint script avoids its flash (that value lives in
+`localStorage`, this one doesn't).
 
 Every hardcoded user-facing string (labels, titles, `aria-label`/`title`
 text, etc.) MUST go through `useTranslation()` / `t()` (or `<Trans>` for
@@ -110,7 +122,8 @@ that check is informational only and never blocks merging.
   `components["schemas"]["User"]`). No polling, no focus-refetch. `logout()`
   calls `api.POST("/api/auth/logout")` and flips to `anonymous` in place.
 - `src/components/SidebarUser.tsx` renders the footer user control (initials
-  monogram + sign-out menu via `@headlessui/react`).
+  monogram + a `@headlessui/react` menu: "Settings" → `/settings`, then
+  "Log out").
 - `src/routes/login.tsx` is the magic-link form. On mount it calls
   `api.GET("/api/auth/config")`; when the response's `oidc` is non-null it
   renders a provider button (a plain `<a href={oidc.start_path}>` — a full-page
@@ -118,6 +131,31 @@ that check is informational only and never blocks merging.
   `oidc` or a failed request just shows the email form.
 - Data fetching is plain `fetch`/`api` calls in effects — no query library yet.
 - **Never** open a database connection from the frontend.
+
+## Settings
+
+`/settings` is the first route that requires authentication: `settings.tsx`
+(the layout route) redirects an anonymous `useAuth` to `/login`, renders
+nothing while `loading`, and otherwise renders the tab nav (Common always;
+Users only when `user.is_admin`, per `AdminUser`) plus `<Outlet/>`.
+
+- `settings.index.tsx` (`/settings`, Common tab) — language/timezone/default
+  currency. Each field calls `PUT /api/settings` with only itself on change
+  (no separate Save button, mirroring `ThemeSwitch`'s immediate-apply
+  interaction); a successful language change also calls
+  `i18n.changeLanguage()` so the running app switches immediately. A failed
+  update reverts the field and shows an inline error.
+- `settings.users.tsx` (`/settings/users`, admin-only) — redirects to
+  `/settings` if `user.is_admin` is false (defense in depth beyond the tab
+  simply not being listed). Lists users (`GET /api/auth/users`) and
+  invitations (`GET /api/auth/invites`), can invite
+  (`POST /api/auth/invites` — open to any authenticated user per the
+  backend, this tab is just its current UI surface), and can
+  disable/enable/(soft) delete a user, each behind a `@headlessui/react`
+  `Dialog` confirmation whose copy calls out self-targeting. A successful
+  self-disable/self-delete flips `useAuth` to `anonymous` locally (the same
+  transition `logout()` performs) and navigates away, rather than waiting for
+  a subsequent request to discover the `401`.
 
 ## Build output
 
