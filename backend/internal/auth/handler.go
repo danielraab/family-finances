@@ -52,7 +52,12 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("GET /api/auth/me", h.me)
 	h.mux.HandleFunc("POST /api/auth/logout", h.logout)
 	h.mux.HandleFunc("POST /api/auth/invites", h.createInvite)
+	h.mux.HandleFunc("GET /api/auth/invites", h.listInvites)
 	h.mux.HandleFunc("GET /api/auth/invites/accept", h.acceptInvite)
+	h.mux.HandleFunc("GET /api/auth/users", h.listUsers)
+	h.mux.HandleFunc("POST /api/auth/users/{id}/disable", h.disableUser)
+	h.mux.HandleFunc("POST /api/auth/users/{id}/enable", h.enableUser)
+	h.mux.HandleFunc("DELETE /api/auth/users/{id}", h.deleteUser)
 
 	return h
 }
@@ -146,13 +151,24 @@ func (h *Handler) config(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, body)
 }
 
+// meResponse embeds User and adds the raw (unresolved) language preference —
+// see internal/settings' design note on why /api/auth/me carries the raw
+// value while GET /api/settings carries the resolved one.
+type meResponse struct {
+	User
+	Language *string `json:"language"`
+}
+
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
 		writeUnauthorized(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, user)
+	writeJSON(w, http.StatusOK, meResponse{
+		User:     user,
+		Language: h.svc.UserLanguage(r.Context(), user.ID),
+	})
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
@@ -190,11 +206,99 @@ func (h *Handler) createInvite(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"id":         inv.ID,
-		"email":      inv.Email,
-		"expires_at": inv.ExpiresAt,
+	writeJSON(w, http.StatusCreated, InviteInfo{
+		ID:    inv.ID,
+		Email: inv.Email,
+		InvitedBy: InviteInviter{
+			ID:          inviter.ID,
+			Email:       inviter.Email,
+			DisplayName: inviter.DisplayName,
+		},
+		CreatedAt:  inv.CreatedAt,
+		ExpiresAt:  inv.ExpiresAt,
+		AcceptedAt: inv.AcceptedAt,
 	})
+}
+
+func (h *Handler) listInvites(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	invites, err := h.svc.ListInvites(r.Context())
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, invites)
+}
+
+// --- admin: users ----------------------------------------------------
+
+// requireAdmin returns the authenticated admin user, or writes 401/403 and
+// returns ok=false. The first real use of is_admin as an authorization
+// boundary in the backend.
+func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (User, bool) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return User{}, false
+	}
+	if !user.IsAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return User{}, false
+	}
+	return user, true
+}
+
+func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	users, err := h.svc.ListUsers(r.Context())
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	out := make([]AdminUser, len(users))
+	for i, u := range users {
+		out[i] = toAdminUser(u)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (h *Handler) disableUser(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	u, err := h.svc.DisableUser(r.Context(), r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toAdminUser(u))
+}
+
+func (h *Handler) enableUser(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	u, err := h.svc.EnableUser(r.Context(), r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toAdminUser(u))
+}
+
+func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if err := h.svc.SoftDeleteUser(r.Context(), r.PathValue("id")); err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) acceptInvite(w http.ResponseWriter, r *http.Request) {

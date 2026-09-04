@@ -43,10 +43,16 @@ backend/
     │   └── health.go    #   GET /api/healthz
     ├── auth/            # first domain package — accounts, identities, sessions, invites, OIDC login state
     │   ├── auth.go      #   domain types + email normalization + the identity-linking decision (§D1)
-    │   ├── service.go   #   use-case logic; declares Store, Mailer, OIDCClient interfaces
+    │   ├── service.go   #   use-case logic; declares Store, Mailer, OIDCClient, LanguageLookup interfaces
     │   ├── store.go     #   Store interface + sentinel errors (ErrSignupDisabled, ErrTokenExpired…)
     │   ├── handler.go   #   http.Handler for /api/auth/…; RenderError injected so it needn't import httpapi
     │   ├── httpctx.go   #   CookieName, WithUser / UserFromContext
+    │   └── *_test.go
+    ├── settings/        # per-user preferences — display language, timezone, default currency
+    │   ├── settings.go  #   domain type + hardcoded defaults (en/UTC/EUR) + validation
+    │   ├── service.go   #   Get/Update (resolved) + Language (raw, for auth.WithLanguageLookup)
+    │   ├── store.go     #   Store interface + sentinel error (ErrInvalidValue)
+    │   ├── handler.go   #   http.Handler for GET/PUT /api/settings; imports auth only for UserFromContext
     │   └── *_test.go
     ├── mailer/          # auth.Mailer over net/smtp — STARTTLS/implicit/none, hand-built MIME
     ├── oidcauth/        # auth.OIDCClient over coreos/go-oidc/v3 + x/oauth2 — discovery, PKCE, id_token verify
@@ -154,7 +160,9 @@ to status codes in the one place — `httpapi/respond.go`.
 
 `internal/auth` is the first domain package. It owns `users`, `identities`
 (`kind ∈ {email, oidc}`), `sessions`, `magic_link_tokens`, `invites`, and
-`oidc_login_state` (migration `0002_auth.sql`).
+`oidc_login_state` (migration `0002_auth.sql`). `users` also carries
+`disabled` and `deleted_at` (migration `0004_user_administration.sql`, see
+"User administration" below).
 
 - **Sessions are opaque bearer tokens** — 256 bits from `crypto/rand`, stored
   only as `sha256(token)`. Never a JWT. Browsers get an
@@ -180,7 +188,8 @@ to status codes in the one place — `httpapi/respond.go`.
   (enforced inside the account-creation transaction under an advisory lock).
 - **`admin` CLI:** `server admin grant <email>`, `server admin revoke <email>`,
   `server admin list` — in `internal/cli`, dispatched from `main.go`. `is_admin`
-  gates nothing yet.
+  gates the user-administration endpoints below (its first real use as an
+  authorization check).
 - Env groups: `AUTH_BASE_URL` (builds magic-link URLs and the OIDC
   `redirect_uri`), `AUTH_SESSION_TTL`/`AUTH_SESSION_MAX_TTL`,
   `AUTH_COOKIE_SECURE`, `AUTH_SIGNUP_ENABLED`, `AUTH_ALLOWED_EMAIL_DOMAINS`,
@@ -192,6 +201,52 @@ to status codes in the one place — `httpapi/respond.go`.
   OIDC is optional — the client is built only when `OIDC_ISSUER` **and**
   `OIDC_CLIENT_ID` are both set; otherwise the `/api/auth/oidc/*` routes are
   disabled and `/api/auth/config` reports `oidc: null`.
+
+## User administration
+
+Admin-only endpoints on `auth.Handler`, each gated on `user.IsAdmin` (`403`
+for a non-admin, `401` unauthenticated): `GET /api/auth/users` (every
+non-soft-deleted user), `GET /api/auth/invites` (every invitation, any
+status, with the inviter's identity), `POST /api/auth/users/{id}/disable`,
+`POST /api/auth/users/{id}/enable`, `DELETE /api/auth/users/{id}` (soft
+delete — one-way, no undelete endpoint). Disable and delete both call
+`Store.DeleteSessionsByUserID` to revoke every session belonging to the
+target **immediately**, not just rely on expiry; the auth middleware
+(`Service.Authenticate`) also re-checks `disabled`/`deleted_at` on every
+request as a belt-and-suspenders guard against a session row that somehow
+outlives the revocation. A disabled or soft-deleted account is rejected by
+both sign-in flows too (`ErrAccountDisabled`, `403`) — magic-link
+`POST /api/auth/email/start` treats it like "no account" (still `200`, no
+mail sent).
+
+**No self-lockout guard, deliberately.** An admin may disable or delete their
+own account, including as the only remaining admin — there is no
+server-side check preventing it. The frontend's confirmation dialog is the
+only mitigation; see `openspec/specs/user-administration/spec.md`.
+
+## Settings
+
+`internal/settings` is a small domain package for per-user preferences:
+display language, timezone, default currency (`user_settings` table,
+migration `0003_user_settings.sql` — one row per user, every column
+nullable; a missing row and a `NULL` column both mean "use the hardcoded
+default," resolved once in `Service.Get`/`Update`). `GET`/`PUT /api/settings`
+require authentication; `PUT` is a partial update (`ON CONFLICT (user_id) DO
+UPDATE`, touching only the fields present in the body). Validation:
+`language ∈ {en, de}`, `timezone` via `time.LoadLocation`, `default_currency`
+by ISO-4217 shape (three uppercase letters) — not a canonical list.
+
+`internal/settings` imports `internal/auth` only for `auth.UserFromContext`
+(the same read-only context accessor `internal/httpapi` uses) — never its
+`Store` or a driver. The reverse dependency runs the other way for the
+language preference specifically: `auth.Service` declares its own narrow
+`LanguageLookup` interface (`Language(ctx, userID) (*string, error)`,
+satisfied structurally by `settings.Service`) and `main.go` wires it in via
+`auth.WithLanguageLookup` — so `GET /api/auth/me` can embed the *raw*,
+unresolved language preference for the web client's i18n precedence, without
+`internal/auth` importing `internal/settings`. See
+`openspec/specs/user-settings/spec.md` for why the raw value (not the
+resolved one from `GET /api/settings`) has to be the one on `/me`.
 
 ## Serving the frontend
 
@@ -252,8 +307,12 @@ The `internal/` layout above is in place (`internal/config`,
 `healthcheck.go`, and `embed.go`. `internal/auth` is the first domain package,
 in the four-file shape, with `Store` implementations in both `storage/memory`
 and `storage/postgres` and migration `0002_auth.sql`; `internal/mailer`,
-`internal/oidcauth`, and `internal/cli` are its supporting leaf packages. The
-next product noun adds another `internal/<noun>/` the same way.
+`internal/oidcauth`, and `internal/cli` are its supporting leaf packages.
+`internal/settings` is the second domain package, same four-file shape,
+`Store` implementations in both storage backends, migration
+`0003_user_settings.sql`; `0004_user_administration.sql` extends `users`
+for `internal/auth`'s admin endpoints. The next product noun adds another
+`internal/<noun>/` the same way.
 
 ## Before you're done
 

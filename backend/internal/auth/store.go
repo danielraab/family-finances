@@ -38,6 +38,9 @@ var (
 	// ErrEmailRequired: an OIDC sign-in returned no email, so no account can
 	// be created.
 	ErrEmailRequired = errors.New("provider returned no email address")
+	// ErrAccountDisabled: the resolved account is disabled or soft-deleted;
+	// no session is established.
+	ErrAccountDisabled = errors.New("account is disabled")
 )
 
 // Sentinels is every error above, for the httpapi mapping and for tests.
@@ -45,6 +48,7 @@ var Sentinels = []error{
 	ErrNotFound, ErrSignupDisabled, ErrDomainNotAllowed, ErrTokenInvalid,
 	ErrTokenExpired, ErrTokenConsumed, ErrInviteInvalid, ErrIdentityConflict,
 	ErrEmailInUse, ErrInvalidEmail, ErrOIDCNotConfigured, ErrEmailRequired,
+	ErrAccountDisabled,
 }
 
 // NewUser is the input to account creation.
@@ -127,4 +131,25 @@ type Store interface {
 	// ConsumeOIDCState atomically deletes and returns the row for state,
 	// yielding ErrTokenInvalid when unknown and ErrTokenExpired when stale.
 	ConsumeOIDCState(ctx context.Context, state string, now time.Time) (OIDCState, error)
+
+	// --- admin: users ---
+
+	// ListUsers returns every non-soft-deleted user, ordered by created_at.
+	ListUsers(ctx context.Context) ([]User, error)
+	// SetUserDisabled sets disabled on the user with this id, returning
+	// ErrNotFound if there is none.
+	SetUserDisabled(ctx context.Context, id string, disabled bool) error
+	// SoftDeleteUser sets deleted_at on the user with this id, returning
+	// ErrNotFound if there is none.
+	SoftDeleteUser(ctx context.Context, id string, now time.Time) error
+	// DeleteSessionsByUserID immediately revokes every session belonging to
+	// the user — used by disable/soft-delete so access ends at once, not on
+	// next expiry check.
+	DeleteSessionsByUserID(ctx context.Context, userID string) error
+
+	// --- admin: invites ---
+
+	// ListInvites returns every invite regardless of status, newest first,
+	// each carrying the inviter's identity.
+	ListInvites(ctx context.Context) ([]InviteInfo, error)
 }

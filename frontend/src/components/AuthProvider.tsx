@@ -7,6 +7,7 @@ import {
 } from "react";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
+import i18n from "../i18n";
 
 /** The authenticated user, as returned by `GET /api/auth/me`. */
 export type User = components["schemas"]["User"];
@@ -29,6 +30,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  * status, or a network error → anonymous. No polling, no focus-refetch: signing
  * in is a full page load (the magic-link callback redirects here), so the only
  * transition this provider drives itself is `logout()`.
+ *
+ * When the resolved user carries a non-null `language`, it is applied via
+ * `i18n.changeLanguage` — an explicit account preference takes priority over
+ * the browser-detected language (see web-client-i18n). A visitor with no
+ * preference set keeps whatever the browser detector already resolved.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
@@ -44,6 +50,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (data) {
           setUser(data);
           setStatus("authenticated");
+          if (data.language) {
+            i18n.changeLanguage(data.language);
+          }
         } else {
           setUser(null);
           setStatus("anonymous");

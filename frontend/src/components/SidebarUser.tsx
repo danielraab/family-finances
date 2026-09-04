@@ -48,6 +48,26 @@ function LogInGlyph() {
   );
 }
 
+function GearGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={20}
+      height={20}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
 function PowerGlyph() {
   return (
     <svg
@@ -93,8 +113,8 @@ function SelectorGlyph() {
  * - loading  → a neutral person glyph, no label (so a signed-in visitor never
  *   sees "Log in" flash before their identity resolves);
  * - anonymous → a "Log in" link to /login;
- * - authenticated → the initials avatar + name/email, opening a menu whose one
- *   item signs out.
+ * - authenticated → the initials avatar + name/email, opening a menu with
+ *   "Settings" (links to /settings) and "Log out".
  * Takes the sidebar's `collapsed` state to switch to a glyph/avatar-only row.
  */
 export function SidebarUser({ collapsed }: { collapsed: boolean }) {
@@ -171,6 +191,21 @@ export function SidebarUser({ collapsed }: { collapsed: boolean }) {
         anchor={{ to: collapsed ? "right end" : "top start", gap: 8 }}
         className="z-50 w-52 rounded-md border border-black/10 bg-white p-1 shadow-lg focus:outline-none dark:border-white/10 dark:bg-neutral-900"
       >
+        <MenuItem>
+          {({ focus }) => (
+            <Link
+              to="/settings"
+              className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300 ${
+                focus ? "bg-black/[.05] dark:bg-white/[.08]" : ""
+              }`}
+            >
+              <span className="shrink-0">
+                <GearGlyph />
+              </span>
+              {t("user.settings")}
+            </Link>
+          )}
+        </MenuItem>
         <MenuItem>
           {({ focus }) => (
             <button

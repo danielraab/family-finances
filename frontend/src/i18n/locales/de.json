@@ -13,7 +13,8 @@
   },
   "user": {
     "logIn": "Anmelden",
-    "logOut": "Abmelden"
+    "logOut": "Abmelden",
+    "settings": "Einstellungen"
   },
   "theme": {
     "system": "System",
@@ -39,5 +40,56 @@
     "tagline": "Behalte die Finanzen der Familie an einem Ort im Blick.",
     "emptyTitle": "Hier ist noch nichts",
     "emptyBody": "Dies ist ein Platzhalter. Echte Inhalte folgen hier bald."
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "tabs": {
+      "common": "Allgemein",
+      "users": "Benutzer"
+    },
+    "common": {
+      "language": "Anzeigesprache",
+      "languageOption": {
+        "en": "Englisch",
+        "de": "Deutsch"
+      },
+      "timezone": "Zeitzone",
+      "defaultCurrency": "Standardwährung",
+      "saveError": "Speichern fehlgeschlagen — bitte versuche es erneut."
+    },
+    "users": {
+      "usersHeading": "Benutzer",
+      "invitesHeading": "Einladungen",
+      "inviteEmailLabel": "E-Mail-Adresse",
+      "invite": "Einladen",
+      "inviting": "Wird eingeladen…",
+      "inviteError": "Einladung konnte nicht gesendet werden — bitte versuche es erneut.",
+      "columnUser": "Benutzer",
+      "columnRole": "Rolle",
+      "columnStatus": "Status",
+      "columnCreated": "Erstellt",
+      "roleAdmin": "Admin",
+      "roleMember": "Mitglied",
+      "statusActive": "Aktiv",
+      "statusDisabled": "Deaktiviert",
+      "invitedBy": "Eingeladen von {{name}}",
+      "expires": "Läuft ab am {{date}}",
+      "accepted": "Angenommen am {{date}}",
+      "pending": "Ausstehend",
+      "disable": "Deaktivieren",
+      "enable": "Aktivieren",
+      "delete": "Löschen",
+      "confirm": {
+        "disableTitle": "{{email}} deaktivieren?",
+        "disableBody": "Der Zugriff wird sofort entzogen und kann später wieder aktiviert werden.",
+        "enableTitle": "{{email}} aktivieren?",
+        "enableBody": "Diese Person kann sich wieder anmelden.",
+        "deleteTitle": "{{email}} löschen?",
+        "deleteBody": "Dies entfernt die Person aus der Benutzerliste. Dies kann hier nicht rückgängig gemacht werden.",
+        "selfWarning": "Dies ist dein eigenes Konto — du wirst sofort abgemeldet.",
+        "cancel": "Abbrechen",
+        "confirmAction": "Bestätigen"
+      }
+    }
   }
 }

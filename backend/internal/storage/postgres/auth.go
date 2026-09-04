@@ -44,11 +44,11 @@ func (a *AuthStore) UserCount(ctx context.Context) (int, error) {
 	return n, err
 }
 
-const userCols = `id::text, email, COALESCE(display_name, ''), is_admin, created_at`
+const userCols = `id::text, email, COALESCE(display_name, ''), is_admin, created_at, disabled, deleted_at`
 
 func scanUser(row pgx.Row) (auth.User, error) {
 	var u auth.User
-	if err := row.Scan(&u.ID, &u.Email, &u.DisplayName, &u.IsAdmin, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Email, &u.DisplayName, &u.IsAdmin, &u.CreatedAt, &u.Disabled, &u.DeletedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return auth.User{}, auth.ErrNotFound
 		}
@@ -90,6 +90,79 @@ func (a *AuthStore) ListAdminEmails(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// --- admin: users --------------------------------------------------------
+
+func (a *AuthStore) ListUsers(ctx context.Context) ([]auth.User, error) {
+	rows, err := a.pool.Query(ctx, `SELECT `+userCols+` FROM users WHERE deleted_at IS NULL ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []auth.User
+	for rows.Next() {
+		var u auth.User
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.IsAdmin, &u.CreatedAt, &u.Disabled, &u.DeletedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (a *AuthStore) SetUserDisabled(ctx context.Context, id string, disabled bool) error {
+	tag, err := a.pool.Exec(ctx, `UPDATE users SET disabled = $2 WHERE id = $1`, id, disabled)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrNotFound
+	}
+	return nil
+}
+
+func (a *AuthStore) SoftDeleteUser(ctx context.Context, id string, now time.Time) error {
+	tag, err := a.pool.Exec(ctx, `UPDATE users SET deleted_at = $2 WHERE id = $1`, id, now)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrNotFound
+	}
+	return nil
+}
+
+func (a *AuthStore) DeleteSessionsByUserID(ctx context.Context, userID string) error {
+	_, err := a.pool.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID)
+	return err
+}
+
+// --- admin: invites -------------------------------------------------------
+
+func (a *AuthStore) ListInvites(ctx context.Context) ([]auth.InviteInfo, error) {
+	rows, err := a.pool.Query(ctx, `
+		SELECT i.id::text, i.email, u.id::text, u.email, COALESCE(u.display_name, ''),
+		       i.created_at, i.expires_at, i.accepted_at
+		FROM invites i
+		JOIN users u ON u.id = i.invited_by
+		ORDER BY i.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []auth.InviteInfo
+	for rows.Next() {
+		var inv auth.InviteInfo
+		if err := rows.Scan(&inv.ID, &inv.Email, &inv.InvitedBy.ID, &inv.InvitedBy.Email, &inv.InvitedBy.DisplayName,
+			&inv.CreatedAt, &inv.ExpiresAt, &inv.AcceptedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, inv)
 	}
 	return out, rows.Err()
 }

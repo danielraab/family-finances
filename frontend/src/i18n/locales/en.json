@@ -13,7 +13,8 @@
   },
   "user": {
     "logIn": "Log in",
-    "logOut": "Log out"
+    "logOut": "Log out",
+    "settings": "Settings"
   },
   "theme": {
     "system": "System",
@@ -39,5 +40,56 @@
     "tagline": "Track the household's money in one place.",
     "emptyTitle": "Nothing here yet",
     "emptyBody": "This is a placeholder. Real content will land here soon."
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "common": "Common",
+      "users": "Users"
+    },
+    "common": {
+      "language": "Display language",
+      "languageOption": {
+        "en": "English",
+        "de": "German"
+      },
+      "timezone": "Timezone",
+      "defaultCurrency": "Default currency",
+      "saveError": "Couldn't save — please try again."
+    },
+    "users": {
+      "usersHeading": "Users",
+      "invitesHeading": "Invitations",
+      "inviteEmailLabel": "Email address",
+      "invite": "Invite",
+      "inviting": "Inviting…",
+      "inviteError": "Couldn't send the invite — please try again.",
+      "columnUser": "User",
+      "columnRole": "Role",
+      "columnStatus": "Status",
+      "columnCreated": "Created",
+      "roleAdmin": "Admin",
+      "roleMember": "Member",
+      "statusActive": "Active",
+      "statusDisabled": "Disabled",
+      "invitedBy": "Invited by {{name}}",
+      "expires": "Expires {{date}}",
+      "accepted": "Accepted {{date}}",
+      "pending": "Pending",
+      "disable": "Disable",
+      "enable": "Enable",
+      "delete": "Delete",
+      "confirm": {
+        "disableTitle": "Disable {{email}}?",
+        "disableBody": "They will lose access immediately and can be re-enabled later.",
+        "enableTitle": "Enable {{email}}?",
+        "enableBody": "They will be able to sign in again.",
+        "deleteTitle": "Delete {{email}}?",
+        "deleteBody": "This removes them from the users list. This cannot be undone here.",
+        "selfWarning": "This is your own account — you will be signed out immediately.",
+        "cancel": "Cancel",
+        "confirmAction": "Confirm"
+      }
+    }
   }
 }

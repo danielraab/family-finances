@@ -44,6 +44,16 @@ type OIDCClaims struct {
 	EmailVerified bool
 }
 
+// LanguageLookup resolves an authenticated user's raw, unresolved language
+// preference for GET /api/auth/me — nil when unset. internal/settings'
+// Service satisfies this structurally; wiring it via WithLanguageLookup is
+// optional (a nil lookup means the me response's language is always nil).
+// auth declares this interface itself rather than importing internal/settings
+// — see that package's design note on the client's i18n precedence.
+type LanguageLookup interface {
+	Language(ctx context.Context, userID string) (*string, error)
+}
+
 // Params is the slice of configuration the service needs, mapped from
 // config.Config by package main.
 type Params struct {
@@ -64,7 +74,8 @@ type Params struct {
 type Service struct {
 	store  Store
 	mailer Mailer
-	oidc   OIDCClient // nil when no provider is configured
+	oidc   OIDCClient     // nil when no provider is configured
+	lang   LanguageLookup // nil when not wired
 	p      Params
 	now    func() time.Time
 }
@@ -74,6 +85,10 @@ type Option func(*Service)
 
 // WithClock overrides the time source, for deterministic expiry tests.
 func WithClock(fn func() time.Time) Option { return func(s *Service) { s.now = fn } }
+
+// WithLanguageLookup wires the raw-language-preference source for
+// GET /api/auth/me. package main passes internal/settings' Service.
+func WithLanguageLookup(l LanguageLookup) Option { return func(s *Service) { s.lang = l } }
 
 // NewService builds the auth service. mailer must be non-nil; oidc may be nil,
 // in which case the OIDC routes return ErrOIDCNotConfigured.
@@ -121,11 +136,14 @@ func (s *Service) StartEmailLogin(ctx context.Context, rawEmail string) error {
 }
 
 // emailPermitted reports whether a magic link may be sent to email: it belongs
-// to an existing user, OR signup is enabled and the domain passes, OR an
-// unexpired invite exists.
+// to an existing, non-disabled, non-deleted user, OR signup is enabled and
+// the domain passes, OR an unexpired invite exists. An address that belongs
+// to a disabled or soft-deleted user is treated as not permitted outright —
+// it already has an account, just a blocked one, so the signup/invite checks
+// below don't apply either.
 func (s *Service) emailPermitted(ctx context.Context, email string) (bool, error) {
-	if _, err := s.store.UserByEmail(ctx, email); err == nil {
-		return true, nil
+	if u, err := s.store.UserByEmail(ctx, email); err == nil {
+		return !u.Disabled && u.DeletedAt == nil, nil
 	} else if !errors.Is(err, ErrNotFound) {
 		return false, err
 	}
@@ -160,6 +178,9 @@ func (s *Service) CompleteEmailLogin(ctx context.Context, token, currentUserID s
 		allowCreate:   true,
 	})
 	if err != nil {
+		return User{}, "", err
+	}
+	if err := checkAccountUsable(user); err != nil {
 		return User{}, "", err
 	}
 	return s.issueSession(ctx, user, sc)
@@ -249,6 +270,9 @@ func (s *Service) CompleteOIDC(ctx context.Context, state, code, currentUserID s
 	if err != nil {
 		return User{}, "", "", err
 	}
+	if err := checkAccountUsable(user); err != nil {
+		return User{}, "", "", err
+	}
 	tok, err := s.issueSessionToken(ctx, user, sc)
 	if err != nil {
 		return User{}, "", "", err
@@ -322,10 +346,22 @@ func (s *Service) AcceptInvite(ctx context.Context, token, currentUserID string,
 	if err != nil {
 		return User{}, "", err
 	}
+	if err := checkAccountUsable(user); err != nil {
+		return User{}, "", err
+	}
 	if err := s.store.MarkInviteAcceptedBy(ctx, inv.ID, user.ID, s.now()); err != nil {
 		return User{}, "", err
 	}
 	return s.issueSession(ctx, user, sc)
+}
+
+// checkAccountUsable rejects a disabled or soft-deleted account from
+// completing any sign-in flow.
+func checkAccountUsable(u User) error {
+	if u.Disabled || u.DeletedAt != nil {
+		return ErrAccountDisabled
+	}
+	return nil
 }
 
 // --- sessions -----------------------------------------------------------
@@ -359,7 +395,17 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 		_ = s.store.TouchSession(ctx, sess.ID, now, newExpiry)
 	}
 
-	return s.store.UserByID(ctx, sess.UserID)
+	user, err := s.store.UserByID(ctx, sess.UserID)
+	if err != nil {
+		return User{}, err
+	}
+	// Belt-and-suspenders: disable/delete already revoke sessions
+	// immediately, but a session row can outlive that in a race — reject it
+	// here too rather than trusting the row alone.
+	if user.Disabled || user.DeletedAt != nil {
+		return User{}, ErrNotFound
+	}
+	return user, nil
 }
 
 // Logout revokes the session identified by token. It is idempotent: an unknown
@@ -385,6 +431,66 @@ func (s *Service) SetAdmin(ctx context.Context, email string, isAdmin bool) erro
 // ListAdmins returns the sorted emails of all admin users.
 func (s *Service) ListAdmins(ctx context.Context) ([]string, error) {
 	return s.store.ListAdminEmails(ctx)
+}
+
+// UserLanguage returns userID's raw language preference via the wired
+// LanguageLookup, or nil if none is wired or the lookup fails — GET
+// /api/auth/me degrades to "no preference" rather than failing the request.
+func (s *Service) UserLanguage(ctx context.Context, userID string) *string {
+	if s.lang == nil {
+		return nil
+	}
+	v, err := s.lang.Language(ctx, userID)
+	if err != nil {
+		return nil
+	}
+	return v
+}
+
+// --- admin: users and invitations -----------------------------------------
+
+// ListUsers returns every non-soft-deleted user.
+func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
+	return s.store.ListUsers(ctx)
+}
+
+// DisableUser sets disabled and immediately revokes every session belonging
+// to the user. No check prevents an admin from disabling themselves, even as
+// the last remaining admin — see design.md.
+func (s *Service) DisableUser(ctx context.Context, id string) (User, error) {
+	if err := s.store.SetUserDisabled(ctx, id, true); err != nil {
+		return User{}, err
+	}
+	if err := s.store.DeleteSessionsByUserID(ctx, id); err != nil {
+		return User{}, err
+	}
+	return s.store.UserByID(ctx, id)
+}
+
+// EnableUser clears disabled. It does not restore any session revoked while
+// disabled — the user signs in again.
+func (s *Service) EnableUser(ctx context.Context, id string) (User, error) {
+	if err := s.store.SetUserDisabled(ctx, id, false); err != nil {
+		return User{}, err
+	}
+	return s.store.UserByID(ctx, id)
+}
+
+// SoftDeleteUser sets deleted_at and immediately revokes every session
+// belonging to the user. There is no undelete in this change. No check
+// prevents an admin from deleting themselves, even as the last remaining
+// admin — see design.md.
+func (s *Service) SoftDeleteUser(ctx context.Context, id string) error {
+	if err := s.store.SoftDeleteUser(ctx, id, s.now()); err != nil {
+		return err
+	}
+	return s.store.DeleteSessionsByUserID(ctx, id)
+}
+
+// ListInvites returns every invitation regardless of status, each carrying
+// the inviter's identity.
+func (s *Service) ListInvites(ctx context.Context) ([]InviteInfo, error) {
+	return s.store.ListInvites(ctx)
 }
 
 // LinkIdentity attaches an identity to an existing, already-authenticated user

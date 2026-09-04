@@ -115,6 +115,82 @@ func (a *AuthStore) ListAdminEmails(context.Context) ([]string, error) {
 	return out, nil
 }
 
+// --- admin: users --------------------------------------------------------
+
+func (a *AuthStore) ListUsers(context.Context) ([]auth.User, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	var out []auth.User
+	for _, u := range a.users {
+		if u.DeletedAt == nil {
+			out = append(out, u)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (a *AuthStore) SetUserDisabled(_ context.Context, id string, disabled bool) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	u, ok := a.users[id]
+	if !ok {
+		return auth.ErrNotFound
+	}
+	u.Disabled = disabled
+	a.users[id] = u
+	return nil
+}
+
+func (a *AuthStore) SoftDeleteUser(_ context.Context, id string, now time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	u, ok := a.users[id]
+	if !ok {
+		return auth.ErrNotFound
+	}
+	t := now
+	u.DeletedAt = &t
+	a.users[id] = u
+	return nil
+}
+
+func (a *AuthStore) DeleteSessionsByUserID(_ context.Context, userID string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for id, row := range a.sessions {
+		if row.s.UserID == userID {
+			delete(a.sessions, id)
+		}
+	}
+	return nil
+}
+
+// --- admin: invites -------------------------------------------------------
+
+func (a *AuthStore) ListInvites(context.Context) ([]auth.InviteInfo, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	var out []auth.InviteInfo
+	for _, row := range a.invites {
+		inviter := a.users[row.inv.InvitedBy]
+		out = append(out, auth.InviteInfo{
+			ID:    row.inv.ID,
+			Email: row.inv.Email,
+			InvitedBy: auth.InviteInviter{
+				ID:          inviter.ID,
+				Email:       inviter.Email,
+				DisplayName: inviter.DisplayName,
+			},
+			CreatedAt:  row.inv.CreatedAt,
+			ExpiresAt:  row.inv.ExpiresAt,
+			AcceptedAt: row.inv.AcceptedAt,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
 // --- identities --------------------------------------------------------
 
 func (a *AuthStore) IdentityByEmail(_ context.Context, email string) (auth.Identity, error) {

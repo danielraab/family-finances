@@ -37,13 +37,41 @@ const (
 )
 
 // User is one account. A person has exactly one User no matter how many ways
-// they can sign in to it.
+// they can sign in to it. Disabled and DeletedAt are excluded from JSON — a
+// disabled or deleted user can never authenticate to view their own record
+// (see Service.Authenticate), and the admin-facing view uses AdminUser
+// instead.
 type User struct {
+	ID          string     `json:"id"`
+	Email       string     `json:"email"`
+	DisplayName string     `json:"display_name,omitempty"`
+	IsAdmin     bool       `json:"is_admin"`
+	CreatedAt   time.Time  `json:"created_at"`
+	Disabled    bool       `json:"-"`
+	DeletedAt   *time.Time `json:"-"`
+}
+
+// AdminUser is a user as shown to an admin (GET /api/auth/users, and the
+// disable/enable responses) — everything User has, plus the lifecycle state
+// an admin needs to see.
+type AdminUser struct {
 	ID          string    `json:"id"`
 	Email       string    `json:"email"`
 	DisplayName string    `json:"display_name,omitempty"`
 	IsAdmin     bool      `json:"is_admin"`
+	Disabled    bool      `json:"disabled"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+func toAdminUser(u User) AdminUser {
+	return AdminUser{
+		ID:          u.ID,
+		Email:       u.Email,
+		DisplayName: u.DisplayName,
+		IsAdmin:     u.IsAdmin,
+		Disabled:    u.Disabled,
+		CreatedAt:   u.CreatedAt,
+	}
 }
 
 // Identity is one way to sign in to a User. An email identity carries the
@@ -81,6 +109,25 @@ type Invite struct {
 	ExpiresAt      time.Time  `json:"expires_at"`
 	AcceptedAt     *time.Time `json:"accepted_at,omitempty"`
 	AcceptedUserID string     `json:"accepted_user_id,omitempty"`
+}
+
+// InviteInviter is the minimal public identity of who created an invite.
+type InviteInviter struct {
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name,omitempty"`
+}
+
+// InviteInfo is an invite as returned over HTTP — both from creating one and
+// from the admin-only listing — carrying the inviter's identity rather than
+// just their id.
+type InviteInfo struct {
+	ID         string        `json:"id"`
+	Email      string        `json:"email"`
+	InvitedBy  InviteInviter `json:"invited_by"`
+	CreatedAt  time.Time     `json:"created_at"`
+	ExpiresAt  time.Time     `json:"expires_at"`
+	AcceptedAt *time.Time    `json:"accepted_at"`
 }
 
 // OIDCState is the short-lived per-attempt state for an OIDC authorization-code

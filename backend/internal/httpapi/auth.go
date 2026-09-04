@@ -31,6 +31,7 @@ func init() {
 	registerErrStatus(auth.ErrInvalidEmail, http.StatusBadRequest)
 	registerErrStatus(auth.ErrOIDCNotConfigured, http.StatusNotFound)
 	registerErrStatus(auth.ErrEmailRequired, http.StatusBadRequest)
+	registerErrStatus(auth.ErrAccountDisabled, http.StatusForbidden)
 }
 
 // authResolve is middleware that reads a session token from the
