@@ -64,8 +64,8 @@
   `POST /api/auth/users/{id}/enable`, `DELETE /api/auth/users/{id}`, each with
   `401`/`403` responses where applicable.
 - [x] 3.2 `cd backend && go generate ./...` to sync `backend/openapi.yaml`.
-- [ ] 3.3 `cd frontend && pnpm generate:api` to regenerate `src/api/schema.d.ts`.
-- [ ] 3.4 Confirm the `contract` CI job's drift check would pass (lint the
+- [x] 3.3 `cd frontend && pnpm generate:api` to regenerate `src/api/schema.d.ts`.
+- [x] 3.4 Confirm the `contract` CI job's drift check would pass (lint the
   spec, diff the two generated copies).
 
 ## 4. Frontend: settings route and auth gate
