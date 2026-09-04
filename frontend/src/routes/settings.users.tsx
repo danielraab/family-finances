@@ -48,7 +48,7 @@ function UsersSettingsTab() {
   const [inviting, setInviting] = useState(false);
   const [confirming, setConfirming] = useState<
     | { kind: ConfirmKind; target: AdminUser }
-    | { kind: "revokeInvite"; target: Invite }
+    | { kind: "revokeInvite" | "deleteInvite"; target: Invite }
     | null
   >(null);
 
@@ -108,6 +108,17 @@ function UsersSettingsTab() {
         setInvites(
           (prev) => prev?.map((i) => (i.id === data.id ? data : i)) ?? null,
         );
+      }
+      return;
+    }
+
+    if (state.kind === "deleteInvite") {
+      const { response } = await api.DELETE("/api/auth/invites/{id}", {
+        params: { path: { id: state.target.id } },
+      });
+      if (response.ok) {
+        const deletedId = state.target.id;
+        setInvites((prev) => prev?.filter((i) => i.id !== deletedId) ?? null);
       }
       return;
     }
@@ -294,6 +305,9 @@ function UsersSettingsTab() {
             onRevoke={(invite) =>
               setConfirming({ kind: "revokeInvite", target: invite })
             }
+            onDelete={(invite) =>
+              setConfirming({ kind: "deleteInvite", target: invite })
+            }
           />
         )}
       </section>
@@ -313,15 +327,22 @@ function UsersSettingsTab() {
                     ? t("settings.invite.confirmRevokeTitle", {
                         email: confirming.target.email,
                       })
-                    : t(`settings.users.confirm.${confirming.kind}Title`, {
-                        email: confirming.target.email,
-                      })}
+                    : confirming.kind === "deleteInvite"
+                      ? t("settings.invite.confirmDeleteTitle", {
+                          email: confirming.target.email,
+                        })
+                      : t(`settings.users.confirm.${confirming.kind}Title`, {
+                          email: confirming.target.email,
+                        })}
                 </DialogTitle>
                 <Description className="text-sm text-zinc-600 dark:text-zinc-400">
                   {confirming.kind === "revokeInvite"
                     ? t("settings.invite.confirmRevokeBody")
-                    : t(`settings.users.confirm.${confirming.kind}Body`)}
+                    : confirming.kind === "deleteInvite"
+                      ? t("settings.invite.confirmDeleteBody")
+                      : t(`settings.users.confirm.${confirming.kind}Body`)}
                   {confirming.kind !== "revokeInvite" &&
+                    confirming.kind !== "deleteInvite" &&
                     confirming.target.id === user.id &&
                     confirming.kind !== "enable" && (
                       <span className="mt-2 block font-medium text-amber-700 dark:text-amber-400">
