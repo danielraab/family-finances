@@ -126,6 +126,13 @@ to status codes in the one place — `httpapi/respond.go`.
   code and JSON body. Prefer black-box `package <noun>_test`.
 - `httpapi` middleware is tested on its own with a stub handler.
 - Keep `_test.go` beside the code it exercises.
+- **Integration tests do not run by default.** `internal/storage/postgres` is
+  the only integration-test package (see "Persistence" below) — everything
+  else is a fast unit/handler test with no external dependency. Don't wire
+  integration tests into a path that always executes them (a default `go
+  test ./...` locally, a pre-commit hook, the main CI job that gates every
+  push); they belong behind an explicit `DATABASE_URL` and, in CI, in the
+  dedicated `backend-integration` job described below.
 
 ## Conventions
 
@@ -154,7 +161,15 @@ to status codes in the one place — `httpapi/respond.go`.
 - `GET /api/healthz` pings the database; it returns `503` when the DB is down.
 - `internal/storage/postgres` integration tests need a real database: they read
   `DATABASE_URL` and **skip** when it is unset, so `go test ./...` passes on a
-  bare checkout. CI supplies a `postgres` service container.
+  bare checkout with no database running. They are intentionally excluded from
+  the main `backend` CI job (no `DATABASE_URL` there, so they self-skip) and
+  instead run in their own `backend-integration` job
+  (`.github/workflows/ci.yml`), which starts a `postgres` service container,
+  sets `DATABASE_URL`, and runs `go test ./internal/storage/postgres/...`. That
+  job is scoped to `pull_request` events — integration tests run once per PR,
+  not on every push to a branch with no open PR. Run them locally the same way
+  the job does: start `docker compose up -d db`, export `DATABASE_URL` (see
+  "Commands" below), then `go test ./internal/storage/postgres/...`.
 
 ## Authentication
 

@@ -73,35 +73,35 @@
 
 ## 5. Frontend: My Invitations tab
 
-- [ ] 5.1 `frontend/src/routes/settings.invitations.tsx` — new route,
+- [x] 5.1 `frontend/src/routes/settings.invitations.tsx` — new route,
   `/settings/invitations`, any authenticated user; fetch
   `GET /api/auth/invites/mine` on mount; render the list (email, status,
   dates) with a Revoke action per pending/non-revoked row; empty-state text
   when the list is empty.
-- [ ] 5.2 Add "My Invitations" to the tab nav in `frontend/src/routes/settings.tsx`,
+- [x] 5.2 Add "My Invitations" to the tab nav in `frontend/src/routes/settings.tsx`,
   between Common and the admin-only Users tab, visible to every authenticated
   user (no admin gate).
-- [ ] 5.3 Revoke action calls `POST /api/auth/invites/{id}/revoke`; on
+- [x] 5.3 Revoke action calls `POST /api/auth/invites/{id}/revoke`; on
   success, update that row's status in place (no refetch needed).
 
 ## 6. Frontend: Users tab
 
-- [ ] 6.1 `frontend/src/routes/settings.users.tsx`: add empty-state text to
+- [x] 6.1 `frontend/src/routes/settings.users.tsx`: add empty-state text to
   the invitations list when it's empty.
-- [ ] 6.2 Add a Revoke action per invitation row (calls the same
+- [x] 6.2 Add a Revoke action per invitation row (calls the same
   `POST /api/auth/invites/{id}/revoke`), and a status label covering
   pending/accepted/revoked.
-- [ ] 6.3 Both Revoke actions (Users tab and My Invitations tab) go through
+- [x] 6.3 Both Revoke actions (Users tab and My Invitations tab) go through
   the existing `@headlessui/react` `Dialog` confirmation pattern already used
   for disable/enable/delete.
 
 ## 7. i18n
 
-- [ ] 7.1 Add new keys to `frontend/src/i18n/locales/en.json` first, then
+- [x] 7.1 Add new keys to `frontend/src/i18n/locales/en.json` first, then
   `de.json`: tab label ("My Invitations"), empty-state text
   (`settings.users.noInvites` / equivalent for the new tab), `revoke` action
   label, `statusRevoked`, confirm-dialog copy for revoke.
-- [ ] 7.2 Double-check no "inventations"/"invokation" typos slipped into any
+- [x] 7.2 Double-check no "inventations"/"invokation" typos slipped into any
   new key, label, or comment — the shipped terms are invitation(s) and
   revoke/revocation.
 
