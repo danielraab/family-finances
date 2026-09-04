@@ -66,7 +66,10 @@
       "pending": "Pending",
       "revoke": "Revoke",
       "confirmRevokeTitle": "Revoke invitation to {{email}}?",
-      "confirmRevokeBody": "They will no longer be able to accept this invitation."
+      "confirmRevokeBody": "They will no longer be able to accept this invitation.",
+      "delete": "Delete",
+      "confirmDeleteTitle": "Delete invitation to {{email}}?",
+      "confirmDeleteBody": "This removes the revoked invitation from every list. This cannot be undone here."
     },
     "users": {
       "usersHeading": "Users",
