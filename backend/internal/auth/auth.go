@@ -109,6 +109,10 @@ type Invite struct {
 	ExpiresAt      time.Time  `json:"expires_at"`
 	AcceptedAt     *time.Time `json:"accepted_at,omitempty"`
 	AcceptedUserID string     `json:"accepted_user_id,omitempty"`
+	// RevokedAt is set once, by the invite's own inviter or an admin, and
+	// never cleared. It blocks acceptance but does not remove the invite
+	// from any listing — see the user-administration capability.
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
 }
 
 // InviteInviter is the minimal public identity of who created an invite.
@@ -118,9 +122,9 @@ type InviteInviter struct {
 	DisplayName string `json:"display_name,omitempty"`
 }
 
-// InviteInfo is an invite as returned over HTTP — both from creating one and
-// from the admin-only listing — carrying the inviter's identity rather than
-// just their id.
+// InviteInfo is an invite as returned over HTTP — from creating one, from
+// the admin-only listing, from a user's own listing, and from
+// revoking one — carrying the inviter's identity rather than just their id.
 type InviteInfo struct {
 	ID         string        `json:"id"`
 	Email      string        `json:"email"`
@@ -128,6 +132,7 @@ type InviteInfo struct {
 	CreatedAt  time.Time     `json:"created_at"`
 	ExpiresAt  time.Time     `json:"expires_at"`
 	AcceptedAt *time.Time    `json:"accepted_at"`
+	RevokedAt  *time.Time    `json:"revoked_at"`
 }
 
 // OIDCState is the short-lived per-attempt state for an OIDC authorization-code

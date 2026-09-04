@@ -51,12 +51,72 @@ export interface paths {
         };
         /**
          * List every invitation (admin only)
-         * @description Every invite regardless of status (pending, accepted, or expired), newest first, each carrying the inviter's identity.
+         * @description Every non-soft-deleted invite regardless of status (pending, accepted, expired, or revoked), newest first, each carrying the inviter's identity.
          */
         get: operations["getAuthInvites"];
         put?: never;
         /** Invite an email address */
         post: operations["postAuthInvites"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/invites/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Soft-delete a revoked invitation (admin only)
+         * @description Rejected with 409 unless the invitation has already been revoked. One-way — there is no undelete endpoint. A soft-deleted invitation is excluded from both invitation listings.
+         */
+        delete: operations["deleteAuthInvite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/invites/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke an invitation
+         * @description Permitted for the invite's own inviter or an admin. Idempotent — a repeat call on an already-revoked invite succeeds without changing its revoked_at. Permitted regardless of the invite's current status; a revoked invite stays visible in every listing.
+         */
+        post: operations["postAuthInviteRevoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/invites/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the authenticated user's own invitations
+         * @description Every non-soft-deleted invite the caller personally created, regardless of status. No admin requirement.
+         */
+        get: operations["getAuthInvitesMine"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -266,6 +326,11 @@ export interface components {
             expires_at: string;
             id: string;
             invited_by: components["schemas"]["InviteInviter"];
+            /**
+             * Format: date-time
+             * @description Set once, by the invite's own inviter or an admin. Blocks acceptance but does not remove the invite from any listing.
+             */
+            revoked_at: string | null;
         };
         InviteInviter: {
             display_name?: string;
@@ -313,6 +378,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description The request conflicts with the resource's current state. */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description The authenticated user is not an admin. */
         Forbidden: {
             headers: {
@@ -455,6 +529,100 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    deleteAuthInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invitation is soft-deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No such invitation (or it is already soft-deleted). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    postAuthInviteRevoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invitation, now revoked. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invite"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The caller neither created this invitation nor is an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such invitation (or it has been soft-deleted). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAuthInvitesMine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's own invitations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invite"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     postAuthLogout: {

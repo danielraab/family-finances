@@ -53,7 +53,10 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("POST /api/auth/logout", h.logout)
 	h.mux.HandleFunc("POST /api/auth/invites", h.createInvite)
 	h.mux.HandleFunc("GET /api/auth/invites", h.listInvites)
+	h.mux.HandleFunc("GET /api/auth/invites/mine", h.listMyInvites)
 	h.mux.HandleFunc("GET /api/auth/invites/accept", h.acceptInvite)
+	h.mux.HandleFunc("POST /api/auth/invites/{id}/revoke", h.revokeInvite)
+	h.mux.HandleFunc("DELETE /api/auth/invites/{id}", h.deleteInvite)
 	h.mux.HandleFunc("GET /api/auth/users", h.listUsers)
 	h.mux.HandleFunc("POST /api/auth/users/{id}/disable", h.disableUser)
 	h.mux.HandleFunc("POST /api/auth/users/{id}/enable", h.enableUser)
@@ -230,6 +233,45 @@ func (h *Handler) listInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, invites)
+}
+
+func (h *Handler) listMyInvites(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	invites, err := h.svc.ListMyInvites(r.Context(), user.ID)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, invites)
+}
+
+func (h *Handler) revokeInvite(w http.ResponseWriter, r *http.Request) {
+	actor, ok := UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	inv, err := h.svc.RevokeInvite(r.Context(), actor, r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, inv)
+}
+
+func (h *Handler) deleteInvite(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if err := h.svc.SoftDeleteInvite(r.Context(), r.PathValue("id")); err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- admin: users ----------------------------------------------------

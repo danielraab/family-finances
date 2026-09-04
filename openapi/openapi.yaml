@@ -174,8 +174,9 @@ paths:
       operationId: getAuthInvites
       summary: List every invitation (admin only)
       description: >-
-        Every invite regardless of status (pending, accepted, or expired),
-        newest first, each carrying the inviter's identity.
+        Every non-soft-deleted invite regardless of status (pending,
+        accepted, expired, or revoked), newest first, each carrying the
+        inviter's identity.
       tags: [auth]
       responses:
         "200":
@@ -190,6 +191,96 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+
+  /api/auth/invites/mine:
+    get:
+      operationId: getAuthInvitesMine
+      summary: List the authenticated user's own invitations
+      description: >-
+        Every non-soft-deleted invite the caller personally created,
+        regardless of status. No admin requirement.
+      tags: [auth]
+      responses:
+        "200":
+          description: The caller's own invitations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invite"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/invites/{id}/revoke:
+    post:
+      operationId: postAuthInviteRevoke
+      summary: Revoke an invitation
+      description: >-
+        Permitted for the invite's own inviter or an admin. Idempotent — a
+        repeat call on an already-revoked invite succeeds without changing
+        its revoked_at. Permitted regardless of the invite's current status;
+        a revoked invite stays visible in every listing.
+      tags: [auth]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The invitation, now revoked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invite"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >-
+            The caller neither created this invitation nor is an admin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No such invitation (or it has been soft-deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/invites/{id}:
+    delete:
+      operationId: deleteAuthInvite
+      summary: Soft-delete a revoked invitation (admin only)
+      description: >-
+        Rejected with 409 unless the invitation has already been revoked.
+        One-way — there is no undelete endpoint. A soft-deleted invitation
+        is excluded from both invitation listings.
+      tags: [auth]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The invitation is soft-deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such invitation (or it is already soft-deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/auth/users:
     get:
@@ -468,6 +559,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The request conflicts with the resource's current state.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
 
   schemas:
     User:
@@ -576,7 +673,7 @@ components:
 
     Invite:
       type: object
-      required: [id, email, expires_at, invited_by, accepted_at]
+      required: [id, email, expires_at, invited_by, accepted_at, revoked_at]
       properties:
         id:
           type: string
@@ -592,6 +689,13 @@ components:
           type: string
           format: date-time
           nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Set once, by the invite's own inviter or an admin. Blocks
+            acceptance but does not remove the invite from any listing.
 
     InviteInviter:
       type: object

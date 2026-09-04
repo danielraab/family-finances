@@ -315,8 +315,8 @@ Inviting SHALL be enabled whenever `AUTH_SIGNUP_ENABLED` is true. When signup is
 false, inviting SHALL be governed by `AUTH_INVITE_ENABLED`; when both are false,
 no new accounts can be created at all. Accepting a valid invite SHALL create
 the account even when signup is disabled, and SHALL bypass the email-domain
-allow-list. The invite token SHALL be single-use and rejected once consumed or
-expired.
+allow-list. The invite token SHALL be single-use and SHALL be rejected once
+consumed, expired, or revoked (see `user-administration` for revocation).
 
 #### Scenario: Authenticated user invites someone
 
@@ -350,6 +350,11 @@ expired.
 
 - **WHEN** an invite acceptance link is followed a second time
 - **THEN** it is rejected
+
+#### Scenario: Revoked invite cannot be accepted
+
+- **WHEN** an invite has been revoked and its acceptance link is followed
+- **THEN** the request is rejected and no account is created
 
 ### Requirement: Admin flag and CLI administration
 

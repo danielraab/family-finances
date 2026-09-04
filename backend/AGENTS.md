@@ -206,23 +206,39 @@ to status codes in the one place — `httpapi/respond.go`.
 
 Admin-only endpoints on `auth.Handler`, each gated on `user.IsAdmin` (`403`
 for a non-admin, `401` unauthenticated): `GET /api/auth/users` (every
-non-soft-deleted user), `GET /api/auth/invites` (every invitation, any
-status, with the inviter's identity), `POST /api/auth/users/{id}/disable`,
-`POST /api/auth/users/{id}/enable`, `DELETE /api/auth/users/{id}` (soft
-delete — one-way, no undelete endpoint). Disable and delete both call
-`Store.DeleteSessionsByUserID` to revoke every session belonging to the
-target **immediately**, not just rely on expiry; the auth middleware
-(`Service.Authenticate`) also re-checks `disabled`/`deleted_at` on every
-request as a belt-and-suspenders guard against a session row that somehow
-outlives the revocation. A disabled or soft-deleted account is rejected by
-both sign-in flows too (`ErrAccountDisabled`, `403`) — magic-link
-`POST /api/auth/email/start` treats it like "no account" (still `200`, no
-mail sent).
+non-soft-deleted user), `GET /api/auth/invites` (every non-soft-deleted
+invitation, any status, with the inviter's identity),
+`POST /api/auth/users/{id}/disable`, `POST /api/auth/users/{id}/enable`,
+`DELETE /api/auth/users/{id}` (soft delete — one-way, no undelete endpoint).
+Disable and delete both call `Store.DeleteSessionsByUserID` to revoke every
+session belonging to the target **immediately**, not just rely on expiry;
+the auth middleware (`Service.Authenticate`) also re-checks
+`disabled`/`deleted_at` on every request as a belt-and-suspenders guard
+against a session row that somehow outlives the revocation. A disabled or
+soft-deleted account is rejected by both sign-in flows too
+(`ErrAccountDisabled`, `403`) — magic-link `POST /api/auth/email/start`
+treats it like "no account" (still `200`, no mail sent).
 
 **No self-lockout guard, deliberately.** An admin may disable or delete their
 own account, including as the only remaining admin — there is no
 server-side check preventing it. The frontend's confirmation dialog is the
 only mitigation; see `openspec/specs/user-administration/spec.md`.
+
+**Invite revocation and soft-delete** (`invites` gains `revoked_at` and
+`deleted_at`, migration `0005_invite_revocation.sql`): `invites` is not
+purely admin-managed — `GET /api/auth/invites/mine` lets any authenticated
+user list the invitations *they* created (`invited_by = self`), and
+`POST /api/auth/invites/{id}/revoke` is permitted for that same person or
+for an admin (`403` for anyone else), not gated behind `requireAdmin` the
+way every other admin endpoint is. Revoking is idempotent — a repeat call
+leaves `revoked_at` at its original value and still returns `200` — and is
+allowed on an invite in any state (pending, accepted, or expired); a revoked
+invite is never removed from a listing, only `deleted_at` does that.
+`DELETE /api/auth/invites/{id}` (admin-only, `204`) requires `revoked_at` to
+already be set, `409` otherwise — it's cleanup for a revocation, not a
+general-purpose delete. `Store.ConsumeInvite`'s atomic acceptance query
+additionally excludes `revoked_at IS NOT NULL`, so a revoked invite's
+acceptance link stops working immediately.
 
 ## Settings
 
@@ -311,7 +327,8 @@ and `storage/postgres` and migration `0002_auth.sql`; `internal/mailer`,
 `internal/settings` is the second domain package, same four-file shape,
 `Store` implementations in both storage backends, migration
 `0003_user_settings.sql`; `0004_user_administration.sql` extends `users`
-for `internal/auth`'s admin endpoints. The next product noun adds another
+for `internal/auth`'s admin endpoints and `0005_invite_revocation.sql`
+extends `invites` the same way. The next product noun adds another
 `internal/<noun>/` the same way.
 
 ## Before you're done

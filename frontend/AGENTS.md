@@ -49,8 +49,9 @@ git-ignored. Build-script allow-listing lives in `pnpm-workspace.yaml`
   open/close the off-canvas drawer below it). `Sidebar` is presentational.
   Router devtools render only in dev.
 - `src/routes/index.tsx` → `/`. `src/routes/login.tsx` → `/login`.
-  `src/routes/settings.tsx` (+ `settings.index.tsx`, `settings.users.tsx`) →
-  `/settings` and `/settings/users` — see "Settings" below.
+  `src/routes/settings.tsx` (+ `settings.index.tsx`, `settings.invitations.tsx`,
+  `settings.users.tsx`) → `/settings`, `/settings/invitations`, and
+  `/settings/users` — see "Settings" below.
 - Navigate with `@tanstack/react-router`'s `<Link to="…">` / `useNavigate()`;
   read the path with `useLocation()`. `to` is type-checked against the route
   tree.
@@ -136,8 +137,9 @@ that check is informational only and never blocks merging.
 
 `/settings` is the first route that requires authentication: `settings.tsx`
 (the layout route) redirects an anonymous `useAuth` to `/login`, renders
-nothing while `loading`, and otherwise renders the tab nav (Common always;
-Users only when `user.is_admin`, per `AdminUser`) plus `<Outlet/>`.
+nothing while `loading`, and otherwise renders the tab nav (Common and My
+Invitations for everyone; Users only when `user.is_admin`, per `AdminUser`)
+plus `<Outlet/>`.
 
 - `settings.index.tsx` (`/settings`, Common tab) — language/timezone/default
   currency. Each field calls `PUT /api/settings` with only itself on change
@@ -145,17 +147,27 @@ Users only when `user.is_admin`, per `AdminUser`) plus `<Outlet/>`.
   interaction); a successful language change also calls
   `i18n.changeLanguage()` so the running app switches immediately. A failed
   update reverts the field and shows an inline error.
+- `settings.invitations.tsx` (`/settings/invitations`, "My Invitations" tab,
+  every authenticated user) — lists the invitations the visitor personally
+  created (`GET /api/auth/invites/mine`), with a Revoke action per row
+  (`POST /api/auth/invites/{id}/revoke`, confirmed via a `Dialog`) and
+  empty-state text when the list is empty. The non-admin counterpart of the
+  Users tab's invitations section: only the inviter or an admin may revoke
+  an invitation, so this tab is where a non-admin does that themselves.
 - `settings.users.tsx` (`/settings/users`, admin-only) — redirects to
   `/settings` if `user.is_admin` is false (defense in depth beyond the tab
-  simply not being listed). Lists users (`GET /api/auth/users`) and
-  invitations (`GET /api/auth/invites`), can invite
+  simply not being listed). Lists users (`GET /api/auth/users`) and every
+  invitation (`GET /api/auth/invites`), can invite
   (`POST /api/auth/invites` — open to any authenticated user per the
   backend, this tab is just its current UI surface), and can
-  disable/enable/(soft) delete a user, each behind a `@headlessui/react`
-  `Dialog` confirmation whose copy calls out self-targeting. A successful
-  self-disable/self-delete flips `useAuth` to `anonymous` locally (the same
-  transition `logout()` performs) and navigates away, rather than waiting for
-  a subsequent request to discover the `401`.
+  disable/enable/(soft) delete a user or revoke an invitation, each behind a
+  `@headlessui/react` `Dialog` confirmation whose copy calls out
+  self-targeting. A successful self-disable/self-delete flips `useAuth` to
+  `anonymous` locally (the same transition `logout()` performs) and
+  navigates away, rather than waiting for a subsequent request to discover
+  the `401`. The invitation row rendering (status, inviter line, Revoke
+  action) is shared with `settings.invitations.tsx` via
+  `src/components/InviteList.tsx`.
 
 ## Build output
 

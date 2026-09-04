@@ -40,6 +40,10 @@ function SettingsLayout() {
 
   const tabs = [
     { to: "/settings" as const, label: t("settings.tabs.common") },
+    {
+      to: "/settings/invitations" as const,
+      label: t("settings.tabs.myInvitations"),
+    },
     ...(user.is_admin
       ? [{ to: "/settings/users" as const, label: t("settings.tabs.users") }]
       : []),

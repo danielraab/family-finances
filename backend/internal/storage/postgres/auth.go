@@ -141,25 +141,57 @@ func (a *AuthStore) DeleteSessionsByUserID(ctx context.Context, userID string) e
 	return err
 }
 
-// --- admin: invites -------------------------------------------------------
+// --- invite listing -------------------------------------------------------
+
+const inviteInfoCols = `i.id::text, i.email, u.id::text, u.email, COALESCE(u.display_name, ''),
+	       i.created_at, i.expires_at, i.accepted_at, i.revoked_at`
+
+func scanInviteInfo(rows pgx.Rows) (auth.InviteInfo, error) {
+	var inv auth.InviteInfo
+	err := rows.Scan(&inv.ID, &inv.Email, &inv.InvitedBy.ID, &inv.InvitedBy.Email, &inv.InvitedBy.DisplayName,
+		&inv.CreatedAt, &inv.ExpiresAt, &inv.AcceptedAt, &inv.RevokedAt)
+	return inv, err
+}
 
 func (a *AuthStore) ListInvites(ctx context.Context) ([]auth.InviteInfo, error) {
 	rows, err := a.pool.Query(ctx, `
-		SELECT i.id::text, i.email, u.id::text, u.email, COALESCE(u.display_name, ''),
-		       i.created_at, i.expires_at, i.accepted_at
+		SELECT `+inviteInfoCols+`
 		FROM invites i
 		JOIN users u ON u.id = i.invited_by
+		WHERE i.deleted_at IS NULL
 		ORDER BY i.created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []auth.InviteInfo
+	out := []auth.InviteInfo{} // never nil: an empty list must render as [], not JSON null
 	for rows.Next() {
-		var inv auth.InviteInfo
-		if err := rows.Scan(&inv.ID, &inv.Email, &inv.InvitedBy.ID, &inv.InvitedBy.Email, &inv.InvitedBy.DisplayName,
-			&inv.CreatedAt, &inv.ExpiresAt, &inv.AcceptedAt); err != nil {
+		inv, err := scanInviteInfo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, inv)
+	}
+	return out, rows.Err()
+}
+
+func (a *AuthStore) ListInvitesByInviter(ctx context.Context, inviterID string) ([]auth.InviteInfo, error) {
+	rows, err := a.pool.Query(ctx, `
+		SELECT `+inviteInfoCols+`
+		FROM invites i
+		JOIN users u ON u.id = i.invited_by
+		WHERE i.deleted_at IS NULL AND i.invited_by = $1
+		ORDER BY i.created_at DESC`, inviterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []auth.InviteInfo{} // never nil: an empty personal list is common, unlike the admin listing
+	for rows.Next() {
+		inv, err := scanInviteInfo(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, inv)
@@ -374,11 +406,11 @@ func (a *AuthStore) classifyToken(ctx context.Context, table, consumedCol string
 
 // --- invites -------------------------------------------------
 
-const inviteCols = `id::text, email, invited_by::text, created_at, expires_at`
+const inviteCols = `id::text, email, invited_by::text, created_at, expires_at, accepted_at, revoked_at`
 
 func scanInvite(row pgx.Row) (auth.Invite, error) {
 	var inv auth.Invite
-	if err := row.Scan(&inv.ID, &inv.Email, &inv.InvitedBy, &inv.CreatedAt, &inv.ExpiresAt); err != nil {
+	if err := row.Scan(&inv.ID, &inv.Email, &inv.InvitedBy, &inv.CreatedAt, &inv.ExpiresAt, &inv.AcceptedAt, &inv.RevokedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return auth.Invite{}, auth.ErrNotFound
 		}
@@ -398,7 +430,8 @@ func (a *AuthStore) CreateInvite(ctx context.Context, in auth.Invite, tokenHash 
 func (a *AuthStore) ActiveInviteForEmail(ctx context.Context, email string, now time.Time) (auth.Invite, error) {
 	return scanInvite(a.pool.QueryRow(ctx,
 		`SELECT `+inviteCols+` FROM invites
-		 WHERE email = $1 AND accepted_at IS NULL AND expires_at > $2
+		 WHERE email = $1 AND accepted_at IS NULL AND revoked_at IS NULL
+		   AND deleted_at IS NULL AND expires_at > $2
 		 ORDER BY created_at DESC LIMIT 1`,
 		auth.NormalizeEmail(email), now))
 }
@@ -406,7 +439,7 @@ func (a *AuthStore) ActiveInviteForEmail(ctx context.Context, email string, now 
 func (a *AuthStore) ConsumeInvite(ctx context.Context, tokenHash []byte, now time.Time) (auth.Invite, error) {
 	inv, err := scanInvite(a.pool.QueryRow(ctx,
 		`UPDATE invites SET accepted_at = $2
-		 WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > $2
+		 WHERE token_hash = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > $2
 		 RETURNING `+inviteCols, tokenHash, now))
 	if err == nil {
 		return inv, nil
@@ -421,6 +454,32 @@ func (a *AuthStore) MarkInviteAcceptedBy(ctx context.Context, inviteID, userID s
 	tag, err := a.pool.Exec(ctx,
 		`UPDATE invites SET accepted_at = $3, accepted_user_id = $2 WHERE id = $1`,
 		inviteID, userID, now)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrNotFound
+	}
+	return nil
+}
+
+func (a *AuthStore) InviteByID(ctx context.Context, id string) (auth.Invite, error) {
+	return scanInvite(a.pool.QueryRow(ctx,
+		`SELECT `+inviteCols+` FROM invites WHERE id = $1 AND deleted_at IS NULL`, id))
+}
+
+// RevokeInvite is idempotent: COALESCE leaves an already-set revoked_at
+// untouched on a repeat call.
+func (a *AuthStore) RevokeInvite(ctx context.Context, id string, now time.Time) (auth.Invite, error) {
+	return scanInvite(a.pool.QueryRow(ctx,
+		`UPDATE invites SET revoked_at = COALESCE(revoked_at, $2)
+		 WHERE id = $1 AND deleted_at IS NULL
+		 RETURNING `+inviteCols, id, now))
+}
+
+func (a *AuthStore) SoftDeleteInvite(ctx context.Context, id string, now time.Time) error {
+	tag, err := a.pool.Exec(ctx,
+		`UPDATE invites SET deleted_at = $2 WHERE id = $1 AND deleted_at IS NULL`, id, now)
 	if err != nil {
 		return err
 	}
