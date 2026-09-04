@@ -21,10 +21,18 @@ export function InviteList({
   invites,
   showInviter,
   onRevoke,
+  onDelete,
 }: {
   invites: Invite[];
   showInviter: boolean;
   onRevoke: (invite: Invite) => void;
+  /**
+   * Admin-only soft-delete. Omit this prop entirely on a non-admin surface
+   * (e.g. the My Invitations tab) — the Delete button only ever renders when
+   * it's provided, and only once an invite is already revoked, matching
+   * DELETE /api/auth/invites/{id}'s requirement that revoked_at be set.
+   */
+  onDelete?: (invite: Invite) => void;
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.resolvedLanguage ?? "en";
@@ -62,15 +70,26 @@ export function InviteList({
                     )}`}
             </span>
           </span>
-          {!invite.revoked_at && (
-            <button
-              type="button"
-              onClick={() => onRevoke(invite)}
-              className="shrink-0 text-xs font-medium text-red-600 underline underline-offset-2 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-            >
-              {t("settings.invite.revoke")}
-            </button>
-          )}
+          <div className="flex shrink-0 gap-2">
+            {!invite.revoked_at && (
+              <button
+                type="button"
+                onClick={() => onRevoke(invite)}
+                className="text-xs font-medium text-red-600 underline underline-offset-2 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+              >
+                {t("settings.invite.revoke")}
+              </button>
+            )}
+            {onDelete && invite.revoked_at && (
+              <button
+                type="button"
+                onClick={() => onDelete(invite)}
+                className="text-xs font-medium text-red-600 underline underline-offset-2 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+              >
+                {t("settings.invite.delete")}
+              </button>
+            )}
+          </div>
         </li>
       ))}
     </ul>

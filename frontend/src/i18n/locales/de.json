@@ -66,7 +66,10 @@
       "pending": "Ausstehend",
       "revoke": "Widerrufen",
       "confirmRevokeTitle": "Einladung an {{email}} widerrufen?",
-      "confirmRevokeBody": "Diese Person kann die Einladung nicht mehr annehmen."
+      "confirmRevokeBody": "Diese Person kann die Einladung nicht mehr annehmen.",
+      "delete": "Löschen",
+      "confirmDeleteTitle": "Einladung an {{email}} löschen?",
+      "confirmDeleteBody": "Dies entfernt die widerrufene Einladung aus jeder Liste. Dies kann hier nicht rückgängig gemacht werden."
     },
     "users": {
       "usersHeading": "Benutzer",
