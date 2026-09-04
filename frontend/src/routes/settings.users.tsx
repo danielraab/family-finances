@@ -11,6 +11,7 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
 import { Avatar } from "../components/Avatar";
+import { InviteList } from "../components/InviteList";
 
 export const Route = createFileRoute("/settings/users")({
   component: UsersSettingsTab,
@@ -45,10 +46,11 @@ function UsersSettingsTab() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
-  const [confirming, setConfirming] = useState<{
-    kind: ConfirmKind;
-    target: AdminUser;
-  } | null>(null);
+  const [confirming, setConfirming] = useState<
+    | { kind: ConfirmKind; target: AdminUser }
+    | { kind: "revokeInvite"; target: Invite }
+    | null
+  >(null);
 
   useEffect(() => {
     if (user && !user.is_admin) {
@@ -95,8 +97,22 @@ function UsersSettingsTab() {
 
   async function performConfirmed() {
     if (!confirming) return;
-    const { kind, target } = confirming;
+    const state = confirming;
     setConfirming(null);
+
+    if (state.kind === "revokeInvite") {
+      const { data } = await api.POST("/api/auth/invites/{id}/revoke", {
+        params: { path: { id: state.target.id } },
+      });
+      if (data) {
+        setInvites(
+          (prev) => prev?.map((i) => (i.id === data.id ? data : i)) ?? null,
+        );
+      }
+      return;
+    }
+
+    const { kind, target } = state;
     const isSelf = target.id === user?.id;
 
     if (kind === "disable") {
@@ -267,39 +283,19 @@ function UsersSettingsTab() {
         <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
           {t("settings.users.invitesHeading")}
         </h2>
-        <ul className="flex flex-col gap-2">
-          {invites?.map((invite) => (
-            <li
-              key={invite.id}
-              className="flex flex-col gap-0.5 rounded-md border border-black/10 px-3 py-2 text-sm dark:border-white/10"
-            >
-              <span className="font-medium">{invite.email}</span>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                {t("settings.users.invitedBy", {
-                  name:
-                    invite.invited_by.display_name || invite.invited_by.email,
-                })}
-                {" · "}
-                {invite.accepted_at
-                  ? t("settings.users.accepted", {
-                      date: formatDate(
-                        invite.accepted_at,
-                        i18n.resolvedLanguage ?? "en",
-                      ),
-                    })
-                  : `${t("settings.users.pending")} · ${t(
-                      "settings.users.expires",
-                      {
-                        date: formatDate(
-                          invite.expires_at,
-                          i18n.resolvedLanguage ?? "en",
-                        ),
-                      },
-                    )}`}
-              </span>
-            </li>
-          ))}
-        </ul>
+        {invites === null ? null : invites.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {t("settings.users.noInvites")}
+          </p>
+        ) : (
+          <InviteList
+            invites={invites}
+            showInviter
+            onRevoke={(invite) =>
+              setConfirming({ kind: "revokeInvite", target: invite })
+            }
+          />
+        )}
       </section>
 
       <Dialog
@@ -313,13 +309,20 @@ function UsersSettingsTab() {
             {confirming && (
               <>
                 <DialogTitle className="text-base font-semibold">
-                  {t(`settings.users.confirm.${confirming.kind}Title`, {
-                    email: confirming.target.email,
-                  })}
+                  {confirming.kind === "revokeInvite"
+                    ? t("settings.invite.confirmRevokeTitle", {
+                        email: confirming.target.email,
+                      })
+                    : t(`settings.users.confirm.${confirming.kind}Title`, {
+                        email: confirming.target.email,
+                      })}
                 </DialogTitle>
                 <Description className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {t(`settings.users.confirm.${confirming.kind}Body`)}
-                  {confirming.target.id === user.id &&
+                  {confirming.kind === "revokeInvite"
+                    ? t("settings.invite.confirmRevokeBody")
+                    : t(`settings.users.confirm.${confirming.kind}Body`)}
+                  {confirming.kind !== "revokeInvite" &&
+                    confirming.target.id === user.id &&
                     confirming.kind !== "enable" && (
                       <span className="mt-2 block font-medium text-amber-700 dark:text-amber-400">
                         {t("settings.users.confirm.selfWarning")}

@@ -45,6 +45,7 @@
     "title": "Einstellungen",
     "tabs": {
       "common": "Allgemein",
+      "myInvitations": "Meine Einladungen",
       "users": "Benutzer"
     },
     "common": {
@@ -57,9 +58,20 @@
       "defaultCurrency": "Standardwährung",
       "saveError": "Speichern fehlgeschlagen — bitte versuche es erneut."
     },
+    "invite": {
+      "invitedBy": "Eingeladen von {{name}}",
+      "expires": "Läuft ab am {{date}}",
+      "accepted": "Angenommen am {{date}}",
+      "revoked": "Widerrufen am {{date}}",
+      "pending": "Ausstehend",
+      "revoke": "Widerrufen",
+      "confirmRevokeTitle": "Einladung an {{email}} widerrufen?",
+      "confirmRevokeBody": "Diese Person kann die Einladung nicht mehr annehmen."
+    },
     "users": {
       "usersHeading": "Benutzer",
       "invitesHeading": "Einladungen",
+      "noInvites": "Noch keine Einladungen.",
       "inviteEmailLabel": "E-Mail-Adresse",
       "invite": "Einladen",
       "inviting": "Wird eingeladen…",
@@ -72,10 +84,6 @@
       "roleMember": "Mitglied",
       "statusActive": "Aktiv",
       "statusDisabled": "Deaktiviert",
-      "invitedBy": "Eingeladen von {{name}}",
-      "expires": "Läuft ab am {{date}}",
-      "accepted": "Angenommen am {{date}}",
-      "pending": "Ausstehend",
       "disable": "Deaktivieren",
       "enable": "Aktivieren",
       "delete": "Löschen",
@@ -90,6 +98,10 @@
         "cancel": "Abbrechen",
         "confirmAction": "Bestätigen"
       }
+    },
+    "myInvitations": {
+      "heading": "Von dir gesendete Einladungen",
+      "noInvites": "Du hast noch niemanden eingeladen."
     }
   }
 }

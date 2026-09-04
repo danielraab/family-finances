@@ -1,15 +1,9 @@
-# user-administration Specification
+## RENAMED Requirements
 
-## Purpose
+- FROM: `### Requirement: Admin-only user and invitation listing`
+- TO: `### Requirement: Admin-only user listing`
 
-Admin-only listing and lifecycle management of users (disable, enable,
-soft-delete); listing, revoking, and soft-deleting invitations. Listing and
-revoking an invitation are not admin-exclusive — see below. See
-`authentication` for how a disabled or soft-deleted user is blocked at
-sign-in and session resolution, and for how a revoked invite is blocked at
-acceptance, and `web-client-settings` for the client surface.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Admin-only user listing
 
@@ -34,6 +28,8 @@ and `401` for no valid session.
 - **WHEN** a user has been soft-deleted and an admin calls
   `GET /api/auth/users`
 - **THEN** that user does not appear in the response
+
+## ADDED Requirements
 
 ### Requirement: Invitation listing
 
@@ -168,61 +164,3 @@ introduces no mechanism to reverse a soft delete.
 - **WHEN** a non-admin authenticated user calls `DELETE /api/auth/invites/{id}`
 - **THEN** the response is `403`, including when the caller is the
   invitation's own inviter
-
-### Requirement: Disabling and enabling a user
-
-`POST /api/auth/users/{id}/disable` SHALL require authentication and
-`is_admin`, SHALL set the target user's `disabled` flag to `true`, and SHALL
-immediately delete every session row belonging to that user (not merely rely
-on expiry). `POST /api/auth/users/{id}/enable` SHALL require the same
-authorization and SHALL clear the `disabled` flag; it SHALL NOT restore any
-previously-revoked session. An admin MAY disable or enable their own account,
-including when they are the only remaining admin; no check prevents this.
-
-#### Scenario: Disabling revokes active sessions immediately
-
-- **WHEN** an admin calls `POST /api/auth/users/{id}/disable` for a user with
-  an active session
-- **THEN** the target's `disabled` becomes `true`
-- **AND** a request using that user's previously-valid session token is now
-  `401`
-
-#### Scenario: Enabling does not restore sessions
-
-- **WHEN** an admin re-enables a previously disabled user
-- **THEN** `disabled` becomes `false`
-- **AND** the user must sign in again to obtain a new session
-
-#### Scenario: Admin may disable themselves, even as the last admin
-
-- **WHEN** the only remaining admin calls
-  `POST /api/auth/users/{id}/disable` on their own id
-- **THEN** the request succeeds and their own sessions are revoked
-  immediately, with no server-side check blocking it
-
-### Requirement: Soft-deleting a user
-
-`DELETE /api/auth/users/{id}` SHALL require authentication and `is_admin`,
-SHALL set the target user's `deleted_at` to the current time, and SHALL
-immediately delete every session row belonging to that user. A soft-deleted
-user SHALL be excluded from `GET /api/auth/users`. This change introduces no
-mechanism to reverse a soft delete. An admin MAY soft-delete their own
-account, including when they are the only remaining admin; no check prevents
-this.
-
-#### Scenario: Soft-deleting revokes access immediately
-
-- **WHEN** an admin calls `DELETE /api/auth/users/{id}` for a user with an
-  active session
-- **THEN** `deleted_at` is set and that session's next request is `401`
-
-#### Scenario: Soft-deleted user is hidden from the listing
-
-- **WHEN** a user has been soft-deleted
-- **THEN** they no longer appear in `GET /api/auth/users`
-
-#### Scenario: No self-lockout protection
-
-- **WHEN** the only remaining admin calls `DELETE /api/auth/users/{id}` on
-  their own id
-- **THEN** the request succeeds with no server-side check blocking it

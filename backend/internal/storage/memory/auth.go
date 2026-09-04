@@ -38,8 +38,9 @@ type magicRow struct {
 }
 
 type inviteRow struct {
-	inv  auth.Invite
-	hash []byte
+	inv       auth.Invite
+	hash      []byte
+	deletedAt *time.Time
 }
 
 // NewAuthStore returns an empty AuthStore.
@@ -166,26 +167,48 @@ func (a *AuthStore) DeleteSessionsByUserID(_ context.Context, userID string) err
 	return nil
 }
 
-// --- admin: invites -------------------------------------------------------
+// --- invite listing ---------------------------------------------------
+
+func (a *AuthStore) inviteInfoLocked(row inviteRow) auth.InviteInfo {
+	inviter := a.users[row.inv.InvitedBy]
+	return auth.InviteInfo{
+		ID:    row.inv.ID,
+		Email: row.inv.Email,
+		InvitedBy: auth.InviteInviter{
+			ID:          inviter.ID,
+			Email:       inviter.Email,
+			DisplayName: inviter.DisplayName,
+		},
+		CreatedAt:  row.inv.CreatedAt,
+		ExpiresAt:  row.inv.ExpiresAt,
+		AcceptedAt: row.inv.AcceptedAt,
+		RevokedAt:  row.inv.RevokedAt,
+	}
+}
 
 func (a *AuthStore) ListInvites(context.Context) ([]auth.InviteInfo, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	var out []auth.InviteInfo
+	out := []auth.InviteInfo{} // never nil: an empty list must render as [], not JSON null
 	for _, row := range a.invites {
-		inviter := a.users[row.inv.InvitedBy]
-		out = append(out, auth.InviteInfo{
-			ID:    row.inv.ID,
-			Email: row.inv.Email,
-			InvitedBy: auth.InviteInviter{
-				ID:          inviter.ID,
-				Email:       inviter.Email,
-				DisplayName: inviter.DisplayName,
-			},
-			CreatedAt:  row.inv.CreatedAt,
-			ExpiresAt:  row.inv.ExpiresAt,
-			AcceptedAt: row.inv.AcceptedAt,
-		})
+		if row.deletedAt != nil {
+			continue
+		}
+		out = append(out, a.inviteInfoLocked(row))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (a *AuthStore) ListInvitesByInviter(_ context.Context, inviterID string) ([]auth.InviteInfo, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := []auth.InviteInfo{} // never nil: an empty personal list is common, unlike the admin listing
+	for _, row := range a.invites {
+		if row.deletedAt != nil || row.inv.InvitedBy != inviterID {
+			continue
+		}
+		out = append(out, a.inviteInfoLocked(row))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out, nil
@@ -377,7 +400,11 @@ func (a *AuthStore) ActiveInviteForEmail(_ context.Context, email string, now ti
 	defer a.mu.Unlock()
 	email = auth.NormalizeEmail(email)
 	for _, row := range a.invites {
-		if auth.NormalizeEmail(row.inv.Email) == email && row.inv.AcceptedAt == nil && now.Before(row.inv.ExpiresAt) {
+		if row.deletedAt != nil {
+			continue
+		}
+		if auth.NormalizeEmail(row.inv.Email) == email && row.inv.AcceptedAt == nil &&
+			row.inv.RevokedAt == nil && now.Before(row.inv.ExpiresAt) {
 			return row.inv, nil
 		}
 	}
@@ -394,6 +421,9 @@ func (a *AuthStore) ConsumeInvite(_ context.Context, tokenHash []byte, now time.
 		if row.inv.AcceptedAt != nil {
 			return auth.Invite{}, auth.ErrTokenConsumed
 		}
+		if row.inv.RevokedAt != nil {
+			return auth.Invite{}, auth.ErrInviteInvalid
+		}
 		if now.After(row.inv.ExpiresAt) {
 			return auth.Invite{}, auth.ErrTokenExpired
 		}
@@ -403,6 +433,44 @@ func (a *AuthStore) ConsumeInvite(_ context.Context, tokenHash []byte, now time.
 		return row.inv, nil
 	}
 	return auth.Invite{}, auth.ErrInviteInvalid
+}
+
+func (a *AuthStore) InviteByID(_ context.Context, id string) (auth.Invite, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	row, ok := a.invites[id]
+	if !ok || row.deletedAt != nil {
+		return auth.Invite{}, auth.ErrNotFound
+	}
+	return row.inv, nil
+}
+
+func (a *AuthStore) RevokeInvite(_ context.Context, id string, now time.Time) (auth.Invite, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	row, ok := a.invites[id]
+	if !ok || row.deletedAt != nil {
+		return auth.Invite{}, auth.ErrNotFound
+	}
+	if row.inv.RevokedAt == nil {
+		t := now
+		row.inv.RevokedAt = &t
+		a.invites[id] = row
+	}
+	return row.inv, nil
+}
+
+func (a *AuthStore) SoftDeleteInvite(_ context.Context, id string, now time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	row, ok := a.invites[id]
+	if !ok || row.deletedAt != nil {
+		return auth.ErrNotFound
+	}
+	t := now
+	row.deletedAt = &t
+	a.invites[id] = row
+	return nil
 }
 
 func (a *AuthStore) MarkInviteAcceptedBy(_ context.Context, inviteID, userID string, now time.Time) error {

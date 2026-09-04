@@ -45,6 +45,7 @@
     "title": "Settings",
     "tabs": {
       "common": "Common",
+      "myInvitations": "My Invitations",
       "users": "Users"
     },
     "common": {
@@ -57,9 +58,20 @@
       "defaultCurrency": "Default currency",
       "saveError": "Couldn't save — please try again."
     },
+    "invite": {
+      "invitedBy": "Invited by {{name}}",
+      "expires": "Expires {{date}}",
+      "accepted": "Accepted {{date}}",
+      "revoked": "Revoked {{date}}",
+      "pending": "Pending",
+      "revoke": "Revoke",
+      "confirmRevokeTitle": "Revoke invitation to {{email}}?",
+      "confirmRevokeBody": "They will no longer be able to accept this invitation."
+    },
     "users": {
       "usersHeading": "Users",
       "invitesHeading": "Invitations",
+      "noInvites": "No invitations yet.",
       "inviteEmailLabel": "Email address",
       "invite": "Invite",
       "inviting": "Inviting…",
@@ -72,10 +84,6 @@
       "roleMember": "Member",
       "statusActive": "Active",
       "statusDisabled": "Disabled",
-      "invitedBy": "Invited by {{name}}",
-      "expires": "Expires {{date}}",
-      "accepted": "Accepted {{date}}",
-      "pending": "Pending",
       "disable": "Disable",
       "enable": "Enable",
       "delete": "Delete",
@@ -90,6 +98,10 @@
         "cancel": "Cancel",
         "confirmAction": "Confirm"
       }
+    },
+    "myInvitations": {
+      "heading": "Invitations you've sent",
+      "noInvites": "You haven't invited anyone yet."
     }
   }
 }

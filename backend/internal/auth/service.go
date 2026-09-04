@@ -493,6 +493,70 @@ func (s *Service) ListInvites(ctx context.Context) ([]InviteInfo, error) {
 	return s.store.ListInvites(ctx)
 }
 
+// ListMyInvites returns every invitation userID personally created,
+// regardless of status.
+func (s *Service) ListMyInvites(ctx context.Context, userID string) ([]InviteInfo, error) {
+	return s.store.ListInvitesByInviter(ctx, userID)
+}
+
+// RevokeInvite marks an invitation revoked, permitted for its own inviter or
+// an admin (ErrInviteRevokeForbidden otherwise). It is idempotent: revoking
+// an already-revoked invite succeeds without changing its revoked_at, and it
+// is permitted regardless of the invite's status (pending, accepted, or
+// expired) — a revoked invite stays visible in every listing, only its
+// acceptance is blocked (see Store.ConsumeInvite).
+func (s *Service) RevokeInvite(ctx context.Context, actor User, id string) (InviteInfo, error) {
+	inv, err := s.store.InviteByID(ctx, id)
+	if err != nil {
+		return InviteInfo{}, err
+	}
+	if inv.InvitedBy != actor.ID && !actor.IsAdmin {
+		return InviteInfo{}, ErrInviteRevokeForbidden
+	}
+	revoked, err := s.store.RevokeInvite(ctx, id, s.now())
+	if err != nil {
+		return InviteInfo{}, err
+	}
+	return s.inviteInfo(ctx, revoked)
+}
+
+// SoftDeleteInvite hides an already-revoked invitation from every listing.
+// Admin-only authorization is enforced by the caller (the handler's
+// requireAdmin guard), matching SoftDeleteUser. Returns ErrInviteNotRevoked
+// for an invitation whose revoked_at is not yet set.
+func (s *Service) SoftDeleteInvite(ctx context.Context, id string) error {
+	inv, err := s.store.InviteByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if inv.RevokedAt == nil {
+		return ErrInviteNotRevoked
+	}
+	return s.store.SoftDeleteInvite(ctx, id, s.now())
+}
+
+// inviteInfo resolves inv's inviter identity to build the InviteInfo shape
+// returned over HTTP.
+func (s *Service) inviteInfo(ctx context.Context, inv Invite) (InviteInfo, error) {
+	inviter, err := s.store.UserByID(ctx, inv.InvitedBy)
+	if err != nil {
+		return InviteInfo{}, err
+	}
+	return InviteInfo{
+		ID:    inv.ID,
+		Email: inv.Email,
+		InvitedBy: InviteInviter{
+			ID:          inviter.ID,
+			Email:       inviter.Email,
+			DisplayName: inviter.DisplayName,
+		},
+		CreatedAt:  inv.CreatedAt,
+		ExpiresAt:  inv.ExpiresAt,
+		AcceptedAt: inv.AcceptedAt,
+		RevokedAt:  inv.RevokedAt,
+	}, nil
+}
+
 // LinkIdentity attaches an identity to an existing, already-authenticated user
 // without going through a full sign-in flow. It is the explicit-link path.
 func (s *Service) LinkIdentity(ctx context.Context, userID string, id Identity) (Identity, error) {

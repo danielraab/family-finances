@@ -41,6 +41,12 @@ var (
 	// ErrAccountDisabled: the resolved account is disabled or soft-deleted;
 	// no session is established.
 	ErrAccountDisabled = errors.New("account is disabled")
+	// ErrInviteRevokeForbidden: the caller is neither the invite's own
+	// inviter nor an admin.
+	ErrInviteRevokeForbidden = errors.New("not permitted to revoke this invite")
+	// ErrInviteNotRevoked: a soft-delete was attempted on an invite that has
+	// not been revoked yet.
+	ErrInviteNotRevoked = errors.New("invite has not been revoked")
 )
 
 // Sentinels is every error above, for the httpapi mapping and for tests.
@@ -48,7 +54,7 @@ var Sentinels = []error{
 	ErrNotFound, ErrSignupDisabled, ErrDomainNotAllowed, ErrTokenInvalid,
 	ErrTokenExpired, ErrTokenConsumed, ErrInviteInvalid, ErrIdentityConflict,
 	ErrEmailInUse, ErrInvalidEmail, ErrOIDCNotConfigured, ErrEmailRequired,
-	ErrAccountDisabled,
+	ErrAccountDisabled, ErrInviteRevokeForbidden, ErrInviteNotRevoked,
 }
 
 // NewUser is the input to account creation.
@@ -117,13 +123,27 @@ type Store interface {
 	// --- invites ---
 
 	CreateInvite(ctx context.Context, in Invite, tokenHash []byte) (Invite, error)
-	// ActiveInviteForEmail returns an unexpired, unaccepted invite for the
-	// address, or ErrNotFound.
+	// ActiveInviteForEmail returns an unexpired, unaccepted, unrevoked,
+	// non-soft-deleted invite for the address, or ErrNotFound.
 	ActiveInviteForEmail(ctx context.Context, email string, now time.Time) (Invite, error)
 	// ConsumeInvite atomically marks the invite accepted-pending and returns
-	// it; MarkInviteAcceptedBy then records which user accepted.
+	// it; MarkInviteAcceptedBy then records which user accepted. A revoked
+	// invite is rejected the same way an expired or already-consumed one is.
 	ConsumeInvite(ctx context.Context, tokenHash []byte, now time.Time) (Invite, error)
 	MarkInviteAcceptedBy(ctx context.Context, inviteID, userID string, now time.Time) error
+	// InviteByID returns a single non-soft-deleted invite, or ErrNotFound.
+	// Used to authorize and validate a revoke or soft-delete before it runs.
+	InviteByID(ctx context.Context, id string) (Invite, error)
+	// RevokeInvite sets revoked_at to now if it is not already set —
+	// idempotent, so a repeat call leaves the original revoked_at
+	// untouched — and returns the resulting invite. ErrNotFound for a
+	// missing or soft-deleted invite.
+	RevokeInvite(ctx context.Context, id string, now time.Time) (Invite, error)
+	// SoftDeleteInvite sets deleted_at, hiding the invite from every
+	// listing. Callers MUST check revoked_at first (via InviteByID) —
+	// this method does not enforce that an invite be revoked before
+	// deletion.
+	SoftDeleteInvite(ctx context.Context, id string, now time.Time) error
 
 	// --- oidc login state ---
 
@@ -147,9 +167,12 @@ type Store interface {
 	// next expiry check.
 	DeleteSessionsByUserID(ctx context.Context, userID string) error
 
-	// --- admin: invites ---
+	// --- invite listing ---
 
-	// ListInvites returns every invite regardless of status, newest first,
-	// each carrying the inviter's identity.
+	// ListInvites returns every non-soft-deleted invite regardless of
+	// status, newest first, each carrying the inviter's identity.
 	ListInvites(ctx context.Context) ([]InviteInfo, error)
+	// ListInvitesByInviter returns every non-soft-deleted invite created by
+	// inviterID, regardless of status, newest first.
+	ListInvitesByInviter(ctx context.Context, inviterID string) ([]InviteInfo, error)
 }
