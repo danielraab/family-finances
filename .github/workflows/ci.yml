@@ -104,8 +104,36 @@ jobs:
               });
             }
 
+  # Unit/handler tests only. No database is available here, so the
+  # internal/storage/postgres integration tests self-skip (DATABASE_URL is
+  # unset) — see the backend-integration job below for those.
   backend:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - name: gofmt
+        run: |
+          UNFORMATTED="$(gofmt -l .)"
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following files are not gofmt'd:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+      - run: go vet ./...
+      - run: go test ./...
+
+  # Runs the internal/storage/postgres integration tests against a real
+  # Postgres. Scoped to pull requests: integration tests are not part of the
+  # always-on push pipeline, only the PR gate (see backend/AGENTS.md).
+  backend-integration:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     defaults:
       run:
         working-directory: backend
@@ -124,24 +152,13 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      # Present so the internal/storage/postgres integration tests run rather
-      # than skip. A bare `go test ./...` without this still passes.
       DATABASE_URL: postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
-      - name: gofmt
-        run: |
-          UNFORMATTED="$(gofmt -l .)"
-          if [ -n "$UNFORMATTED" ]; then
-            echo "The following files are not gofmt'd:"
-            echo "$UNFORMATTED"
-            exit 1
-          fi
-      - run: go vet ./...
-      - run: go test ./...
+      - run: go test ./internal/storage/postgres/...
 
   # Builds and publishes the combined image. Only runs when a new git tag is
   # pushed, using that tag as the image tag.
