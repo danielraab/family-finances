@@ -38,6 +38,10 @@ type Deps struct {
 	// /api/auth/. Nil leaves the prefix unrouted.
 	AuthHandler http.Handler
 
+	// SettingsHandler is the settings domain package's http.Handler, mounted
+	// at /api/settings. Nil leaves it unrouted.
+	SettingsHandler http.Handler
+
 	// OpenAPISpec is the raw bytes of the hand-written API contract
 	// (openapi/openapi.yaml), served verbatim at GET /api/openapi.yaml. Nil
 	// leaves that route unregistered (it 404s as any other unknown /api/ path).
@@ -56,6 +60,9 @@ func Routes(deps Deps) *http.ServeMux {
 		// More specific than the "/api/" fallback below, so ServeMux routes
 		// every /api/auth/... path here.
 		mux.Handle("/api/auth/", deps.AuthHandler)
+	}
+	if deps.SettingsHandler != nil {
+		mux.Handle("/api/settings", deps.SettingsHandler)
 	}
 	// Unmatched /api/ paths get a JSON 404 — the reserved namespace never
 	// falls through to the static site. More specific than "/", so it wins

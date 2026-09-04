@@ -17,6 +17,7 @@ import (
 	"at.draab/familyfinances/internal/httpapi"
 	"at.draab/familyfinances/internal/mailer"
 	"at.draab/familyfinances/internal/oidcauth"
+	"at.draab/familyfinances/internal/settings"
 	"at.draab/familyfinances/internal/storage/postgres"
 )
 
@@ -61,18 +62,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	authSvc, authHandler, err := buildAuth(ctx, cfg, pool)
+	settingsSvc, settingsHandler := buildSettings(pool)
+
+	authSvc, authHandler, err := buildAuth(ctx, cfg, pool, settingsSvc)
 	if err != nil {
 		slog.Error("build auth", "error", err)
 		os.Exit(1)
 	}
 
 	srv := httpapi.New(cfg, httpapi.Deps{
-		Static:      staticFS,
-		DB:          pool,
-		Auth:        authSvc,
-		AuthHandler: authHandler,
-		OpenAPISpec: openAPISpec,
+		Static:          staticFS,
+		DB:              pool,
+		Auth:            authSvc,
+		AuthHandler:     authHandler,
+		SettingsHandler: settingsHandler,
+		OpenAPISpec:     openAPISpec,
 	})
 
 	if err := run(srv); err != nil {
@@ -81,10 +85,20 @@ func main() {
 	}
 }
 
+// buildSettings constructs the settings service and its HTTP handler over the
+// Postgres store.
+func buildSettings(pool *postgres.Pool) (*settings.Service, http.Handler) {
+	store := postgres.NewSettingsStore(pool)
+	svc := settings.NewService(store)
+	handler := settings.NewHandler(svc, settings.HandlerOptions{RenderError: httpapi.WriteError})
+	return svc, handler
+}
+
 // buildAuth constructs the auth service and its HTTP handler: the Postgres
 // store, the SMTP mailer, and — only when OIDC_ISSUER is set — a discovered
-// OIDC client.
-func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool) (*auth.Service, http.Handler, error) {
+// OIDC client. settingsSvc is wired in as the raw-language-preference source
+// for GET /api/auth/me (see internal/settings' design note).
+func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, settingsSvc *settings.Service) (*auth.Service, http.Handler, error) {
 	store := postgres.NewAuthStore(pool)
 
 	mail := mailer.New(mailer.Config{
@@ -124,7 +138,7 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool) (*au
 		MagicLinkTTL:        cfg.Auth.MagicLinkTTL,
 		OIDCIssuer:          cfg.OIDC.Issuer,
 		OIDCLabel:           cfg.OIDC.Label,
-	})
+	}, auth.WithLanguageLookup(settingsSvc))
 
 	handler := auth.NewHandler(svc, auth.HandlerOptions{
 		RenderError:  httpapi.WriteError,

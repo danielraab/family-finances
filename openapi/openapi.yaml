@@ -18,7 +18,11 @@ tags:
   - name: health
     description: Liveness / readiness.
   - name: auth
-    description: Sign-in, session, and invites.
+    description: >-
+      Sign-in, session, and invites — including the admin-only user and
+      invitation administration endpoints.
+  - name: settings
+    description: Per-user preferences (language, timezone, default currency).
   - name: browser-flow
     description: >-
       Endpoints a browser reaches by full-page navigation, not fetch. Documented
@@ -166,6 +170,181 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+    get:
+      operationId: getAuthInvites
+      summary: List every invitation (admin only)
+      description: >-
+        Every invite regardless of status (pending, accepted, or expired),
+        newest first, each carrying the inviter's identity.
+      tags: [auth]
+      responses:
+        "200":
+          description: Every invitation.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invite"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/auth/users:
+    get:
+      operationId: getAuthUsers
+      summary: List every non-deleted user (admin only)
+      tags: [auth]
+      responses:
+        "200":
+          description: Every non-soft-deleted user.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/auth/users/{id}/disable:
+    post:
+      operationId: postAuthUserDisable
+      summary: Disable a user and revoke their sessions immediately (admin only)
+      description: >-
+        No check prevents an admin from disabling their own account, including
+        as the only remaining admin.
+      tags: [auth]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The user, now disabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/users/{id}/enable:
+    post:
+      operationId: postAuthUserEnable
+      summary: Re-enable a disabled user (admin only)
+      description: Does not restore any session revoked while disabled.
+      tags: [auth]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The user, now enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/users/{id}:
+    delete:
+      operationId: deleteAuthUser
+      summary: Soft-delete a user and revoke their sessions immediately (admin only)
+      description: >-
+        One-way in this API — there is no undelete endpoint. No check
+        prevents an admin from deleting their own account, including as the
+        only remaining admin.
+      tags: [auth]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The user is soft-deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/settings:
+    get:
+      operationId: getSettings
+      summary: The authenticated user's resolved settings
+      description: >-
+        Always fully populated — a field never set by the user resolves to
+        its hardcoded application default.
+      tags: [settings]
+      responses:
+        "200":
+          description: The resolved settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      operationId: putSettings
+      summary: Update one or more of the authenticated user's settings
+      description: >-
+        Partial update: only the fields present in the body are changed.
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserSettingsUpdate"
+      responses:
+        "200":
+          description: The resolved settings after the update.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSettings"
+        "400":
+          description: A field included in the body failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /api/auth/email/callback:
     get:
@@ -283,11 +462,17 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The authenticated user is not an admin.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
 
   schemas:
     User:
       type: object
-      required: [id, email, is_admin, created_at]
+      required: [id, email, is_admin, created_at, language]
       properties:
         id:
           type: string
@@ -301,6 +486,60 @@ components:
         created_at:
           type: string
           format: date-time
+        language:
+          type: string
+          nullable: true
+          description: >-
+            The account's raw, unresolved language preference, or null when
+            none is set — used by the client to prioritize it over browser
+            detection (see the web-client-i18n capability). Distinct from
+            GET /api/settings, whose language field is always resolved to a
+            default when unset.
+          enum: [en, de]
+
+    AdminUser:
+      type: object
+      required: [id, email, is_admin, disabled, created_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        is_admin:
+          type: boolean
+        disabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    UserSettings:
+      type: object
+      additionalProperties: false
+      required: [language, timezone, default_currency]
+      properties:
+        language:
+          type: string
+          enum: [en, de]
+        timezone:
+          type: string
+        default_currency:
+          type: string
+
+    UserSettingsUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        language:
+          type: string
+          enum: [en, de]
+        timezone:
+          type: string
+        default_currency:
+          type: string
 
     Error:
       type: object
@@ -337,7 +576,7 @@ components:
 
     Invite:
       type: object
-      required: [id, email, expires_at]
+      required: [id, email, expires_at, invited_by, accepted_at]
       properties:
         id:
           type: string
@@ -347,6 +586,24 @@ components:
         expires_at:
           type: string
           format: date-time
+        invited_by:
+          $ref: "#/components/schemas/InviteInviter"
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    InviteInviter:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
 
     OidcLogin:
       type: object
