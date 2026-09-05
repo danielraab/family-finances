@@ -145,75 +145,75 @@
 ## 7. Backend verification
 
 - [x] 7.1 `gofmt -l .`, `go vet ./...`, `go test ./...` from `backend/`.
-- [ ] 7.2 `internal/storage/postgres` integration tests against a real
+- [x] 7.2 `internal/storage/postgres` integration tests against a real
   Postgres for every new store (accounts incl. disable/enable, account
   types, categories, tags, entries incl. listing/balance, and the
   `user_settings` column).
 
 ## 8. Frontend: shell and routing
 
-- [ ] 8.1 `src/components/Sidebar.tsx`: add "Accounts" and "Entries" to
+- [x] 8.1 `src/components/Sidebar.tsx`: add "Accounts" and "Entries" to
   `NAV` with their own icons and i18n keys (`nav.accounts`, `nav.entries`),
   active-state matching that highlights the section for any nested route
   (`/accounts/*`, `/entries/*`), not just an exact path match.
-- [ ] 8.2 New route files: `accounts.tsx` (layout + auth gate, same
+- [x] 8.2 New route files: `accounts.tsx` (layout + auth gate, same
   redirect-to-`/login` pattern as `settings.tsx`), `accounts.index.tsx`
   (`/accounts`), `accounts.new.tsx`, `accounts.$accountId.tsx`,
   `accounts.$accountId.edit.tsx`; `entries.tsx` (layout + auth gate),
   `entries.index.tsx` (`/entries`, with `validateSearch` for filter/search/
   sort params), `entries.new.tsx`, `entries.$entryId.edit.tsx`.
-- [ ] 8.3 New i18n keys in `src/i18n/locales/{en,de}.json` for every label,
+- [x] 8.3 New i18n keys in `src/i18n/locales/{en,de}.json` for every label,
   empty state, and confirmation copy introduced below — `en.json` first,
   per the existing source-of-truth rule.
 
 ## 9. Frontend: `web-client-accounts`
 
-- [ ] 9.1 `/accounts` (overview): on mount, `GET /api/accounts` then, per
+- [x] 9.1 `/accounts` (overview): on mount, `GET /api/accounts` then, per
   account, `GET /api/accounts/{id}/balance` for the live balance; render
   title, type, currency, balance (formatted at the user's
   `displayed_decimal_places`), and a status indicator reflecting
   disabled/closed/open. Empty-state text when there are no accounts, with
   a create action.
-- [ ] 9.2 `/accounts/{id}` (details): `GET /api/accounts/{id}` plus the
+- [x] 9.2 `/accounts/{id}` (details): `GET /api/accounts/{id}` plus the
   most recent entries (`GET /api/entries?account_id={id}&sort=
   booking_timestamp&dir=desc&limit=…`, a small fixed page), each row
   linking to its edit page; a "See all" link to
   `/entries?account_id={id}`.
-- [ ] 9.3 `/accounts/new` and `/accounts/{id}/edit`: form for title,
+- [x] 9.3 `/accounts/new` and `/accounts/{id}/edit`: form for title,
   description, type (`GET /api/account-types` populates the select),
   currency, financial institute, opening/closing date; client-side
   validation mirroring the backend's (currency shape, closing >= opening).
-- [ ] 9.4 On the edit page: Disable/Enable action
+- [x] 9.4 On the edit page: Disable/Enable action
   (`POST /api/accounts/{id}/disable` / `.../enable`) and a soft-delete
   action (`DELETE /api/accounts/{id}`), each behind a
   `@headlessui/react` `Dialog` confirmation mirroring
   `/settings/users`' pattern — delete's confirmation copy states it cannot
   be undone.
-- [ ] 9.5 Manual verification in a running dev instance: create, edit,
+- [x] 9.5 Manual verification in a running dev instance: create, edit,
   disable (confirm a new entry against it is rejected with a clear
   message), enable, soft-delete (confirm it disappears from the overview)
   an account.
 
 ## 10. Frontend: `web-client-entries`
 
-- [ ] 10.1 `/entries` search-param shape: `account_id` (repeatable),
+- [x] 10.1 `/entries` search-param shape: `account_id` (repeatable),
   `category_id`, `tag_id`, `kind`, `from`, `to`, `q`, `sort`, `dir` —
   typed via `validateSearch`, read via `useSearch`, written via `navigate`/
   `Link search={}` so every control (filter chip, sort header, search box)
   updates the URL rather than local-only state.
-- [ ] 10.2 Filter UI: account multi-select, category picker (flat indented
+- [x] 10.2 Filter UI: account multi-select, category picker (flat indented
   list per design.md), tag picker, kind toggle, date-range inputs, a debounced
   search input for `q`.
-- [ ] 10.3 List rendering: sortable column headers for booking timestamp
+- [x] 10.3 List rendering: sortable column headers for booking timestamp
   and amount (toggle `dir`, only one `sort` active at a time); infinite
   scroll — an intersection observer (or scroll-position check) triggers the
   next `GET /api/entries?...&after=<next_cursor>` once the previous request
   resolves, appending rows; the loaded list resets whenever any filter/
   search/sort param changes.
-- [ ] 10.4 Empty state (no entries match the current filters, distinct
+- [x] 10.4 Empty state (no entries match the current filters, distinct
   from "no entries at all") and a loading indicator for the initial load
   and each subsequent page fetch.
-- [ ] 10.5 `/entries/new`: preselects `account_id` when arriving via
+- [x] 10.5 `/entries/new`: preselects `account_id` when arriving via
   `?account_id=` (from the account details page's link); form for account
   (if not preselected — only the caller's own, non-deleted accounts),
   kind, amount (input at full precision, independent of the display
@@ -221,10 +221,10 @@
   unless kind is `balance_adjustment`), and a tag input that matches
   existing tags as-you-type and creates (`POST /api/tags`) any typed value
   with no match on submit, then attaches it.
-- [ ] 10.6 `/entries/{id}/edit`: same form minus account/kind (rendered
+- [x] 10.6 `/entries/{id}/edit`: same form minus account/kind (rendered
   read-only — immutable per the backend); includes a delete action behind
   a confirmation dialog.
-- [ ] 10.7 Manual verification: create a transaction and a balance
+- [x] 10.7 Manual verification: create a transaction and a balance
   adjustment; edit one; delete one; apply each filter individually and in
   combination; search; sort by both columns in both directions; scroll far
   enough to trigger at least two "load more" fetches; confirm the URL
@@ -233,10 +233,10 @@
 
 ## 11. Frontend: displayed decimal places setting
 
-- [ ] 11.1 `settings.index.tsx` (Common tab): add a "Displayed decimal
+- [x] 11.1 `settings.index.tsx` (Common tab): add a "Displayed decimal
   places" control (0–4), saving immediately on change via
   `PUT /api/settings`, matching the existing fields' interaction pattern.
-- [ ] 11.2 A shared amount-formatting helper (used by the accounts overview/
+- [x] 11.2 A shared amount-formatting helper (used by the accounts overview/
   details balance and the entries list) that rounds the stored 4-decimal
   integer to the current user's `displayed_decimal_places` for display —
   used nowhere in the create/edit forms, which always work at full
@@ -244,4 +244,4 @@
 
 ## 12. Frontend verification
 
-- [ ] 12.1 `pnpm lint`, `pnpm exec tsc`, `pnpm build` from `frontend/`.
+- [x] 12.1 `pnpm lint`, `pnpm exec tsc`, `pnpm build` from `frontend/`.

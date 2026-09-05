@@ -1,6 +1,8 @@
 {
   "nav": {
-    "home": "Home"
+    "home": "Home",
+    "accounts": "Accounts",
+    "entries": "Entries"
   },
   "sidebar": {
     "closeSidebar": "Close sidebar"
@@ -56,6 +58,7 @@
       },
       "timezone": "Timezone",
       "defaultCurrency": "Default currency",
+      "displayedDecimalPlaces": "Displayed decimal places",
       "saveError": "Couldn't save — please try again."
     },
     "invite": {
@@ -105,6 +108,124 @@
     "myInvitations": {
       "heading": "Invitations you've sent",
       "noInvites": "You haven't invited anyone yet."
+    }
+  },
+  "accounts": {
+    "title": "Accounts",
+    "create": "New account",
+    "empty": "No accounts yet. Create one to get started.",
+    "notFound": "This account doesn't exist, or isn't yours.",
+    "status": {
+      "open": "Open",
+      "closed": "Closed",
+      "disabled": "Disabled"
+    },
+    "form": {
+      "title": "Title",
+      "titleRequired": "Title is required.",
+      "description": "Description",
+      "type": "Type",
+      "typePlaceholder": "Select a type…",
+      "typeRequired": "Type is required.",
+      "currency": "Currency",
+      "currencyInvalid": "Currency must be three uppercase letters (e.g. EUR).",
+      "financialInstitute": "Financial institute",
+      "openingDate": "Opening date",
+      "closingDate": "Closing date",
+      "closingDateInvalid": "Closing date can't be before the opening date.",
+      "create": "Create account",
+      "save": "Save changes",
+      "saveError": "Couldn't save — please check the form and try again."
+    },
+    "new": {
+      "title": "New account"
+    },
+    "details": {
+      "edit": "Edit",
+      "balance": "Balance",
+      "status": "Status",
+      "recentEntries": "Recent entries",
+      "seeAll": "See all",
+      "noEntries": "No entries yet."
+    },
+    "edit": {
+      "title": "Edit account",
+      "dangerZone": "Account status",
+      "disable": "Disable account",
+      "enable": "Enable account",
+      "delete": "Delete account",
+      "confirm": {
+        "disableTitle": "Disable this account?",
+        "disableBody": "New entries can no longer be created against it. It stays visible and its existing entries are unaffected — you can re-enable it any time.",
+        "enableTitle": "Enable this account?",
+        "enableBody": "New entries can be created against it again.",
+        "deleteTitle": "Delete this account?",
+        "deleteBody": "This removes it from your accounts list. This cannot be undone here.",
+        "cancel": "Cancel",
+        "confirmAction": "Confirm"
+      }
+    }
+  },
+  "entries": {
+    "title": "Entries",
+    "create": "New entry",
+    "notFound": "This entry doesn't exist, or isn't yours.",
+    "loading": "Loading…",
+    "emptyAll": "No entries yet.",
+    "emptyFiltered": "No entries match these filters.",
+    "columns": {
+      "date": "Date",
+      "title": "Title",
+      "account": "Account",
+      "amount": "Amount"
+    },
+    "filters": {
+      "account": "Account",
+      "allAccounts": "All accounts",
+      "category": "Category",
+      "allCategories": "All categories",
+      "tag": "Tag",
+      "allTags": "All tags",
+      "kind": "Kind",
+      "allKinds": "All kinds",
+      "from": "From",
+      "to": "To",
+      "search": "Search"
+    },
+    "kind": {
+      "transaction": "Transaction",
+      "balanceAdjustment": "Balance adjustment"
+    },
+    "form": {
+      "account": "Account",
+      "accountPlaceholder": "Select an account…",
+      "accountRequired": "Account is required.",
+      "kind": "Kind",
+      "amount": "Amount ({{currency}})",
+      "amountInvalid": "Enter a valid amount.",
+      "bookingTimestamp": "Booking date & time",
+      "title": "Title",
+      "titleRequired": "Title is required.",
+      "description": "Description",
+      "category": "Category",
+      "categoryPlaceholder": "Select a category…",
+      "categoryNone": "No category",
+      "categoryRequired": "Category is required for a transaction.",
+      "tags": "Tags",
+      "tagsPlaceholder": "Add tag…",
+      "removeTag": "Remove {{name}}",
+      "create": "Create entry",
+      "save": "Save changes",
+      "saveError": "Couldn't save — please check the form and try again."
+    },
+    "new": {
+      "title": "New entry"
+    },
+    "edit": {
+      "title": "Edit entry",
+      "delete": "Delete entry",
+      "confirmDeleteTitle": "Delete this entry?",
+      "confirmDeleteBody": "This cannot be undone here."
     }
   }
 }

@@ -1,6 +1,8 @@
 {
   "nav": {
-    "home": "Start"
+    "home": "Start",
+    "accounts": "Konten",
+    "entries": "Buchungen"
   },
   "sidebar": {
     "closeSidebar": "Seitenleiste schließen"
@@ -56,6 +58,7 @@
       },
       "timezone": "Zeitzone",
       "defaultCurrency": "Standardwährung",
+      "displayedDecimalPlaces": "Angezeigte Nachkommastellen",
       "saveError": "Speichern fehlgeschlagen — bitte versuche es erneut."
     },
     "invite": {
@@ -105,6 +108,124 @@
     "myInvitations": {
       "heading": "Von dir gesendete Einladungen",
       "noInvites": "Du hast noch niemanden eingeladen."
+    }
+  },
+  "accounts": {
+    "title": "Konten",
+    "create": "Neues Konto",
+    "empty": "Noch keine Konten. Erstelle eines, um loszulegen.",
+    "notFound": "Dieses Konto existiert nicht oder gehört dir nicht.",
+    "status": {
+      "open": "Offen",
+      "closed": "Geschlossen",
+      "disabled": "Deaktiviert"
+    },
+    "form": {
+      "title": "Titel",
+      "titleRequired": "Titel ist erforderlich.",
+      "description": "Beschreibung",
+      "type": "Typ",
+      "typePlaceholder": "Typ auswählen…",
+      "typeRequired": "Typ ist erforderlich.",
+      "currency": "Währung",
+      "currencyInvalid": "Die Währung muss aus drei Großbuchstaben bestehen (z. B. EUR).",
+      "financialInstitute": "Finanzinstitut",
+      "openingDate": "Eröffnungsdatum",
+      "closingDate": "Schließungsdatum",
+      "closingDateInvalid": "Das Schließungsdatum darf nicht vor dem Eröffnungsdatum liegen.",
+      "create": "Konto erstellen",
+      "save": "Änderungen speichern",
+      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut."
+    },
+    "new": {
+      "title": "Neues Konto"
+    },
+    "details": {
+      "edit": "Bearbeiten",
+      "balance": "Kontostand",
+      "status": "Status",
+      "recentEntries": "Letzte Buchungen",
+      "seeAll": "Alle anzeigen",
+      "noEntries": "Noch keine Buchungen."
+    },
+    "edit": {
+      "title": "Konto bearbeiten",
+      "dangerZone": "Kontostatus",
+      "disable": "Konto deaktivieren",
+      "enable": "Konto aktivieren",
+      "delete": "Konto löschen",
+      "confirm": {
+        "disableTitle": "Dieses Konto deaktivieren?",
+        "disableBody": "Es können keine neuen Buchungen mehr dafür erstellt werden. Es bleibt sichtbar und bestehende Buchungen sind nicht betroffen — du kannst es jederzeit wieder aktivieren.",
+        "enableTitle": "Dieses Konto aktivieren?",
+        "enableBody": "Es können wieder neue Buchungen dafür erstellt werden.",
+        "deleteTitle": "Dieses Konto löschen?",
+        "deleteBody": "Dies entfernt es aus deiner Kontenliste. Dies kann hier nicht rückgängig gemacht werden.",
+        "cancel": "Abbrechen",
+        "confirmAction": "Bestätigen"
+      }
+    }
+  },
+  "entries": {
+    "title": "Buchungen",
+    "create": "Neue Buchung",
+    "notFound": "Diese Buchung existiert nicht oder gehört dir nicht.",
+    "loading": "Wird geladen…",
+    "emptyAll": "Noch keine Buchungen.",
+    "emptyFiltered": "Keine Buchungen entsprechen diesen Filtern.",
+    "columns": {
+      "date": "Datum",
+      "title": "Titel",
+      "account": "Konto",
+      "amount": "Betrag"
+    },
+    "filters": {
+      "account": "Konto",
+      "allAccounts": "Alle Konten",
+      "category": "Kategorie",
+      "allCategories": "Alle Kategorien",
+      "tag": "Tag",
+      "allTags": "Alle Tags",
+      "kind": "Art",
+      "allKinds": "Alle Arten",
+      "from": "Von",
+      "to": "Bis",
+      "search": "Suche"
+    },
+    "kind": {
+      "transaction": "Transaktion",
+      "balanceAdjustment": "Kontostandanpassung"
+    },
+    "form": {
+      "account": "Konto",
+      "accountPlaceholder": "Konto auswählen…",
+      "accountRequired": "Konto ist erforderlich.",
+      "kind": "Art",
+      "amount": "Betrag ({{currency}})",
+      "amountInvalid": "Gib einen gültigen Betrag ein.",
+      "bookingTimestamp": "Buchungsdatum & -uhrzeit",
+      "title": "Titel",
+      "titleRequired": "Titel ist erforderlich.",
+      "description": "Beschreibung",
+      "category": "Kategorie",
+      "categoryPlaceholder": "Kategorie auswählen…",
+      "categoryNone": "Keine Kategorie",
+      "categoryRequired": "Für eine Transaktion ist eine Kategorie erforderlich.",
+      "tags": "Tags",
+      "tagsPlaceholder": "Tag hinzufügen…",
+      "removeTag": "{{name}} entfernen",
+      "create": "Buchung erstellen",
+      "save": "Änderungen speichern",
+      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut."
+    },
+    "new": {
+      "title": "Neue Buchung"
+    },
+    "edit": {
+      "title": "Buchung bearbeiten",
+      "delete": "Buchung löschen",
+      "confirmDeleteTitle": "Diese Buchung löschen?",
+      "confirmDeleteBody": "Dies kann hier nicht rückgängig gemacht werden."
     }
   }
 }
