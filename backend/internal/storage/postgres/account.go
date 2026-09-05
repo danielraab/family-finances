@@ -160,9 +160,11 @@ func (s *AccountStore) Owner(ctx context.Context, id string) (string, string, bo
 
 // --- account types ---------------------------------------------------
 
+const accountTypeCols = `id::text, title, COALESCE(description, ''), disabled, created_at`
+
 func scanType(row pgx.Row) (account.Type, error) {
 	var t account.Type
-	err := row.Scan(&t.ID, &t.Name, &t.CreatedAt)
+	err := row.Scan(&t.ID, &t.Title, &t.Description, &t.Disabled, &t.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return account.Type{}, account.ErrNotFound
 	}
@@ -170,7 +172,7 @@ func scanType(row pgx.Row) (account.Type, error) {
 }
 
 func (s *AccountStore) ListTypes(ctx context.Context) ([]account.Type, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id::text, name, created_at FROM account_types ORDER BY name`)
+	rows, err := s.pool.Query(ctx, `SELECT `+accountTypeCols+` FROM account_types ORDER BY title`)
 	if err != nil {
 		return nil, err
 	}
@@ -187,9 +189,14 @@ func (s *AccountStore) ListTypes(ctx context.Context) ([]account.Type, error) {
 	return out, rows.Err()
 }
 
-func (s *AccountStore) CreateType(ctx context.Context, name string) (account.Type, error) {
+func (s *AccountStore) GetType(ctx context.Context, id string) (account.Type, error) {
+	return scanType(s.pool.QueryRow(ctx, `SELECT `+accountTypeCols+` FROM account_types WHERE id = $1`, id))
+}
+
+func (s *AccountStore) CreateType(ctx context.Context, title, description string) (account.Type, error) {
 	t, err := scanType(s.pool.QueryRow(ctx,
-		`INSERT INTO account_types (name) VALUES ($1) RETURNING id::text, name, created_at`, name,
+		`INSERT INTO account_types (title, description) VALUES ($1, NULLIF($2, '')) RETURNING `+accountTypeCols,
+		title, description,
 	))
 	if isUniqueViolation(err) {
 		return account.Type{}, account.ErrInvalidValue
@@ -197,14 +204,22 @@ func (s *AccountStore) CreateType(ctx context.Context, name string) (account.Typ
 	return t, err
 }
 
-func (s *AccountStore) UpdateType(ctx context.Context, id, name string) (account.Type, error) {
+func (s *AccountStore) UpdateType(ctx context.Context, id, title, description string) (account.Type, error) {
 	t, err := scanType(s.pool.QueryRow(ctx,
-		`UPDATE account_types SET name = $2 WHERE id = $1 RETURNING id::text, name, created_at`, id, name,
+		`UPDATE account_types SET title = $2, description = NULLIF($3, '') WHERE id = $1 RETURNING `+accountTypeCols,
+		id, title, description,
 	))
 	if isUniqueViolation(err) {
 		return account.Type{}, account.ErrInvalidValue
 	}
 	return t, err
+}
+
+func (s *AccountStore) SetTypeDisabled(ctx context.Context, id string, disabled bool) (account.Type, error) {
+	return scanType(s.pool.QueryRow(ctx,
+		`UPDATE account_types SET disabled = $2 WHERE id = $1 RETURNING `+accountTypeCols,
+		id, disabled,
+	))
 }
 
 func (s *AccountStore) DeleteType(ctx context.Context, id string) error {
@@ -228,10 +243,4 @@ func (s *AccountStore) DeleteType(ctx context.Context, id string) error {
 		return account.ErrTypeInUse
 	}
 	return nil
-}
-
-func (s *AccountStore) TypeExists(ctx context.Context, id string) (bool, error) {
-	var exists bool
-	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM account_types WHERE id = $1)`, id).Scan(&exists)
-	return exists, err
 }

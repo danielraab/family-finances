@@ -32,13 +32,50 @@ export interface paths {
         post?: never;
         /**
          * Delete an account type (admin only)
-         * @description 409 if a non-deleted account still references it — deletion is never cascaded.
+         * @description 409 if a non-deleted account still references it (disabled or not) — deletion is never cascaded.
          */
         delete: operations["deleteAccountType"];
         options?: never;
         head?: never;
-        /** Rename an account type (admin only) */
+        /** Update an account type's title and description (admin only) */
         patch: operations["patchAccountType"];
+        trace?: never;
+    };
+    "/api/account-types/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable an account type (admin only)
+         * @description Reversible via enable. Blocks the type from being (re)assigned to an account — including on an existing account's next edit, if its current type is this one — without affecting any account already carrying it.
+         */
+        post: operations["postAccountTypeDisable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/account-types/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-enable a disabled account type (admin only) */
+        post: operations["postAccountTypeEnable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/accounts": {
@@ -51,7 +88,10 @@ export interface paths {
         /** List the caller's accounts */
         get: operations["getAccounts"];
         put?: never;
-        /** Create an account */
+        /**
+         * Create an account
+         * @description 422 when type_id names a disabled account type.
+         */
         post: operations["postAccounts"];
         delete?: never;
         options?: never;
@@ -80,7 +120,10 @@ export interface paths {
         delete: operations["deleteAccount"];
         options?: never;
         head?: never;
-        /** Update an account */
+        /**
+         * Update an account
+         * @description 422 when the account's effective type_id — the value in this request if present, otherwise its current one — names a disabled account type. An account whose current type has since been disabled therefore rejects every update, whatever else it changes, until the same request also supplies a type_id for a different, non-disabled type.
+         */
         patch: operations["patchAccount"];
         trace?: never;
     };
@@ -595,11 +638,15 @@ export interface components {
         AccountType: {
             /** Format: date-time */
             created_at: string;
+            description?: string;
+            /** @description Blocks this type from being (re)assigned to an account without affecting any account already carrying it. */
+            disabled: boolean;
             id: string;
-            name: string;
+            title: string;
         };
         AccountTypeWrite: {
-            name: string;
+            description?: string;
+            title: string;
         };
         AccountUpdate: {
             /**
@@ -945,6 +992,56 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    postAccountTypeDisable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account type, now disabled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountType"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    postAccountTypeEnable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account type, now enabled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountType"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getAccounts: {
         parameters: {
             query?: never;
@@ -990,6 +1087,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     getAccount: {
@@ -1065,6 +1163,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     getAccountBalance: {

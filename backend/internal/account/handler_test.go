@@ -40,7 +40,7 @@ func TestHandlerListRequiresAuth(t *testing.T) {
 
 func TestHandlerCreateAndGet(t *testing.T) {
 	h, svc := newHandler(t)
-	typ, err := svc.CreateType(t.Context(), "Checking")
+	typ, err := svc.CreateType(t.Context(), "Checking", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestHandlerCreateAndGet(t *testing.T) {
 
 func TestHandlerCrossOwnerGetIsNotFound(t *testing.T) {
 	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "Checking")
+	typ, _ := svc.CreateType(t.Context(), "Checking", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
 	if err != nil {
@@ -85,7 +85,7 @@ func TestHandlerCrossOwnerGetIsNotFound(t *testing.T) {
 
 func TestHandlerDisableEnable(t *testing.T) {
 	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "Checking")
+	typ, _ := svc.CreateType(t.Context(), "Checking", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
 	if err != nil {
@@ -117,7 +117,7 @@ func TestHandlerDisableEnable(t *testing.T) {
 
 func TestHandlerSoftDelete(t *testing.T) {
 	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "Checking")
+	typ, _ := svc.CreateType(t.Context(), "Checking", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
 	if err != nil {
@@ -143,7 +143,7 @@ func TestHandlerSoftDelete(t *testing.T) {
 func TestHandlerAccountTypesNonAdminForbidden(t *testing.T) {
 	h, _ := newHandler(t)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types", strings.NewReader(`{"name":"Savings"}`)), auth.User{ID: "u1", IsAdmin: false}))
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types", strings.NewReader(`{"title":"Savings"}`)), auth.User{ID: "u1", IsAdmin: false}))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)
 	}
@@ -153,7 +153,7 @@ func TestHandlerAccountTypesNonAdminForbidden(t *testing.T) {
 func TestHandlerAccountTypesAdminCanCreateAndAnyoneCanList(t *testing.T) {
 	h, _ := newHandler(t)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types", strings.NewReader(`{"name":"Savings"}`)), auth.User{ID: "admin1", IsAdmin: true}))
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types", strings.NewReader(`{"title":"Savings"}`)), auth.User{ID: "admin1", IsAdmin: true}))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, body = %s", rec.Code, rec.Body)
 	}
@@ -169,7 +169,7 @@ func TestHandlerAccountTypesAdminCanCreateAndAnyoneCanList(t *testing.T) {
 
 func TestHandlerDeleteInUseAccountTypeConflict(t *testing.T) {
 	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "Checking")
+	typ, _ := svc.CreateType(t.Context(), "Checking", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	if _, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening}); err != nil {
 		t.Fatal(err)
@@ -183,9 +183,96 @@ func TestHandlerDeleteInUseAccountTypeConflict(t *testing.T) {
 	conforms(t, "DELETE", "/api/account-types/"+typ.ID, rec)
 }
 
+func TestHandlerAccountTypeDisableEnable(t *testing.T) {
+	h, svc := newHandler(t)
+	typ, _ := svc.CreateType(t.Context(), "Checking", "")
+	admin := auth.User{ID: "admin1", IsAdmin: true}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types/"+typ.ID+"/disable", nil), admin))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disable status = %d, body = %s", rec.Code, rec.Body)
+	}
+	var got account.Type
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Disabled {
+		t.Fatalf("Disabled = false after disable")
+	}
+	conforms(t, "POST", "/api/account-types/"+typ.ID+"/disable", rec)
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types/"+typ.ID+"/enable", nil), admin))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enable status = %d", rec.Code)
+	}
+	conforms(t, "POST", "/api/account-types/"+typ.ID+"/enable", rec)
+}
+
+func TestHandlerAccountTypeDisableEnableNonAdminForbidden(t *testing.T) {
+	h, svc := newHandler(t)
+	typ, _ := svc.CreateType(t.Context(), "Checking", "")
+	nonAdmin := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types/"+typ.ID+"/disable", nil), nonAdmin))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+	conforms(t, "POST", "/api/account-types/"+typ.ID+"/disable", rec)
+}
+
+func TestHandlerCreateAccountWithDisabledTypeRejected(t *testing.T) {
+	h, svc := newHandler(t)
+	typ, _ := svc.CreateType(t.Context(), "Checking", "")
+	if _, err := svc.DisableType(t.Context(), typ.ID); err != nil {
+		t.Fatal(err)
+	}
+	user := auth.User{ID: "u1"}
+
+	body := `{"title":"Main","type_id":"` + typ.ID + `","currency":"EUR","opening_date":"2024-01-01"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/accounts", strings.NewReader(body)), user))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "POST", "/api/accounts", rec)
+}
+
+func TestHandlerUpdateAccountWithNowDisabledTypeRejectedUntilReselected(t *testing.T) {
+	h, svc := newHandler(t)
+	typ, _ := svc.CreateType(t.Context(), "Checking", "")
+	opening, _ := account.ParseDate("2024-01-01")
+	acc, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.DisableType(t.Context(), typ.ID); err != nil {
+		t.Fatal(err)
+	}
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/accounts/"+acc.ID, strings.NewReader(`{"financial_institute":"Some Bank"}`)), user))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "PATCH", "/api/accounts/"+acc.ID, rec)
+
+	liveType, _ := svc.CreateType(t.Context(), "Savings", "")
+	rec = httptest.NewRecorder()
+	body := `{"financial_institute":"Some Bank","type_id":"` + liveType.ID + `"}`
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/accounts/"+acc.ID, strings.NewReader(body)), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "PATCH", "/api/accounts/"+acc.ID, rec)
+}
+
 func TestHandlerClosingBeforeOpeningRejected(t *testing.T) {
 	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "Checking")
+	typ, _ := svc.CreateType(t.Context(), "Checking", "")
 	user := auth.User{ID: "u1"}
 
 	body := `{"title":"X","type_id":"` + typ.ID + `","currency":"EUR","opening_date":"2024-06-01","closing_date":"2024-01-01"}`

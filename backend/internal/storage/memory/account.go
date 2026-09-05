@@ -157,27 +157,50 @@ func (s *AccountStore) ListTypes(_ context.Context) ([]account.Type, error) {
 	return out, nil
 }
 
-func (s *AccountStore) CreateType(_ context.Context, name string) (account.Type, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, t := range s.types {
-		if t.Name == name {
-			return account.Type{}, account.ErrInvalidValue
-		}
-	}
-	t := account.Type{ID: s.nextID("atype"), Name: name, CreatedAt: time.Now().UTC()}
-	s.types[t.ID] = t
-	return t, nil
-}
-
-func (s *AccountStore) UpdateType(_ context.Context, id, name string) (account.Type, error) {
+func (s *AccountStore) GetType(_ context.Context, id string) (account.Type, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.types[id]
 	if !ok {
 		return account.Type{}, account.ErrNotFound
 	}
-	t.Name = name
+	return t, nil
+}
+
+func (s *AccountStore) CreateType(_ context.Context, title, description string) (account.Type, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.types {
+		if t.Title == title {
+			return account.Type{}, account.ErrInvalidValue
+		}
+	}
+	t := account.Type{ID: s.nextID("atype"), Title: title, Description: description, CreatedAt: time.Now().UTC()}
+	s.types[t.ID] = t
+	return t, nil
+}
+
+func (s *AccountStore) UpdateType(_ context.Context, id, title, description string) (account.Type, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.types[id]
+	if !ok {
+		return account.Type{}, account.ErrNotFound
+	}
+	t.Title = title
+	t.Description = description
+	s.types[id] = t
+	return t, nil
+}
+
+func (s *AccountStore) SetTypeDisabled(_ context.Context, id string, disabled bool) (account.Type, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.types[id]
+	if !ok {
+		return account.Type{}, account.ErrNotFound
+	}
+	t.Disabled = disabled
 	s.types[id] = t
 	return t, nil
 }
@@ -195,11 +218,4 @@ func (s *AccountStore) DeleteType(_ context.Context, id string) error {
 	}
 	delete(s.types, id)
 	return nil
-}
-
-func (s *AccountStore) TypeExists(_ context.Context, id string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, ok := s.types[id]
-	return ok, nil
 }

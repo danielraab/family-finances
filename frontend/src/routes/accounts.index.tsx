@@ -86,7 +86,7 @@ function AccountsOverview() {
   }, [accounts]);
 
   const typeName = (typeId: string) =>
-    types.find((type) => type.id === typeId)?.name ?? typeId;
+    types.find((type) => type.id === typeId)?.title ?? typeId;
 
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-12 sm:px-10">

@@ -279,6 +279,27 @@ unresolved language preference for the web client's i18n precedence, without
 `openspec/specs/user-settings/spec.md` for why the raw value (not the
 resolved one from `GET /api/settings`) has to be the one on `/me`.
 
+## Account types
+
+`internal/account`'s `account_types` lookup (`title`, optional
+`description`, `disabled`) is admin-managed and instance-global —
+`GET /api/account-types` is open to any authenticated user,
+create/update/delete/disable/enable require `is_admin`. `disabled` is a
+reversible flag (`POST /api/account-types/{id}/disable` / `/enable`,
+mirroring `Account.Disable`/`Enable`) that blocks a type from being
+*newly* (re)assigned without touching any account already carrying it: an
+account's `type_id` may never resolve to a disabled type after a
+create/update, which for `PATCH` means the *effective* `type_id` (the
+request's value, or the account's current one if the request doesn't
+touch it) is what's checked — so an account whose current type has since
+been disabled rejects every edit, whatever else it changes, until that
+same request also supplies a `type_id` for a different, live type
+(`account.ErrTypeDisabled`, `422`). Deleting a type is unchanged from
+before this flag existed: hard delete, rejected (`409` `ErrTypeInUse`) if
+any non-deleted account still references it, disabled or not — disable is
+the reversible off-ramp, delete stays the one-way cleanup for a type
+nothing uses anymore.
+
 ## Serving the frontend
 
 The compiled binary embeds and serves the frontend's Vite bundle — there is

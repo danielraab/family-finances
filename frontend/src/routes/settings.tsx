@@ -18,9 +18,10 @@ export const Route = createFileRoute("/settings")({
  * that requires authentication: an anonymous visitor is redirected to
  * /login, mirroring /login's own redirect-when-authenticated in reverse.
  * Renders nothing while useAuth is loading or the redirect is pending, so
- * there's no flash of the form before the decision is made. The Users tab
- * is only ever listed for an admin — see settings.users.tsx for the
- * matching direct-link redirect.
+ * there's no flash of the form before the decision is made. The Users and
+ * Account Types tabs are only ever listed for an admin — see
+ * settings.users.tsx and settings.account-types.tsx for their matching
+ * direct-link redirects.
  */
 function SettingsLayout() {
   const { status, user } = useAuth();
@@ -45,7 +46,13 @@ function SettingsLayout() {
       label: t("settings.tabs.myInvitations"),
     },
     ...(user.is_admin
-      ? [{ to: "/settings/users" as const, label: t("settings.tabs.users") }]
+      ? [
+          { to: "/settings/users" as const, label: t("settings.tabs.users") },
+          {
+            to: "/settings/account-types" as const,
+            label: t("settings.tabs.accountTypes"),
+          },
+        ]
       : []),
   ];
 

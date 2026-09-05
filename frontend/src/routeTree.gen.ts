@@ -20,6 +20,7 @@ import { Route as AccountsNewRouteImport } from './routes/accounts.new'
 import { Route as EntriesIndexRouteImport } from './routes/entries.index'
 import { Route as EntriesNewRouteImport } from './routes/entries.new'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
+import { Route as SettingsAccountTypesRouteImport } from './routes/settings.account-types'
 import { Route as SettingsInvitationsRouteImport } from './routes/settings.invitations'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as AccountsAccountIdIndexRouteImport } from './routes/accounts.$accountId.index'
@@ -81,6 +82,11 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsAccountTypesRoute = SettingsAccountTypesRouteImport.update({
+  id: '/account-types',
+  path: '/account-types',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsInvitationsRoute = SettingsInvitationsRouteImport.update({
   id: '/invitations',
   path: '/invitations',
@@ -116,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
+  '/settings/account-types': typeof SettingsAccountTypesRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts/': typeof AccountsIndexRoute
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
+  '/settings/account-types': typeof SettingsAccountTypesRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts': typeof AccountsIndexRoute
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
+  '/settings/account-types': typeof SettingsAccountTypesRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts/': typeof AccountsIndexRoute
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId'
     | '/accounts/new'
     | '/entries/new'
+    | '/settings/account-types'
     | '/settings/invitations'
     | '/settings/users'
     | '/accounts/'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/accounts/new'
     | '/entries/new'
+    | '/settings/account-types'
     | '/settings/invitations'
     | '/settings/users'
     | '/accounts'
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId'
     | '/accounts/new'
     | '/entries/new'
+    | '/settings/account-types'
     | '/settings/invitations'
     | '/settings/users'
     | '/accounts/'
@@ -298,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/account-types': {
+      id: '/settings/account-types'
+      path: '/account-types'
+      fullPath: '/settings/account-types'
+      preLoaderRoute: typeof SettingsAccountTypesRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/invitations': {
       id: '/settings/invitations'
       path: '/invitations'
@@ -381,12 +400,14 @@ const EntriesRouteWithChildren =
   EntriesRoute._addFileChildren(EntriesRouteChildren)
 
 interface SettingsRouteChildren {
+  SettingsAccountTypesRoute: typeof SettingsAccountTypesRoute
   SettingsInvitationsRoute: typeof SettingsInvitationsRoute
   SettingsUsersRoute: typeof SettingsUsersRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsAccountTypesRoute: SettingsAccountTypesRoute,
   SettingsInvitationsRoute: SettingsInvitationsRoute,
   SettingsUsersRoute: SettingsUsersRoute,
   SettingsIndexRoute: SettingsIndexRoute,

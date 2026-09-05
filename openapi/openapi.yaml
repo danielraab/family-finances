@@ -471,6 +471,7 @@ paths:
     post:
       operationId: postAccounts
       summary: Create an account
+      description: 422 when type_id names a disabled account type.
       tags: [accounts]
       requestBody:
         required: true
@@ -489,6 +490,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   /api/accounts/{id}:
     get:
@@ -514,6 +517,13 @@ paths:
     patch:
       operationId: patchAccount
       summary: Update an account
+      description: >-
+        422 when the account's effective type_id — the value in this
+        request if present, otherwise its current one — names a disabled
+        account type. An account whose current type has since been
+        disabled therefore rejects every update, whatever else it changes,
+        until the same request also supplies a type_id for a different,
+        non-disabled type.
       tags: [accounts]
       parameters:
         - $ref: "#/components/parameters/AccountId"
@@ -536,6 +546,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
     delete:
       operationId: deleteAccount
       summary: Soft-delete an account
@@ -666,7 +678,7 @@ paths:
   /api/account-types/{id}:
     patch:
       operationId: patchAccountType
-      summary: Rename an account type (admin only)
+      summary: Update an account type's title and description (admin only)
       tags: [accounts]
       parameters:
         - name: id
@@ -699,8 +711,8 @@ paths:
       operationId: deleteAccountType
       summary: Delete an account type (admin only)
       description: >-
-        409 if a non-deleted account still references it — deletion is
-        never cascaded.
+        409 if a non-deleted account still references it (disabled or not)
+        — deletion is never cascaded.
       tags: [accounts]
       parameters:
         - name: id
@@ -719,6 +731,61 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  /api/account-types/{id}/disable:
+    post:
+      operationId: postAccountTypeDisable
+      summary: Disable an account type (admin only)
+      description: >-
+        Reversible via enable. Blocks the type from being (re)assigned to
+        an account — including on an existing account's next edit, if its
+        current type is this one — without affecting any account already
+        carrying it.
+      tags: [accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The account type, now disabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/account-types/{id}/enable:
+    post:
+      operationId: postAccountTypeEnable
+      summary: Re-enable a disabled account type (admin only)
+      tags: [accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The account type, now enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/categories:
     get:
@@ -1531,21 +1598,30 @@ components:
 
     AccountType:
       type: object
-      required: [id, name, created_at]
+      required: [id, title, disabled, created_at]
       properties:
         id:
           type: string
-        name:
+        title:
           type: string
+        description:
+          type: string
+        disabled:
+          type: boolean
+          description: >-
+            Blocks this type from being (re)assigned to an account without
+            affecting any account already carrying it.
         created_at:
           type: string
           format: date-time
 
     AccountTypeWrite:
       type: object
-      required: [name]
+      required: [title]
       properties:
-        name:
+        title:
+          type: string
+        description:
           type: string
 
     Category:
