@@ -11,14 +11,18 @@ import (
 	"syscall"
 	"time"
 
+	"at.draab/familyfinances/internal/account"
 	"at.draab/familyfinances/internal/auth"
+	"at.draab/familyfinances/internal/category"
 	"at.draab/familyfinances/internal/cli"
 	"at.draab/familyfinances/internal/config"
+	"at.draab/familyfinances/internal/entry"
 	"at.draab/familyfinances/internal/httpapi"
 	"at.draab/familyfinances/internal/mailer"
 	"at.draab/familyfinances/internal/oidcauth"
 	"at.draab/familyfinances/internal/settings"
 	"at.draab/familyfinances/internal/storage/postgres"
+	"at.draab/familyfinances/internal/tag"
 )
 
 func main() {
@@ -70,12 +74,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	accountSvc, accountHandler := buildAccount(pool)
+	categorySvc, categoryHandler := buildCategory(pool)
+	tagSvc, tagHandler := buildTag(pool)
+	entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc)
+
 	srv := httpapi.New(cfg, httpapi.Deps{
 		Static:          staticFS,
 		DB:              pool,
 		Auth:            authSvc,
 		AuthHandler:     authHandler,
 		SettingsHandler: settingsHandler,
+		AccountHandler:  accountHandler,
+		CategoryHandler: categoryHandler,
+		TagHandler:      tagHandler,
+		EntryHandler:    entryHandler,
 		OpenAPISpec:     openAPISpec,
 	})
 
@@ -92,6 +105,43 @@ func buildSettings(pool *postgres.Pool) (*settings.Service, http.Handler) {
 	svc := settings.NewService(store)
 	handler := settings.NewHandler(svc, settings.HandlerOptions{RenderError: httpapi.WriteError})
 	return svc, handler
+}
+
+// buildAccount constructs the account service and its HTTP handler over the
+// Postgres store.
+func buildAccount(pool *postgres.Pool) (*account.Service, http.Handler) {
+	store := postgres.NewAccountStore(pool)
+	svc := account.NewService(store)
+	handler := account.NewHandler(svc, account.HandlerOptions{RenderError: httpapi.WriteError})
+	return svc, handler
+}
+
+// buildCategory constructs the category service and its HTTP handler over
+// the Postgres store.
+func buildCategory(pool *postgres.Pool) (*category.Service, http.Handler) {
+	store := postgres.NewCategoryStore(pool)
+	svc := category.NewService(store)
+	handler := category.NewHandler(svc, category.HandlerOptions{RenderError: httpapi.WriteError})
+	return svc, handler
+}
+
+// buildTag constructs the tag service and its HTTP handler over the
+// Postgres store.
+func buildTag(pool *postgres.Pool) (*tag.Service, http.Handler) {
+	store := postgres.NewTagStore(pool)
+	svc := tag.NewService(store)
+	handler := tag.NewHandler(svc, tag.HandlerOptions{RenderError: httpapi.WriteError})
+	return svc, handler
+}
+
+// buildEntry constructs the entry service and its HTTP handler over the
+// Postgres store, wiring accountSvc/categorySvc/tagSvc in as its
+// AccountLookup/CategoryLookup/TagLookup dependencies (see design.md's
+// package-boundaries decision).
+func buildEntry(pool *postgres.Pool, accountSvc *account.Service, categorySvc *category.Service, tagSvc *tag.Service) http.Handler {
+	store := postgres.NewEntryStore(pool)
+	svc := entry.NewService(store, accountSvc, categorySvc, tagSvc)
+	return entry.NewHandler(svc, entry.HandlerOptions{RenderError: httpapi.WriteError})
 }
 
 // buildAuth constructs the auth service and its HTTP handler: the Postgres

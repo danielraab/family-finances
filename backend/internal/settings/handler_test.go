@@ -52,7 +52,7 @@ func TestHandlerGetReturnsDefaults(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR"}
+	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2}
 	if body != want {
 		t.Fatalf("body = %+v, want %+v", body, want)
 	}

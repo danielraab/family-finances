@@ -1,4 +1,4 @@
-package settings
+package tag
 
 import (
 	"encoding/json"
@@ -9,8 +9,8 @@ import (
 
 // RenderError writes a JSON error response with the right status for a
 // (possibly wrapped) sentinel error. package main wires httpapi.WriteError in
-// so settings' sentinels are mapped to status codes in the one place that
-// owns that table.
+// so tag's sentinels are mapped to status codes in the one place that owns
+// that table.
 type RenderError func(w http.ResponseWriter, r *http.Request, err error)
 
 // HandlerOptions configures NewHandler.
@@ -19,39 +19,68 @@ type HandlerOptions struct {
 	RenderError RenderError
 }
 
-// Handler is the settings HTTP surface, mounted by internal/httpapi at
-// /api/settings.
+// Handler is the tag HTTP surface, mounted by internal/httpapi at /api/tags.
 type Handler struct {
 	svc         *Service
 	renderError RenderError
 	mux         *http.ServeMux
 }
 
-// NewHandler builds the settings handler. opts.RenderError must be non-nil.
+// NewHandler builds the tag handler. opts.RenderError must be non-nil.
 func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	if opts.RenderError == nil {
-		panic("settings: HandlerOptions.RenderError is required")
+		panic("tag: HandlerOptions.RenderError is required")
 	}
 	h := &Handler{svc: svc, renderError: opts.RenderError, mux: http.NewServeMux()}
-	h.mux.HandleFunc("GET /api/settings", h.get)
-	h.mux.HandleFunc("PUT /api/settings", h.update)
+
+	h.mux.HandleFunc("GET /api/tags", h.list)
+	h.mux.HandleFunc("POST /api/tags", h.create)
+	h.mux.HandleFunc("PATCH /api/tags/{id}", h.update)
+	h.mux.HandleFunc("DELETE /api/tags/{id}", h.delete)
+
 	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h.mux.ServeHTTP(w, r) }
 
-func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+type tagBody struct {
+	Name string `json:"name"`
+}
+
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeUnauthorized(w)
 		return
 	}
-	s, err := h.svc.Get(r.Context(), user.ID)
+	tags, err := h.svc.List(r.Context(), user.ID)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s)
+	if tags == nil {
+		tags = []Tag{}
+	}
+	writeJSON(w, http.StatusOK, tags)
+}
+
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	var body tagBody
+	if err := decodeJSON(r, &body); err != nil {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+	t, err := h.svc.Create(r.Context(), user.ID, body.Name)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, t)
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -60,27 +89,30 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeUnauthorized(w)
 		return
 	}
-	var body struct {
-		Language               *string `json:"language"`
-		Timezone               *string `json:"timezone"`
-		DefaultCurrency        *string `json:"default_currency"`
-		DisplayedDecimalPlaces *int    `json:"displayed_decimal_places"`
-	}
+	var body tagBody
 	if err := decodeJSON(r, &body); err != nil {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	s, err := h.svc.Update(r.Context(), user.ID, Update{
-		Language:               body.Language,
-		Timezone:               body.Timezone,
-		DefaultCurrency:        body.DefaultCurrency,
-		DisplayedDecimalPlaces: body.DisplayedDecimalPlaces,
-	})
+	t, err := h.svc.Update(r.Context(), user.ID, r.PathValue("id"), body.Name)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s)
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	if err := h.svc.Delete(r.Context(), user.ID, r.PathValue("id")); err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func decodeJSON(r *http.Request, v any) error {

@@ -39,6 +39,9 @@ func (s *SettingsStore) Upsert(_ context.Context, userID string, upd settings.Up
 	if upd.DefaultCurrency != nil {
 		row.DefaultCurrency = upd.DefaultCurrency
 	}
+	if upd.DisplayedDecimalPlaces != nil {
+		row.DisplayedDecimalPlaces = upd.DisplayedDecimalPlaces
+	}
 	s.rows[userID] = row
 	return row, nil
 }

@@ -18,7 +18,7 @@ func TestGetResolvesDefaultsForMissingRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR"}
+	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2}
 	if got != want {
 		t.Fatalf("Get = %+v, want %+v", got, want)
 	}
@@ -35,7 +35,7 @@ func TestUpdateOnlyChangesProvidedField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second update: %v", err)
 	}
-	want := settings.Settings{Language: "de", Timezone: "Europe/Vienna", DefaultCurrency: "EUR"}
+	want := settings.Settings{Language: "de", Timezone: "Europe/Vienna", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2}
 	if got != want {
 		t.Fatalf("Get after two updates = %+v, want %+v", got, want)
 	}
@@ -63,6 +63,28 @@ func TestUpdateRejectsMalformedCurrency(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateRejectsOutOfRangeDisplayedDecimalPlaces(t *testing.T) {
+	svc := settings.NewService(memory.NewSettingsStore())
+	for _, bad := range []int{-1, 5} {
+		if _, err := svc.Update(context.Background(), "u1", settings.Update{DisplayedDecimalPlaces: ptrInt(bad)}); !errors.Is(err, settings.ErrInvalidValue) {
+			t.Fatalf("displayed_decimal_places %d: err = %v, want ErrInvalidValue", bad, err)
+		}
+	}
+}
+
+func TestUpdateDisplayedDecimalPlaces(t *testing.T) {
+	svc := settings.NewService(memory.NewSettingsStore())
+	got, err := svc.Update(context.Background(), "u1", settings.Update{DisplayedDecimalPlaces: ptrInt(0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DisplayedDecimalPlaces != 0 {
+		t.Fatalf("DisplayedDecimalPlaces = %d, want 0", got.DisplayedDecimalPlaces)
+	}
+}
+
+func ptrInt(v int) *int { return &v }
 
 func TestInvalidFieldRejectsWholeUpdate(t *testing.T) {
 	svc := settings.NewService(memory.NewSettingsStore())

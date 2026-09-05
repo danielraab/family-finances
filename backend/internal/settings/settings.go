@@ -14,9 +14,12 @@ import (
 // column. There is no per-instance override (Non-Goal: no instance_settings
 // table) — these are Go constants.
 const (
-	DefaultLanguage        = "en"
-	DefaultTimezone        = "UTC"
-	DefaultDefaultCurrency = "EUR"
+	DefaultLanguage               = "en"
+	DefaultTimezone               = "UTC"
+	DefaultDefaultCurrency        = "EUR"
+	DefaultDisplayedDecimalPlaces = 2
+	MinDisplayedDecimalPlaces     = 0
+	MaxDisplayedDecimalPlaces     = 4
 )
 
 // SupportedLanguages mirrors the client's web-client-i18n language set.
@@ -27,32 +30,36 @@ var currencyShape = regexp.MustCompile(`^[A-Z]{3}$`)
 // Row is a user's raw, possibly-partial stored preferences: nil means unset.
 // A user with no user_settings row is the zero Row (every field nil).
 type Row struct {
-	Language        *string
-	Timezone        *string
-	DefaultCurrency *string
+	Language               *string
+	Timezone               *string
+	DefaultCurrency        *string
+	DisplayedDecimalPlaces *int
 }
 
 // Update is a partial change: only non-nil fields are applied.
 type Update struct {
-	Language        *string
-	Timezone        *string
-	DefaultCurrency *string
+	Language               *string
+	Timezone               *string
+	DefaultCurrency        *string
+	DisplayedDecimalPlaces *int
 }
 
 // Settings is a user's fully-resolved preferences — every field always
 // populated, defaults already substituted.
 type Settings struct {
-	Language        string `json:"language"`
-	Timezone        string `json:"timezone"`
-	DefaultCurrency string `json:"default_currency"`
+	Language               string `json:"language"`
+	Timezone               string `json:"timezone"`
+	DefaultCurrency        string `json:"default_currency"`
+	DisplayedDecimalPlaces int    `json:"displayed_decimal_places"`
 }
 
 // Resolve substitutes the hardcoded defaults for any unset field in row.
 func Resolve(row Row) Settings {
 	s := Settings{
-		Language:        DefaultLanguage,
-		Timezone:        DefaultTimezone,
-		DefaultCurrency: DefaultDefaultCurrency,
+		Language:               DefaultLanguage,
+		Timezone:               DefaultTimezone,
+		DefaultCurrency:        DefaultDefaultCurrency,
+		DisplayedDecimalPlaces: DefaultDisplayedDecimalPlaces,
 	}
 	if row.Language != nil {
 		s.Language = *row.Language
@@ -62,6 +69,9 @@ func Resolve(row Row) Settings {
 	}
 	if row.DefaultCurrency != nil {
 		s.DefaultCurrency = *row.DefaultCurrency
+	}
+	if row.DisplayedDecimalPlaces != nil {
+		s.DisplayedDecimalPlaces = *row.DisplayedDecimalPlaces
 	}
 	return s
 }
@@ -86,6 +96,16 @@ func ValidateTimezone(v string) error {
 // not checked against a canonical currency list; see design.md.
 func ValidateCurrency(v string) error {
 	if !currencyShape.MatchString(v) {
+		return ErrInvalidValue
+	}
+	return nil
+}
+
+// ValidateDisplayedDecimalPlaces accepts 0..4 inclusive — the upper bound
+// matches account-entries' fixed storage precision, since displaying more
+// decimal digits than are ever stored would be meaningless.
+func ValidateDisplayedDecimalPlaces(v int) error {
+	if v < MinDisplayedDecimalPlaces || v > MaxDisplayedDecimalPlaces {
 		return ErrInvalidValue
 	}
 	return nil
