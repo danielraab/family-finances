@@ -22,7 +22,22 @@ tags:
       Sign-in, session, and invites — including the admin-only user and
       invitation administration endpoints.
   - name: settings
-    description: Per-user preferences (language, timezone, default currency).
+    description: >-
+      Per-user preferences (language, timezone, default currency, displayed
+      decimal places).
+  - name: accounts
+    description: >-
+      Bookkeeping accounts, each owned by exactly one user, and the
+      admin-managed account_types lookup they reference.
+  - name: categories
+    description: The global, tree-structured, admin-managed category lookup.
+  - name: tags
+    description: Per-user tags, private to their owner.
+  - name: entries
+    description: >-
+      Transactions and balance adjustments recorded against an account,
+      including live balance computation and a filterable/searchable/
+      sortable, cursor-paginated listing.
   - name: browser-flow
     description: >-
       Endpoints a browser reaches by full-page navigation, not fetch. Documented
@@ -437,6 +452,654 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/accounts:
+    get:
+      operationId: getAccounts
+      summary: List the caller's accounts
+      tags: [accounts]
+      responses:
+        "200":
+          description: Every non-deleted account the caller owns.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: postAccounts
+      summary: Create an account
+      tags: [accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountCreate"
+      responses:
+        "201":
+          description: The created account, owned by the caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/accounts/{id}:
+    get:
+      operationId: getAccount
+      summary: Get an account
+      description: >-
+        404 for an account the caller does not own, identical to a
+        nonexistent one — existence is not disclosed across owners.
+      tags: [accounts]
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: patchAccount
+      summary: Update an account
+      tags: [accounts]
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountUpdate"
+      responses:
+        "200":
+          description: The updated account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteAccount
+      summary: Soft-delete an account
+      description: One-way — there is no undelete endpoint.
+      tags: [accounts]
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "204":
+          description: The account is soft-deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/accounts/{id}/disable:
+    post:
+      operationId: postAccountDisable
+      summary: Disable an account
+      description: >-
+        Reversible via enable. Blocks creating new entries against the
+        account; does not hide it or affect its existing entries.
+      tags: [accounts]
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: The account, now disabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/accounts/{id}/enable:
+    post:
+      operationId: postAccountEnable
+      summary: Re-enable a disabled account
+      tags: [accounts]
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: The account, now enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/accounts/{id}/balance:
+    get:
+      operationId: getAccountBalance
+      summary: The account's live balance
+      description: >-
+        Always computed live, never cached — see the account-entries
+        capability. Equals the latest non-deleted balance_adjustment at or
+        before as_of (or 0 if none), plus every non-deleted transaction
+        after it, up to as_of.
+      tags: [entries]
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+        - name: as_of
+          in: query
+          required: false
+          description: RFC3339 timestamp. Defaults to now.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: The computed balance.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Balance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/account-types:
+    get:
+      operationId: getAccountTypes
+      summary: List every account type
+      tags: [accounts]
+      responses:
+        "200":
+          description: Every account type.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccountType"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: postAccountTypes
+      summary: Create an account type (admin only)
+      tags: [accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountTypeWrite"
+      responses:
+        "201":
+          description: The created account type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountType"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/account-types/{id}:
+    patch:
+      operationId: patchAccountType
+      summary: Rename an account type (admin only)
+      tags: [accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountTypeWrite"
+      responses:
+        "200":
+          description: The updated account type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountType"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteAccountType
+      summary: Delete an account type (admin only)
+      description: >-
+        409 if a non-deleted account still references it — deletion is
+        never cascaded.
+      tags: [accounts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The account type is deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/categories:
+    get:
+      operationId: getCategories
+      summary: List the full category tree
+      tags: [categories]
+      responses:
+        "200":
+          description: Every category, including its parent_id.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: postCategories
+      summary: Create a category (admin only)
+      tags: [categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryWrite"
+      responses:
+        "201":
+          description: The created category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/categories/{id}:
+    patch:
+      operationId: patchCategory
+      summary: Update a category (admin only)
+      description: >-
+        Reparenting onto the category itself or one of its own descendants
+        is rejected with 422.
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryWrite"
+      responses:
+        "200":
+          description: The updated category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    delete:
+      operationId: deleteCategory
+      summary: Delete a category (admin only)
+      description: >-
+        409 if it has child categories or is referenced by a non-deleted
+        entry — deletion is never cascaded.
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The category is deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/tags:
+    get:
+      operationId: getTags
+      summary: List the caller's tags
+      tags: [tags]
+      responses:
+        "200":
+          description: Every tag the caller owns.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: postTags
+      summary: Create a tag
+      tags: [tags]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagWrite"
+      responses:
+        "201":
+          description: The created tag, owned by the caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: The caller already has a tag with this name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/tags/{id}:
+    patch:
+      operationId: patchTag
+      summary: Rename a tag
+      tags: [tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagWrite"
+      responses:
+        "200":
+          description: The updated tag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The caller already has a tag with this name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteTag
+      summary: Delete a tag
+      description: >-
+        Always allowed — detaches the tag from every entry it was attached
+        to rather than being blocked by use, unlike a category or account
+        type.
+      tags: [tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The tag is deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/entries:
+    get:
+      operationId: getEntries
+      summary: List the caller's entries, filtered/searched/sorted, cursor-paginated
+      tags: [entries]
+      parameters:
+        - name: account_id
+          in: query
+          required: false
+          description: Repeatable. Omitted means every account the caller owns.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: category_id
+          in: query
+          required: false
+          description: Matches this category and every descendant.
+          schema:
+            type: string
+        - name: tag_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: kind
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EntryKind"
+        - name: from
+          in: query
+          required: false
+          description: Inclusive booking_timestamp lower bound, RFC3339.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Inclusive booking_timestamp upper bound, RFC3339.
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive substring match against title or description.
+          schema:
+            type: string
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [booking_timestamp, amount]
+            default: booking_timestamp
+        - name: dir
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: after
+          in: query
+          required: false
+          description: Opaque cursor from a previous response's next_cursor.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A page of matching entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: postEntries
+      summary: Create an entry
+      description: >-
+        422 when account_id does not name an account the caller owns, or
+        names a disabled account.
+      tags: [entries]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryCreate"
+      responses:
+        "201":
+          description: The created entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/entries/{id}:
+    get:
+      operationId: getEntry
+      summary: Get an entry
+      tags: [entries]
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "200":
+          description: The entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: patchEntry
+      summary: Update an entry
+      description: >-
+        account_id and kind are immutable — there is no field for them on
+        this request body at all.
+      tags: [entries]
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryUpdate"
+      responses:
+        "200":
+          description: The updated entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteEntry
+      summary: Soft-delete an entry
+      description: One-way — there is no undelete endpoint.
+      tags: [entries]
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "204":
+          description: The entry is soft-deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/auth/email/callback:
     get:
       operationId: getAuthEmailCallback
@@ -565,6 +1228,44 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    NotFound:
+      description: >-
+        No such resource — including one that belongs to a different owner,
+        which behaves identically to nonexistent (existence is not
+        disclosed across owners).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadRequest:
+      description: A field in the request failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnprocessableEntity:
+      description: >-
+        The request is well-formed but violates a business rule (e.g. a
+        reparent that would create a category cycle, or an entry against a
+        disabled account).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  parameters:
+    AccountId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    EntryId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
 
   schemas:
     User:
@@ -616,7 +1317,7 @@ components:
     UserSettings:
       type: object
       additionalProperties: false
-      required: [language, timezone, default_currency]
+      required: [language, timezone, default_currency, displayed_decimal_places]
       properties:
         language:
           type: string
@@ -625,6 +1326,14 @@ components:
           type: string
         default_currency:
           type: string
+        displayed_decimal_places:
+          type: integer
+          minimum: 0
+          maximum: 4
+          description: >-
+            Display-only rounding preference — never affects how an amount
+            is stored or edited (see account-entries' fixed 4-decimal-place
+            storage).
 
     UserSettingsUpdate:
       type: object
@@ -637,6 +1346,10 @@ components:
           type: string
         default_currency:
           type: string
+        displayed_decimal_places:
+          type: integer
+          minimum: 0
+          maximum: 4
 
     Error:
       type: object
@@ -728,6 +1441,280 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/OidcLogin"
+
+    Account:
+      type: object
+      required:
+        - id
+        - title
+        - type_id
+        - currency
+        - opening_date
+        - disabled
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        type_id:
+          type: string
+        currency:
+          type: string
+          description: ISO-4217 shape (three uppercase letters), not a canonical list.
+        financial_institute:
+          type: string
+        opening_date:
+          type: string
+          format: date
+        closing_date:
+          type: string
+          format: date
+        disabled:
+          type: boolean
+          description: >-
+            Reversible; blocks creating new entries against the account.
+            Independent of closing_date (informational only) and of soft
+            delete.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AccountCreate:
+      type: object
+      required: [title, type_id, currency, opening_date]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        type_id:
+          type: string
+        currency:
+          type: string
+        financial_institute:
+          type: string
+        opening_date:
+          type: string
+          format: date
+        closing_date:
+          type: string
+          format: date
+
+    AccountUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        type_id:
+          type: string
+        currency:
+          type: string
+        financial_institute:
+          type: string
+        opening_date:
+          type: string
+          format: date
+        closing_date:
+          type: string
+          format: date
+          nullable: true
+          description: Explicit null clears it (re-opening the account).
+
+    AccountType:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AccountTypeWrite:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    Category:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+        parent_id:
+          type: string
+          description: Absent for a root category.
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CategoryWrite:
+      type: object
+      properties:
+        name:
+          type: string
+        parent_id:
+          type: string
+          nullable: true
+          description: Explicit null makes it a root category.
+
+    Tag:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    TagWrite:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    EntryKind:
+      type: string
+      enum: [transaction, balance_adjustment]
+
+    Entry:
+      type: object
+      required:
+        - id
+        - account_id
+        - kind
+        - amount
+        - booking_timestamp
+        - title
+        - tag_ids
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        account_id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/EntryKind"
+        amount:
+          type: integer
+          format: int64
+          description: >-
+            Integer minor units at a fixed 4 decimal places (e.g. 105000
+            represents 10.5000 in the account's currency). Not
+            configurable — see account-entries.
+        booking_timestamp:
+          type: string
+          format: date-time
+        title:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+          description: >-
+            Required for a transaction, optional for a balance_adjustment.
+        tag_ids:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EntryCreate:
+      type: object
+      required: [account_id, kind, amount, booking_timestamp, title]
+      properties:
+        account_id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/EntryKind"
+        amount:
+          type: integer
+          format: int64
+        booking_timestamp:
+          type: string
+          format: date-time
+        title:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+        tag_ids:
+          type: array
+          items:
+            type: string
+
+    EntryUpdate:
+      type: object
+      description: >-
+        No account_id or kind field — both are immutable after creation.
+      properties:
+        amount:
+          type: integer
+          format: int64
+        booking_timestamp:
+          type: string
+          format: date-time
+        title:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+          nullable: true
+          description: >-
+            Explicit null clears it (only valid when the entry's kind is
+            balance_adjustment).
+        tag_ids:
+          type: array
+          items:
+            type: string
+          description: Replaces the full set, including clearing it with [].
+
+    EntryPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entry"
+        next_cursor:
+          type: string
+          nullable: true
+
+    Balance:
+      type: object
+      required: [balance]
+      properties:
+        balance:
+          type: integer
+          format: int64
 
 security:
   - sessionCookie: []

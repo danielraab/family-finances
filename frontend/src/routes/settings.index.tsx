@@ -186,6 +186,31 @@ function CommonSettingsTab() {
           className={`${inputClass} w-24 uppercase`}
         />
       </SettingField>
+
+      <SettingField
+        id="settings-displayed-decimal-places"
+        label={t("settings.common.displayedDecimalPlaces")}
+        error={
+          errorField === "displayed_decimal_places"
+            ? t("settings.common.saveError")
+            : null
+        }
+      >
+        <select
+          id="settings-displayed-decimal-places"
+          value={settings.displayed_decimal_places}
+          onChange={(event) =>
+            update({ displayed_decimal_places: Number(event.target.value) })
+          }
+          className={`${inputClass} w-24`}
+        >
+          {[0, 1, 2, 3, 4].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+      </SettingField>
     </div>
   );
 }

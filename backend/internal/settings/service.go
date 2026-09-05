@@ -41,6 +41,11 @@ func (s *Service) Update(ctx context.Context, userID string, upd Update) (Settin
 			return Settings{}, err
 		}
 	}
+	if upd.DisplayedDecimalPlaces != nil {
+		if err := ValidateDisplayedDecimalPlaces(*upd.DisplayedDecimalPlaces); err != nil {
+			return Settings{}, err
+		}
+	}
 
 	row, err := s.store.Upsert(ctx, userID, upd)
 	if err != nil {

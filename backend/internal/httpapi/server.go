@@ -42,6 +42,27 @@ type Deps struct {
 	// at /api/settings. Nil leaves it unrouted.
 	SettingsHandler http.Handler
 
+	// AccountHandler is the account domain package's http.Handler, mounted
+	// at /api/accounts and /api/account-types. Nil leaves them unrouted.
+	AccountHandler http.Handler
+
+	// CategoryHandler is the category domain package's http.Handler, mounted
+	// at /api/categories. Nil leaves it unrouted.
+	CategoryHandler http.Handler
+
+	// TagHandler is the tag domain package's http.Handler, mounted at
+	// /api/tags. Nil leaves it unrouted.
+	TagHandler http.Handler
+
+	// EntryHandler is the entry domain package's http.Handler, mounted at
+	// /api/entries and (for the live balance read) GET
+	// /api/accounts/{id}/balance — the one URL that lives under another
+	// package's namespace, since balance is entry-owned logic. Go's
+	// ServeMux resolves that specific pattern over AccountHandler's broader
+	// /api/accounts/ mount by specificity, regardless of registration
+	// order. Nil leaves it unrouted.
+	EntryHandler http.Handler
+
 	// OpenAPISpec is the raw bytes of the hand-written API contract
 	// (openapi/openapi.yaml), served verbatim at GET /api/openapi.yaml. Nil
 	// leaves that route unregistered (it 404s as any other unknown /api/ path).
@@ -63,6 +84,27 @@ func Routes(deps Deps) *http.ServeMux {
 	}
 	if deps.SettingsHandler != nil {
 		mux.Handle("/api/settings", deps.SettingsHandler)
+	}
+	if deps.AccountHandler != nil {
+		mux.Handle("/api/accounts", deps.AccountHandler)
+		mux.Handle("/api/accounts/", deps.AccountHandler)
+		mux.Handle("/api/account-types", deps.AccountHandler)
+		mux.Handle("/api/account-types/", deps.AccountHandler)
+	}
+	if deps.CategoryHandler != nil {
+		mux.Handle("/api/categories", deps.CategoryHandler)
+		mux.Handle("/api/categories/", deps.CategoryHandler)
+	}
+	if deps.TagHandler != nil {
+		mux.Handle("/api/tags", deps.TagHandler)
+		mux.Handle("/api/tags/", deps.TagHandler)
+	}
+	if deps.EntryHandler != nil {
+		mux.Handle("/api/entries", deps.EntryHandler)
+		mux.Handle("/api/entries/", deps.EntryHandler)
+		// More specific than AccountHandler's "/api/accounts/" mount above,
+		// so it wins for this one path regardless of registration order.
+		mux.Handle("GET /api/accounts/{id}/balance", deps.EntryHandler)
 	}
 	// Unmatched /api/ paths get a JSON 404 — the reserved namespace never
 	// falls through to the static site. More specific than "/", so it wins

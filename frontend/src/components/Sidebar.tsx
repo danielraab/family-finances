@@ -6,7 +6,11 @@ import { Icon } from "./Icon";
 import { SidebarUser } from "./SidebarUser";
 import { ThemeSwitch } from "./ThemeSwitch";
 
-const NAV = [{ to: "/", labelKey: "nav.home" }] as const;
+const NAV = [
+  { to: "/", labelKey: "nav.home", glyph: "home" },
+  { to: "/accounts", labelKey: "nav.accounts", glyph: "accounts" },
+  { to: "/entries", labelKey: "nav.entries", glyph: "entries" },
+] as const;
 
 function HomeGlyph() {
   return (
@@ -27,6 +31,57 @@ function HomeGlyph() {
     </svg>
   );
 }
+
+function AccountsGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={20}
+      height={20}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="6" width="18" height="13" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M7 14h4" />
+    </svg>
+  );
+}
+
+function EntriesGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={20}
+      height={20}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 6h13" />
+      <path d="M8 12h13" />
+      <path d="M8 18h13" />
+      <path d="M3 6h.01" />
+      <path d="M3 12h.01" />
+      <path d="M3 18h.01" />
+    </svg>
+  );
+}
+
+const GLYPHS = {
+  home: HomeGlyph,
+  accounts: AccountsGlyph,
+  entries: EntriesGlyph,
+} as const;
 
 /**
  * Mobile-first: below `md` the sidebar is an off-canvas drawer, closed by
@@ -98,8 +153,12 @@ export function Sidebar({
 
         <nav className="flex flex-1 flex-col gap-1 px-2 py-2">
           {NAV.map((item) => {
-            const active = pathname === item.to;
+            const active =
+              item.to === "/"
+                ? pathname === "/"
+                : pathname === item.to || pathname.startsWith(`${item.to}/`);
             const label = t(item.labelKey);
+            const Glyph = GLYPHS[item.glyph];
             return (
               <Link
                 key={item.to}
@@ -114,7 +173,7 @@ export function Sidebar({
                 } ${effectiveCollapsed ? "justify-center" : ""}`}
               >
                 <span className="shrink-0">
-                  <HomeGlyph />
+                  <Glyph />
                 </span>
                 {!effectiveCollapsed && (
                   <span className="truncate">{label}</span>

@@ -10,15 +10,35 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountsRouteImport } from './routes/accounts'
+import { Route as EntriesRouteImport } from './routes/entries'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as AccountsIndexRouteImport } from './routes/accounts.index'
+import { Route as AccountsAccountIdRouteImport } from './routes/accounts.$accountId'
+import { Route as AccountsNewRouteImport } from './routes/accounts.new'
+import { Route as EntriesIndexRouteImport } from './routes/entries.index'
+import { Route as EntriesNewRouteImport } from './routes/entries.new'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsInvitationsRouteImport } from './routes/settings.invitations'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
+import { Route as AccountsAccountIdIndexRouteImport } from './routes/accounts.$accountId.index'
+import { Route as AccountsAccountIdEditRouteImport } from './routes/accounts.$accountId.edit'
+import { Route as EntriesEntryIdEditRouteImport } from './routes/entries.$entryId.edit'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountsRoute = AccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntriesRoute = EntriesRouteImport.update({
+  id: '/entries',
+  path: '/entries',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -30,6 +50,31 @@ const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AccountsIndexRoute = AccountsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AccountsRoute,
+} as any)
+const AccountsAccountIdRoute = AccountsAccountIdRouteImport.update({
+  id: '/$accountId',
+  path: '/$accountId',
+  getParentRoute: () => AccountsRoute,
+} as any)
+const AccountsNewRoute = AccountsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AccountsRoute,
+} as any)
+const EntriesIndexRoute = EntriesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EntriesRoute,
+} as any)
+const EntriesNewRoute = EntriesNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => EntriesRoute,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/',
@@ -46,54 +91,130 @@ const SettingsUsersRoute = SettingsUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => SettingsRoute,
 } as any)
+const AccountsAccountIdIndexRoute = AccountsAccountIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AccountsAccountIdRoute,
+} as any)
+const AccountsAccountIdEditRoute = AccountsAccountIdEditRouteImport.update({
+  id: '/edit',
+  path: '/edit',
+  getParentRoute: () => AccountsAccountIdRoute,
+} as any)
+const EntriesEntryIdEditRoute = EntriesEntryIdEditRouteImport.update({
+  id: '/$entryId/edit',
+  path: '/$entryId/edit',
+  getParentRoute: () => EntriesRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/accounts': typeof AccountsRouteWithChildren
+  '/entries': typeof EntriesRouteWithChildren
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
+  '/accounts/new': typeof AccountsNewRoute
+  '/entries/new': typeof EntriesNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
+  '/accounts/': typeof AccountsIndexRoute
+  '/entries/': typeof EntriesIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
+  '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/accounts/new': typeof AccountsNewRoute
+  '/entries/new': typeof EntriesNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
+  '/accounts': typeof AccountsIndexRoute
+  '/entries': typeof EntriesIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
+  '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/accounts/$accountId': typeof AccountsAccountIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/accounts': typeof AccountsRouteWithChildren
+  '/entries': typeof EntriesRouteWithChildren
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
+  '/accounts/new': typeof AccountsNewRoute
+  '/entries/new': typeof EntriesNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
+  '/accounts/': typeof AccountsIndexRoute
+  '/entries/': typeof EntriesIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
+  '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/accounts'
+    | '/entries'
     | '/login'
     | '/settings'
+    | '/accounts/$accountId'
+    | '/accounts/new'
+    | '/entries/new'
     | '/settings/invitations'
     | '/settings/users'
+    | '/accounts/'
+    | '/entries/'
     | '/settings/'
+    | '/accounts/$accountId/edit'
+    | '/entries/$entryId/edit'
+    | '/accounts/$accountId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/settings/invitations' | '/settings/users' | '/settings'
+  to:
+    | '/'
+    | '/login'
+    | '/accounts/new'
+    | '/entries/new'
+    | '/settings/invitations'
+    | '/settings/users'
+    | '/accounts'
+    | '/entries'
+    | '/settings'
+    | '/accounts/$accountId/edit'
+    | '/entries/$entryId/edit'
+    | '/accounts/$accountId'
   id:
     | '__root__'
     | '/'
+    | '/accounts'
+    | '/entries'
     | '/login'
     | '/settings'
+    | '/accounts/$accountId'
+    | '/accounts/new'
+    | '/entries/new'
     | '/settings/invitations'
     | '/settings/users'
+    | '/accounts/'
+    | '/entries/'
     | '/settings/'
+    | '/accounts/$accountId/edit'
+    | '/entries/$entryId/edit'
+    | '/accounts/$accountId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountsRoute: typeof AccountsRouteWithChildren
+  EntriesRoute: typeof EntriesRouteWithChildren
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRouteWithChildren
 }
@@ -105,6 +226,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounts': {
+      id: '/accounts'
+      path: '/accounts'
+      fullPath: '/accounts'
+      preLoaderRoute: typeof AccountsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entries': {
+      id: '/entries'
+      path: '/entries'
+      fullPath: '/entries'
+      preLoaderRoute: typeof EntriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -120,6 +255,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/accounts/': {
+      id: '/accounts/'
+      path: '/'
+      fullPath: '/accounts/'
+      preLoaderRoute: typeof AccountsIndexRouteImport
+      parentRoute: typeof AccountsRoute
+    }
+    '/accounts/$accountId': {
+      id: '/accounts/$accountId'
+      path: '/$accountId'
+      fullPath: '/accounts/$accountId'
+      preLoaderRoute: typeof AccountsAccountIdRouteImport
+      parentRoute: typeof AccountsRoute
+    }
+    '/accounts/new': {
+      id: '/accounts/new'
+      path: '/new'
+      fullPath: '/accounts/new'
+      preLoaderRoute: typeof AccountsNewRouteImport
+      parentRoute: typeof AccountsRoute
+    }
+    '/entries/': {
+      id: '/entries/'
+      path: '/'
+      fullPath: '/entries/'
+      preLoaderRoute: typeof EntriesIndexRouteImport
+      parentRoute: typeof EntriesRoute
+    }
+    '/entries/new': {
+      id: '/entries/new'
+      path: '/new'
+      fullPath: '/entries/new'
+      preLoaderRoute: typeof EntriesNewRouteImport
+      parentRoute: typeof EntriesRoute
     }
     '/settings/': {
       id: '/settings/'
@@ -142,8 +312,73 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsUsersRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/accounts/$accountId/': {
+      id: '/accounts/$accountId/'
+      path: '/'
+      fullPath: '/accounts/$accountId/'
+      preLoaderRoute: typeof AccountsAccountIdIndexRouteImport
+      parentRoute: typeof AccountsAccountIdRoute
+    }
+    '/accounts/$accountId/edit': {
+      id: '/accounts/$accountId/edit'
+      path: '/edit'
+      fullPath: '/accounts/$accountId/edit'
+      preLoaderRoute: typeof AccountsAccountIdEditRouteImport
+      parentRoute: typeof AccountsAccountIdRoute
+    }
+    '/entries/$entryId/edit': {
+      id: '/entries/$entryId/edit'
+      path: '/$entryId/edit'
+      fullPath: '/entries/$entryId/edit'
+      preLoaderRoute: typeof EntriesEntryIdEditRouteImport
+      parentRoute: typeof EntriesRoute
+    }
   }
 }
+
+interface AccountsAccountIdRouteChildren {
+  AccountsAccountIdEditRoute: typeof AccountsAccountIdEditRoute
+  AccountsAccountIdIndexRoute: typeof AccountsAccountIdIndexRoute
+}
+
+const AccountsAccountIdRouteChildren: AccountsAccountIdRouteChildren = {
+  AccountsAccountIdEditRoute: AccountsAccountIdEditRoute,
+  AccountsAccountIdIndexRoute: AccountsAccountIdIndexRoute,
+}
+
+const AccountsAccountIdRouteWithChildren =
+  AccountsAccountIdRoute._addFileChildren(AccountsAccountIdRouteChildren)
+
+interface AccountsRouteChildren {
+  AccountsAccountIdRoute: typeof AccountsAccountIdRouteWithChildren
+  AccountsNewRoute: typeof AccountsNewRoute
+  AccountsIndexRoute: typeof AccountsIndexRoute
+}
+
+const AccountsRouteChildren: AccountsRouteChildren = {
+  AccountsAccountIdRoute: AccountsAccountIdRouteWithChildren,
+  AccountsNewRoute: AccountsNewRoute,
+  AccountsIndexRoute: AccountsIndexRoute,
+}
+
+const AccountsRouteWithChildren = AccountsRoute._addFileChildren(
+  AccountsRouteChildren,
+)
+
+interface EntriesRouteChildren {
+  EntriesNewRoute: typeof EntriesNewRoute
+  EntriesIndexRoute: typeof EntriesIndexRoute
+  EntriesEntryIdEditRoute: typeof EntriesEntryIdEditRoute
+}
+
+const EntriesRouteChildren: EntriesRouteChildren = {
+  EntriesNewRoute: EntriesNewRoute,
+  EntriesIndexRoute: EntriesIndexRoute,
+  EntriesEntryIdEditRoute: EntriesEntryIdEditRoute,
+}
+
+const EntriesRouteWithChildren =
+  EntriesRoute._addFileChildren(EntriesRouteChildren)
 
 interface SettingsRouteChildren {
   SettingsInvitationsRoute: typeof SettingsInvitationsRoute
@@ -163,6 +398,8 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountsRoute: AccountsRouteWithChildren,
+  EntriesRoute: EntriesRouteWithChildren,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRouteWithChildren,
 }
