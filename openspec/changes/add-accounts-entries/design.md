@@ -30,16 +30,21 @@ Constraints carried over from the rest of the codebase:
 
 - A signed-in user can create an account (title, description, type,
   currency, financial institute, opening/closing date) that only they can
-  see.
+  see, and can disable it (blocking new entries, reversibly) or soft-delete
+  it.
 - That user can record entries against their own accounts: relative
   transactions and absolute balance adjustments, each with a booking
   timestamp, title, optional description, exactly one category (except a
   balance adjustment, where a category is optional), and any number of
-  their own tags.
+  their own tags (creatable inline).
 - An account's balance at any point in time can be computed correctly and
   live from its entries.
 - Account types and categories are curated centrally (admin-managed,
   instance-global); tags are private, per-user organization.
+- That user can browse an accounts overview, drill into one account's
+  details and recent activity, and work the full entry ledger across every
+  account they own — filtered, searched, sorted, and paginated — entirely
+  through the frontend, with the view's state reflected in the URL.
 
 **Non-Goals:**
 
@@ -48,18 +53,25 @@ Constraints carried over from the rest of the codebase:
   `entries` (not derived transitively through `accounts`) so that a future
   sharing change can grant access at the entry level without a schema
   change — but no such access is granted by this change.
-- Any frontend screen. This change is backend-only; `/accounts` and entry UI
-  are a follow-up once this API exists.
 - Undeleting a soft-deleted account or entry.
 - Multi-currency entries, currency conversion, or an entry-level currency
   field — an entry's amount is always in its account's currency.
 - Moving an entry to a different account, or changing an entry's `kind`
   after creation.
-- Validating or rescaling stored amounts when `AMOUNT_DECIMAL_PLACES`
-  changes — the operator's responsibility, not this change's.
 - Caching, precomputing, or materializing account balances.
 - A canonical currency list (unchanged from `user-settings`'s existing
   shape-only validation).
+- A dedicated category, account-type, or tag *management* UI. Categories
+  and account types stay admin-only via the API (no admin frontend surface
+  in this change, same as today); tags get exactly one creation surface —
+  inline, from the entry form — and nothing else (no rename/delete UI).
+- Sorting the entry ledger by anything beyond booking timestamp and amount
+  (e.g. by account, category, or title) — those would need a join-backed
+  keyset the first pass doesn't build.
+- Bulk actions on the entry ledger (multi-select delete/retag/etc).
+- Offline support or optimistic updates beyond ordinary loading/error
+  states — data fetching stays plain `fetch` in effects, matching the rest
+  of the frontend; no client-side cache/query library is introduced.
 
 ## Decisions
 
@@ -79,17 +91,18 @@ existing row or query shape.
 ### Decision: package boundaries — `entry` depends on `account`, `category`, and `tag` through narrow interfaces
 
 `internal/entry` needs to: confirm the caller owns the target account (and
-read its currency), confirm a `category_id` exists, and confirm every
-`tag_id` on the entry exists and is owned by the caller. Rather than
-importing `internal/account`, `internal/category`, and `internal/tag`
-wholesale (their `Store`, their persistence concerns), `entry.Service`
-declares the narrow interfaces it needs — the same shape as
+read its currency and `disabled` state), confirm a `category_id` exists,
+and confirm every `tag_id` on the entry exists and is owned by the caller.
+Rather than importing `internal/account`, `internal/category`, and
+`internal/tag` wholesale (their `Store`, their persistence concerns),
+`entry.Service` declares the narrow interfaces it needs — the same shape as
 `auth.Service`'s `LanguageLookup`:
 
 ```go
 type AccountLookup interface {
-    // Owner returns the account's owner and currency, or ErrNotFound.
-    Owner(ctx context.Context, accountID uuid.UUID) (ownerID uuid.UUID, currency string, err error)
+    // Owner returns the account's owner, currency, and whether new entries
+    // are currently blocked, or ErrNotFound.
+    Owner(ctx context.Context, accountID uuid.UUID) (ownerID uuid.UUID, currency string, disabled bool, err error)
 }
 
 type CategoryLookup interface {
@@ -194,15 +207,73 @@ detaching them from an entry on delete would quietly change what that
 entry means to its owner, so those deletions are rejected instead when
 in use (previous decision). Different blast radius, different behavior.
 
-### Decision: amounts are integers at a fixed, env-configurable decimal-place count
+### Decision: amounts are integers at a fixed 4 decimal places; display precision is a separate, per-user setting
 
-`entries.amount` is `bigint`, minor units (e.g. cents at the default scale).
-The decimal-place count is not a column — it is one instance-wide value,
-`config.Config.AmountDecimalPlaces` (env `AMOUNT_DECIMAL_PLACES`, default
-`2`), read once at startup and passed into `entry.NewService(...)` the same
-way `config.AuthConfig` fields are passed into `auth.NewService`. There is
-no per-currency scale and no migration path for changing it: this is an
-accepted limitation (Risks), not solved here.
+`entries.amount` is `bigint`, always scaled by **4** decimal places
+instance-wide — a Go constant (`entry.AmountScale = 4`) baked into
+`internal/entry`, not read from configuration. An earlier draft of this
+proposal made the decimal-place count an `AMOUNT_DECIMAL_PLACES`
+environment variable; that's dropped — a single fixed constant needs no
+config plumbing, no "what happens when it changes" footgun, and 4 places
+comfortably covers every real currency's minor unit (including the
+3-decimal outliers like `BHD`) with headroom to spare, so there's nothing
+for an instance operator to tune.
+
+What *is* configurable, per user, is display: `user-settings` gains
+`displayed_decimal_places` (nullable smallint, default `2`, validated
+`0..4` — never more than what's actually stored) alongside language/
+timezone/default-currency, resolved the same way. It affects only how the
+frontend *rounds an amount for display* (account balances, entry list
+rows) — never how much precision the edit form accepts or the backend
+stores; the create/edit form always works in the full 4-decimal
+`amount`/`10000` fixed-point representation, so a display rounding
+preference can never quietly truncate what's saved.
+
+### Decision: `accounts.disabled` — a reversible flag distinct from `closing_date` and `deleted_at`
+
+Accounts get a third, independent piece of state: `disabled boolean NOT
+NULL DEFAULT false`. Disabling an account is reversible (an Enable action
+flips it back) and has exactly one effect: `entry.Service.Create` rejects
+(`422`) a new entry whose `account_id` names a disabled account. A disabled
+account is otherwise unaffected — still listed, still readable, still
+editable, its existing entries still fully usable (list, edit, delete,
+count toward balance). This is deliberately a separate column from
+`closing_date` (a bookkeeping fact about when an account was closed at the
+institution — informational only, does not gate anything in this change)
+and from `deleted_at` (one-way soft delete, invisible everywhere). The
+three can combine freely (e.g. a closed-and-disabled account), and only
+`deleted_at` removes an account from view.
+
+### Decision: entry listing is filterable, searchable, sortable, and cursor-paginated
+
+`GET /api/entries` grows real query parameters instead of just
+`account_id`:
+
+- **Filters**: `account_id` (repeatable — omitted means every account the
+  caller owns), `category_id` (matches that category and, since categories
+  form a tree, every descendant — computed by resolving the subtree once
+  per request, not a recursive SQL query per row), `tag_id`, `kind`, `from`/
+  `to` (inclusive `booking_timestamp` range).
+- **Search**: `q`, matched against `title` and `description`
+  (`ILIKE '%...%'` — no full-text index in this change; revisit if this
+  becomes a real workload).
+- **Sort**: `sort ∈ {booking_timestamp, amount}` (default
+  `booking_timestamp`), `dir ∈ {asc, desc}` (default `desc` — newest
+  first).
+- **Pagination**: cursor-based, matching the tie-break already established
+  for ordering. `after` is an opaque, base64-encoded `(sort_value, id)` pair
+  for the last row of the previous page; the query becomes `WHERE
+  (sort_column, id) < ($sort_value, $id)` (or `>` for `asc`) `ORDER BY
+  sort_column, id LIMIT $page_size`. Every filter above still applies
+  before the keyset comparison. The response is `{ items: Entry[],
+  next_cursor: string | null }` — `next_cursor` is `null` once a page comes
+  back shorter than `page_size`.
+
+No `OFFSET`, no total count, no "page 3 of 12" — the frontend's infinite
+scroll only ever asks for "the next page after the last thing I have,"
+which is exactly what a keyset cursor is for and avoids the
+consistency/performance problems `OFFSET` has on a table that keeps
+growing while someone scrolls it.
 
 ### Decision: account currency validation reuses `settings.ValidateCurrency`
 
@@ -229,6 +300,39 @@ it's relative or absolute) closely enough to a delete-and-recreate that
 allowing an in-place change would need its own set of invariant checks for
 no real benefit.
 
+### Decision: frontend routing, search-param, and data-fetching approach
+
+Two new top-level `Sidebar` entries, "Accounts" and "Entries" (a second
+hardcoded row in `NAV`, alongside a new icon each — the sidebar has only
+ever had "Home" so far). Routes follow the existing file-based
+`src/routes/` convention (`accounts.tsx`/`accounts.index.tsx`/
+`accounts.$accountId.tsx`/`accounts.new.tsx`/`accounts.$accountId.edit.tsx`,
+and the equivalent `entries.*` files), each gated the same way `/settings`
+already is (redirect an anonymous visitor to `/login`).
+
+`/entries`' filter/search/sort/cursor state lives in the URL via TanStack
+Router's typed `validateSearch` / `useSearch` / `Link search={}}` — no new
+dependency, and it's exactly what "filterable, searchable, sortable with
+URL parameters, with pagination" asks for: a shared link reproduces the
+exact same view, and the back button un-applies a filter change. The
+running list of loaded entries (across "scroll to load more" pages) is
+local component state, reset whenever the URL's filter/sort/search params
+change but *not* when only scroll position changes — matching how the rest
+of the frontend has no client-side cache (`AuthProvider`, `InviteList`):
+plain `fetch` in an effect, keyed off the params that should refetch from
+scratch.
+
+Category selection (a tree) is a flat, indented list in a
+`@headlessui/react` `Combobox`/`Listbox` (already a dependency, used for
+`SidebarUser`'s menu) rather than a bespoke tree widget — the category set
+is admin-curated and expected to be small, so a searchable flat list with
+visual indentation reads the tree without needing expand/collapse
+interaction. Tag input is a free-text field that matches against the
+caller's existing tags as they type and, on submit, creates
+(`POST /api/tags`) any typed value that didn't match an existing tag
+before attaching it — the "inline creation" this proposal calls for,
+without a separate tag-management surface.
+
 ## Risks / Trade-offs
 
 - **Live balance computation has no ceiling on entry count.** Every call
@@ -236,12 +340,27 @@ no real benefit.
   sum over transactions after it — fine at family-ledger scale, but there is
   no cache and no materialized total. Flagged as a likely future
   optimization once real usage data exists, not solved here.
-- **`AMOUNT_DECIMAL_PLACES` is a silent reinterpretation knob.** Changing it
-  after data exists does not rescale or validate anything already stored —
-  an amount written as `1050` at 2 decimal places (10.50) reads as `10.50`
-  units differently at 3 decimal places (1.050) with no warning. Accepted
-  per explicit instruction; an operator-facing warning belongs in a future
-  change if this becomes a real footgun.
+- **Filtered/searched cursor pagination needs an index that matches the
+  query shape.** A keyset query with several optional filters plus `(sort,
+  id)` ordering wants a composite index covering the common cases
+  (`account_id, booking_timestamp, id` at minimum, per the original
+  migration plan); `q`'s `ILIKE` is not indexed at all and degrades to a
+  sequential scan for large ledgers. Acceptable at family-ledger scale;
+  revisit (a trigram index, or real full-text search) if search becomes
+  slow in practice.
+- **Infinite scroll with no snapshot can show duplicate or shifted rows**
+  if an entry is created, edited, or deleted while a long scroll session is
+  in progress (keyset pagination has no stable "as of" point the way an
+  offset+snapshot would). Accepted as an ordinary, low-stakes eventual-
+  consistency artifact of a live ledger — a page refresh always
+  self-corrects — not solved with a snapshot token in this change.
+- **Two independent status switches on an account (`disabled`,
+  `closing_date`) plus soft delete is three overlapping states to
+  communicate clearly in the UI** (e.g. a closed-and-still-enabled account
+  can still accept new entries, which may surprise a user who reads
+  "closed" as "done"). The account overview/detail pages need a status
+  presentation that shows all that apply, not just one badge — a frontend
+  design detail to get right during implementation, not a schema risk.
 - **No sharing model yet, but the schema already carries `entries.owner_id`
   independently of `accounts.owner_id`** in anticipation of it. Until a
   sharing change actually uses that independence, it's a column that is
@@ -256,25 +375,36 @@ no real benefit.
 
 ## Migration Plan
 
-Five new forward-only migrations, in dependency order:
+Seven new forward-only migrations, in dependency order:
 
 1. `0006_account_types.sql` — `account_types(id, name, created_at)`.
 2. `0007_accounts.sql` — `accounts(id, owner_id, title, description,
    type_id, currency, financial_institute, opening_date, closing_date,
-   deleted_at, created_at, updated_at)`.
+   disabled, deleted_at, created_at, updated_at)`.
 3. `0008_categories.sql` — `categories(id, parent_id, name, created_at)`.
 4. `0009_tags.sql` — `tags(id, owner_id, name, created_at)`, unique
    `(owner_id, name)`.
 5. `0010_entries.sql` — `entries(id bigserial, owner_id, account_id, kind,
    amount, booking_timestamp, title, description, category_id, deleted_at,
-   created_at, updated_at)` plus the `kind`/`category_id` `CHECK` and
-   `entry_tags(entry_id, tag_id)` with `ON DELETE CASCADE` on both sides
-   from `entries` and from `tags`.
-
-No existing table is altered.
+   created_at, updated_at)` plus the `kind`/`category_id` `CHECK`, an index
+   on `(account_id, booking_timestamp, id)` for the listing/balance keyset
+   queries, and `entry_tags(entry_id, tag_id)` with `ON DELETE CASCADE` on
+   both sides from `entries` and from `tags`.
+6. `0011_account_disabled.sql` — `ALTER TABLE accounts ADD COLUMN disabled
+   boolean NOT NULL DEFAULT false`. Kept as its own migration (rather than
+   folded into `0007`) because it's a distinct concern added during
+   exploration after the accounts table shape was first drafted — same
+   spirit as `0004`/`0005` each being one focused `ALTER`.
+7. `0012_user_settings_displayed_decimal_places.sql` — `ALTER TABLE
+   user_settings ADD COLUMN displayed_decimal_places smallint CHECK
+   (displayed_decimal_places BETWEEN 0 AND 4)`. The only migration in this
+   change that touches a table from a previous change (`user_settings`,
+   `0003_user_settings.sql`).
 
 ## Open Questions
 
 None outstanding — ownership, visibility, soft delete, tie-breaking,
-balance computation, category nullability, account-type scope, and amount
-storage were all resolved during exploration before this proposal.
+balance computation, category nullability, account-type scope, amount
+storage (including the disabled flag, fixed decimal precision, and
+frontend pagination/filtering approach added during a later exploration
+round) were all resolved before writing this design.

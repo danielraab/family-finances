@@ -85,6 +85,36 @@ rejected (`409`) rather than performed or cascaded.
   non-deleted account
 - **THEN** the response is `409` and the account type is not deleted
 
+### Requirement: An account can be disabled and re-enabled, blocking new entries without hiding it
+
+Every account SHALL carry a `disabled` flag, `false` by default, settable
+by its owner via `POST /api/accounts/{id}/disable` and reversed via
+`POST /api/accounts/{id}/enable`. Disabling SHALL NOT remove the account
+from listings, reads, or updates, and SHALL NOT affect its existing
+entries in any way — its only effect is that creating a *new* entry
+against a disabled account is rejected (see `account-entries`). `disabled`
+is independent of `closing_date` (informational only) and of `deleted_at`
+(soft delete) — any combination of the three MAY hold at once.
+
+#### Scenario: Disabling blocks new entries but not visibility
+
+- **WHEN** an owner disables an account
+- **THEN** `GET /api/accounts/{id}` and `GET /api/accounts` still show it,
+  its existing entries are unaffected, and a subsequent
+  `POST /api/entries` against it is rejected
+
+#### Scenario: Enabling reverses it
+
+- **WHEN** an owner enables a previously disabled account
+- **THEN** creating a new entry against it succeeds again
+
+#### Scenario: Disabling is independent of closing date
+
+- **WHEN** an account has a `closing_date` in the past but `disabled` is
+  `false`
+- **THEN** creating a new entry against it still succeeds — `closing_date`
+  alone does not block anything
+
 ### Requirement: Soft delete
 
 Deleting an account SHALL set `deleted_at` rather than removing the row —

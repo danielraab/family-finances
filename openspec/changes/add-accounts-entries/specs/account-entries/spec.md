@@ -27,8 +27,8 @@ as if it does not exist (`404`).
 
 - **WHEN** an account has been soft-deleted and its owner calls
   `GET /api/entries?account_id={id}`
-- **THEN** the response is `404` for the account (or an empty/`404` entry
-  listing) — the account's entries are no longer reachable through it
+- **THEN** the response is `200` with an empty `items` list — the
+  account's entries are no longer reachable through it
 
 ### Requirement: An entry is a transaction or a balance adjustment
 
@@ -96,28 +96,90 @@ which they were created).
 - **THEN** they appear in the order they were created, not an unspecified
   order
 
-### Requirement: Amounts are stored as integers at an instance-wide, configurable decimal-place count
+### Requirement: Amounts are stored as integers at a fixed 4 decimal places
 
 An entry's `amount` SHALL be an integer in the account's currency's minor
-units, scaled by a fixed number of decimal places that applies to every
-account and currency in the instance. That decimal-place count SHALL default
-to `2` and SHALL be configurable via an environment variable read once at
-startup. Changing the configured decimal-place count SHALL NOT trigger any
-validation or rescaling of amounts already stored — existing rows are
-reinterpreted at the new scale as-is.
+units, scaled by a fixed 4 decimal places, uniformly for every account and
+currency in the instance. This scale is not configurable. (Per-user
+*display* rounding is a separate concern — see `user-settings`'
+`displayed_decimal_places`, which affects only how a client renders an
+amount, never how it is stored or edited.)
 
-#### Scenario: Default decimal places
+#### Scenario: Amount stored and returned at 4 decimal places
 
-- **WHEN** the backend starts with no decimal-place environment variable set
-- **THEN** amounts are interpreted at 2 decimal places (e.g. stored `1050`
-  means `10.50`)
+- **WHEN** an entry is created with `amount: 105000`
+- **THEN** it represents `10.5000` in the account's currency, and the API
+  returns the same integer, `105000`, on every subsequent read
 
-#### Scenario: Configured decimal places
+### Requirement: Entry creation is rejected against a disabled account
 
-- **WHEN** the backend starts with the decimal-place environment variable
-  set to `3`
-- **THEN** amounts created from that point are interpreted at 3 decimal
-  places (e.g. stored `1050` means `1.050`)
+`POST /api/entries` SHALL reject creating an entry whose `account_id`
+names an account with `disabled = true` (see `accounts`). This applies only
+to creation — an entry that already existed before its account was
+disabled remains fully readable, editable, and deletable.
+
+#### Scenario: Creating an entry against a disabled account is rejected
+
+- **WHEN** an authenticated user calls `POST /api/entries` with the
+  `account_id` of an account they own that is disabled
+- **THEN** the request is rejected (`422`) and no entry is created
+
+#### Scenario: Existing entries on a newly disabled account are unaffected
+
+- **WHEN** an account with existing entries is disabled
+- **THEN** those entries remain listable, editable, and deletable, and
+  still count toward the account's balance
+
+### Requirement: Entry listing supports filtering, free-text search, sorting, and cursor-based pagination
+
+`GET /api/entries` SHALL accept, all optional and combinable: `account_id`
+(repeatable; omitted means every non-deleted account the caller owns),
+`category_id` (matches that category and every descendant in the category
+tree), `tag_id`, `kind`, `from`/`to` (an inclusive `booking_timestamp`
+range), and `q` (a case-insensitive substring match against `title` or
+`description`). It SHALL accept `sort` (`booking_timestamp`, the default,
+or `amount`) and `dir` (`desc`, the default, or `asc`). It SHALL accept
+`after`, an opaque cursor from a previous response's `next_cursor`, and
+`limit` (a page size). The response SHALL be `{ items, next_cursor }`,
+where `next_cursor` is `null` once no further matching entries remain.
+Every filter applies before pagination; results are always scoped to the
+caller's own, non-deleted accounts' non-deleted entries.
+
+#### Scenario: Filtering by account
+
+- **WHEN** `GET /api/entries?account_id={id}` is called
+- **THEN** only entries on that account are returned
+
+#### Scenario: Filtering by category includes descendants
+
+- **WHEN** `GET /api/entries?category_id={parent}` is called and some
+  matching entries carry a child category of `{parent}` rather than
+  `{parent}` itself
+- **THEN** those entries are included in the results
+
+#### Scenario: Free-text search matches title or description
+
+- **WHEN** `GET /api/entries?q=coffee` is called
+- **THEN** only entries whose `title` or `description` contains "coffee"
+  (case-insensitive) are returned
+
+#### Scenario: Sorting by amount
+
+- **WHEN** `GET /api/entries?sort=amount&dir=asc` is called
+- **THEN** results are ordered from the smallest to the largest `amount`
+
+#### Scenario: Paginating with a cursor
+
+- **WHEN** a first page is fetched and its `next_cursor` is passed back as
+  `after` on a second request with the same filters/sort
+- **THEN** the second page continues immediately after the first with no
+  gap or overlap
+
+#### Scenario: Last page has a null cursor
+
+- **WHEN** a page of results is fetched that reaches the end of the
+  matching entries
+- **THEN** `next_cursor` is `null`
 
 ### Requirement: Account balance is always computed live
 
