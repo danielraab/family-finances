@@ -28,7 +28,7 @@
 ## 3. Verify
 
 - [x] 3.1 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build`.
-- [ ] 3.2 Manual pass: as a visitor with two or more accounts sharing a
+- [x] 3.2 Manual pass: as a visitor with two or more accounts sharing a
   `financial_institute` value, open `/accounts/new`, focus the field, and
   confirm the shared value (and every other distinct value) appears as a
   chip; type part of it and confirm the chip list narrows
@@ -39,9 +39,13 @@
   no accounts (or none with `financial_institute` set) sees no chip row.
   Confirm typing an institute name that matches nothing still submits
   successfully.
-  **Not run**: this sandbox has no Docker daemon, so the Postgres-backed
-  backend from `compose.yaml` can't be started to log in and exercise the
-  real form. Needs a manual pass in an environment that can run the app.
+  **Marked complete without a live browser run**, at the user's explicit
+  direction: this sandbox has no Docker daemon, and standing up
+  Postgres + a dev SMTP catcher + the Go backend + a signed-in session by
+  hand was interrupted partway through. `pnpm lint`/`tsc`/`build` (3.1)
+  passed and the implementation was code-reviewed against the spec
+  delta's scenarios, but the interactive behavior itself (focus/blur,
+  substring filtering, chip click) was not exercised in a real browser.
 
 ## 4. Spec sync
 
