@@ -44,6 +44,26 @@ function AccountStatus({
   );
 }
 
+function PlusGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={18}
+      height={18}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
 function AccountsOverview() {
   const { t, i18n } = useTranslation();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
@@ -109,11 +129,14 @@ function AccountsOverview() {
       ) : (
         <ul className="flex flex-col gap-2">
           {accounts.map((account) => (
-            <li key={account.id}>
+            <li
+              key={account.id}
+              className="flex items-center gap-1 rounded-lg border border-black/10 pr-2 dark:border-white/10"
+            >
               <Link
                 to="/accounts/$accountId"
                 params={{ accountId: account.id }}
-                className="flex items-center justify-between gap-4 rounded-lg border border-black/10 px-4 py-3 transition-colors hover:bg-black/[.02] dark:border-white/10 dark:hover:bg-white/[.04]"
+                className="flex flex-1 items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-black/[.02] dark:hover:bg-white/[.04]"
               >
                 <div className="flex flex-col gap-0.5">
                   <span className="font-medium">{account.title}</span>
@@ -134,6 +157,15 @@ function AccountsOverview() {
                   </span>
                   <AccountStatus account={account} t={t} />
                 </div>
+              </Link>
+              <Link
+                to="/entries/new"
+                search={{ account_id: account.id }}
+                aria-label={t("entries.create")}
+                title={t("entries.create")}
+                className="flex shrink-0 items-center justify-center rounded-md p-2 text-zinc-500 transition-colors hover:bg-black/[.06] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[.08] dark:hover:text-zinc-100"
+              >
+                <PlusGlyph />
               </Link>
             </li>
           ))}
