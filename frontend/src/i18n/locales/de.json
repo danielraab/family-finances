@@ -164,6 +164,7 @@
       "typeDisabledOption": "deaktiviert",
       "typeDisabledHint": "Diese Art ist deaktiviert — wähle eine andere, um zu speichern.",
       "currency": "Währung",
+      "currencyPlaceholder": "Währung auswählen…",
       "currencyInvalid": "Die Währung muss aus drei Großbuchstaben bestehen (z. B. EUR).",
       "financialInstitute": "Finanzinstitut",
       "openingDate": "Eröffnungsdatum",

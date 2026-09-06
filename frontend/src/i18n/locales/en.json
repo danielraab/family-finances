@@ -164,6 +164,7 @@
       "typeDisabledOption": "disabled",
       "typeDisabledHint": "This type is disabled — choose another to save.",
       "currency": "Currency",
+      "currencyPlaceholder": "Select a currency…",
       "currencyInvalid": "Currency must be three uppercase letters (e.g. EUR).",
       "financialInstitute": "Financial institute",
       "openingDate": "Opening date",
