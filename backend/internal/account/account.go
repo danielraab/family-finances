@@ -100,11 +100,15 @@ type Account struct {
 }
 
 // Type is one row of the admin-managed, instance-global account_types
-// lookup.
+// lookup. Disabled blocks it from being (re)assigned to an account — see
+// Service.resolveAssignableType — without affecting any account already
+// carrying it.
 type Type struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description,omitempty"`
+	Disabled    bool      `json:"disabled"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // New is the input to creating an account.

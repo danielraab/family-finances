@@ -17,10 +17,14 @@ var (
 	// ErrTypeInUse: an account type cannot be deleted because a non-deleted
 	// account still references it.
 	ErrTypeInUse = errors.New("account type is in use")
+	// ErrTypeDisabled: a create/update tried to (re)assign a disabled
+	// account type — well-formed request, rejected by a business rule,
+	// distinct from ErrInvalidValue (malformed/missing field).
+	ErrTypeDisabled = errors.New("account type is disabled")
 )
 
 // Sentinels is every error above, for the httpapi mapping.
-var Sentinels = []error{ErrNotFound, ErrInvalidValue, ErrTypeInUse}
+var Sentinels = []error{ErrNotFound, ErrInvalidValue, ErrTypeInUse, ErrTypeDisabled}
 
 // Store is the persistence contract account declares. internal/storage/memory
 // and internal/storage/postgres implement it; package main injects one.
@@ -47,10 +51,16 @@ type Store interface {
 	// --- account types ---
 
 	ListTypes(ctx context.Context) ([]Type, error)
-	CreateType(ctx context.Context, name string) (Type, error)
-	UpdateType(ctx context.Context, id, name string) (Type, error)
+	// GetType returns ErrNotFound if id does not exist. Used both to
+	// resolve a type for display and to check whether a type_id may be
+	// (re)assigned (see Service.resolveAssignableType).
+	GetType(ctx context.Context, id string) (Type, error)
+	CreateType(ctx context.Context, title, description string) (Type, error)
+	UpdateType(ctx context.Context, id, title, description string) (Type, error)
+	// SetTypeDisabled toggles whether a type may be newly (re)assigned.
+	// It does not affect any account already carrying it.
+	SetTypeDisabled(ctx context.Context, id string, disabled bool) (Type, error)
 	// DeleteType returns ErrTypeInUse if a non-deleted account still
 	// references it, ErrNotFound if it does not exist.
 	DeleteType(ctx context.Context, id string) error
-	TypeExists(ctx context.Context, id string) (bool, error)
 }

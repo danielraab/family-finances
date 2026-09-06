@@ -33,7 +33,7 @@ func newEntryFixture(t *testing.T) entryFixture {
 	entryStore := NewEntryStore(pool)
 
 	owner := mustUser(t, authStore, "entryowner@example.com")
-	typ, err := accStore.CreateType(ctx, "Checking-entry")
+	typ, err := accStore.CreateType(ctx, "Checking-entry", "")
 	if err != nil {
 		t.Fatal(err)
 	}

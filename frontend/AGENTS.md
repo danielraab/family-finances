@@ -50,8 +50,9 @@ git-ignored. Build-script allow-listing lives in `pnpm-workspace.yaml`
   Router devtools render only in dev.
 - `src/routes/index.tsx` → `/`. `src/routes/login.tsx` → `/login`.
   `src/routes/settings.tsx` (+ `settings.index.tsx`, `settings.invitations.tsx`,
-  `settings.users.tsx`) → `/settings`, `/settings/invitations`, and
-  `/settings/users` — see "Settings" below.
+  `settings.users.tsx`, `settings.account-types.tsx`) → `/settings`,
+  `/settings/invitations`, `/settings/users`, and `/settings/account-types`
+  — see "Settings" below.
 - Navigate with `@tanstack/react-router`'s `<Link to="…">` / `useNavigate()`;
   read the path with `useLocation()`. `to` is type-checked against the route
   tree.
@@ -138,8 +139,8 @@ that check is informational only and never blocks merging.
 `/settings` is the first route that requires authentication: `settings.tsx`
 (the layout route) redirects an anonymous `useAuth` to `/login`, renders
 nothing while `loading`, and otherwise renders the tab nav (Common and My
-Invitations for everyone; Users only when `user.is_admin`, per `AdminUser`)
-plus `<Outlet/>`.
+Invitations for everyone; Users and Account Types only when `user.is_admin`,
+per `AdminUser`) plus `<Outlet/>`.
 
 - `settings.index.tsx` (`/settings`, Common tab) — language/timezone/default
   currency. Each field calls `PUT /api/settings` with only itself on change
@@ -168,6 +169,20 @@ plus `<Outlet/>`.
   the `401`. The invitation row rendering (status, inviter line, Revoke
   action) is shared with `settings.invitations.tsx` via
   `src/components/InviteList.tsx`.
+- `settings.account-types.tsx` (`/settings/account-types`, admin-only) —
+  same direct-link redirect guard as the Users tab. Lists account types
+  (`GET /api/account-types`, title/description/Active-or-Disabled status),
+  and can create (`POST`), edit title/description (`PATCH`),
+  disable/enable (`POST .../disable` / `.../enable`), and delete
+  (`DELETE`) one, each state-changing action behind the same
+  `@headlessui/react` `Dialog` confirmation pattern as the Users tab. A
+  `409` on delete (the type is still assigned to an account) surfaces as
+  an inline error rather than updating the list. `AccountForm.tsx`'s type
+  dropdown only offers non-disabled types for a new selection; if the
+  account being edited currently holds a type that's since been disabled,
+  that type still renders as a non-selectable option (so the form doesn't
+  look like it lost data) and the field stays invalid until a different,
+  live type is chosen.
 
 ## Build output
 

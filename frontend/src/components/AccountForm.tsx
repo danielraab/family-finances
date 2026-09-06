@@ -30,9 +30,15 @@ export const emptyAccountForm: AccountFormValues = {
 const inputClass =
   "rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
 
-function validate(values: AccountFormValues): string | null {
+function validate(
+  values: AccountFormValues,
+  types: AccountType[],
+): string | null {
   if (values.title.trim() === "") return "title";
   if (values.type_id === "") return "type_id";
+  if (types.find((type) => type.id === values.type_id)?.disabled) {
+    return "type_id";
+  }
   if (!/^[A-Z]{3}$/.test(values.currency)) return "currency";
   if (values.opening_date === "") return "opening_date";
   if (values.closing_date !== "" && values.closing_date < values.opening_date) {
@@ -66,6 +72,12 @@ export function AccountForm({
     });
   }, []);
 
+  // The account's current type may have been disabled since it was
+  // assigned — still shown (as a non-selectable option) so the form
+  // doesn't look like it lost the account's data, but it must be swapped
+  // for a live type before the form validates.
+  const currentType = types.find((type) => type.id === values.type_id);
+
   function set<K extends keyof AccountFormValues>(
     key: K,
     value: AccountFormValues[K],
@@ -75,7 +87,7 @@ export function AccountForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const invalid = validate(values);
+    const invalid = validate(values, types);
     setInvalidField(invalid);
     if (invalid) return;
     onSubmit({
@@ -128,16 +140,29 @@ export function AccountForm({
           <option value="" disabled>
             {t("accounts.form.typePlaceholder")}
           </option>
-          {types.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.name}
+          {currentType?.disabled && (
+            <option value={currentType.id} disabled>
+              {currentType.title} ({t("accounts.form.typeDisabledOption")})
             </option>
-          ))}
+          )}
+          {types
+            .filter((type) => !type.disabled)
+            .map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.title}
+              </option>
+            ))}
         </select>
-        {invalidField === "type_id" && (
+        {invalidField === "type_id" ? (
           <span className="text-xs font-normal text-red-600 dark:text-red-400">
             {t("accounts.form.typeRequired")}
           </span>
+        ) : (
+          currentType?.disabled && (
+            <span className="text-xs font-normal text-red-600 dark:text-red-400">
+              {t("accounts.form.typeDisabledHint")}
+            </span>
+          )
         )}
       </label>
 

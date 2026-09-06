@@ -46,6 +46,8 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("POST /api/account-types", h.createType)
 	h.mux.HandleFunc("PATCH /api/account-types/{id}", h.updateType)
 	h.mux.HandleFunc("DELETE /api/account-types/{id}", h.deleteType)
+	h.mux.HandleFunc("POST /api/account-types/{id}/disable", h.disableType)
+	h.mux.HandleFunc("POST /api/account-types/{id}/enable", h.enableType)
 
 	return h
 }
@@ -236,18 +238,21 @@ func (h *Handler) listTypes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, types)
 }
 
+type accountTypeBody struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
 func (h *Handler) createType(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireAdmin(w, r); !ok {
 		return
 	}
-	var body struct {
-		Name string `json:"name"`
-	}
+	var body accountTypeBody
 	if err := decodeJSON(r, &body); err != nil {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	t, err := h.svc.CreateType(r.Context(), body.Name)
+	t, err := h.svc.CreateType(r.Context(), body.Title, body.Description)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -259,14 +264,12 @@ func (h *Handler) updateType(w http.ResponseWriter, r *http.Request) {
 	if _, ok := requireAdmin(w, r); !ok {
 		return
 	}
-	var body struct {
-		Name string `json:"name"`
-	}
+	var body accountTypeBody
 	if err := decodeJSON(r, &body); err != nil {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	t, err := h.svc.UpdateType(r.Context(), r.PathValue("id"), body.Name)
+	t, err := h.svc.UpdateType(r.Context(), r.PathValue("id"), body.Title, body.Description)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -283,6 +286,30 @@ func (h *Handler) deleteType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) disableType(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	t, err := h.svc.DisableType(r.Context(), r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (h *Handler) enableType(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+	t, err := h.svc.EnableType(r.Context(), r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
 }
 
 func decodeJSON(r *http.Request, v any) error {

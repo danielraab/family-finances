@@ -48,7 +48,8 @@
     "tabs": {
       "common": "Allgemein",
       "myInvitations": "Meine Einladungen",
-      "users": "Benutzer"
+      "users": "Benutzer",
+      "accountTypes": "Kontoarten"
     },
     "common": {
       "language": "Anzeigesprache",
@@ -108,6 +109,39 @@
     "myInvitations": {
       "heading": "Von dir gesendete Einladungen",
       "noInvites": "Du hast noch niemanden eingeladen."
+    },
+    "accountTypes": {
+      "heading": "Kontoarten",
+      "empty": "Noch keine Kontoarten. Erstelle eine, um loszulegen.",
+      "titleLabel": "Titel",
+      "descriptionLabel": "Beschreibung",
+      "create": "Art hinzufügen",
+      "creating": "Wird hinzugefügt…",
+      "createError": "Kontoart konnte nicht erstellt werden — bitte versuche es erneut.",
+      "columnTitle": "Titel",
+      "columnDescription": "Beschreibung",
+      "columnStatus": "Status",
+      "statusActive": "Aktiv",
+      "statusDisabled": "Deaktiviert",
+      "edit": "Bearbeiten",
+      "editTitle": "Kontoart bearbeiten",
+      "editError": "Speichern fehlgeschlagen — bitte versuche es erneut.",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "cancel": "Abbrechen",
+      "disable": "Deaktivieren",
+      "enable": "Aktivieren",
+      "delete": "Löschen",
+      "deleteError": "\"{{title}}\" konnte nicht gelöscht werden — sie ist noch mindestens einem Konto zugewiesen.",
+      "confirm": {
+        "disableTitle": "\"{{title}}\" deaktivieren?",
+        "disableBody": "Sie kann keinem neuen oder bearbeiteten Konto mehr zugewiesen werden. Konten, die sie bereits verwenden, sind davon nicht betroffen, und dies kann jederzeit rückgängig gemacht werden.",
+        "enableTitle": "\"{{title}}\" aktivieren?",
+        "enableBody": "Sie kann wieder Konten zugewiesen werden.",
+        "deleteTitle": "\"{{title}}\" löschen?",
+        "deleteBody": "Dies ist nur möglich, solange kein Konto diese Art verwendet. Dies kann hier nicht rückgängig gemacht werden.",
+        "confirmAction": "Bestätigen"
+      }
     }
   },
   "accounts": {
@@ -127,6 +161,8 @@
       "type": "Typ",
       "typePlaceholder": "Typ auswählen…",
       "typeRequired": "Typ ist erforderlich.",
+      "typeDisabledOption": "deaktiviert",
+      "typeDisabledHint": "Diese Art ist deaktiviert — wähle eine andere, um zu speichern.",
       "currency": "Währung",
       "currencyInvalid": "Die Währung muss aus drei Großbuchstaben bestehen (z. B. EUR).",
       "financialInstitute": "Finanzinstitut",

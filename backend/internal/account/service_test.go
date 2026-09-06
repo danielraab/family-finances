@@ -3,6 +3,7 @@ package account_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"at.draab/familyfinances/internal/account"
@@ -17,9 +18,15 @@ func newService(t *testing.T) (*account.Service, *memory.AccountStore) {
 	return account.NewService(store), store
 }
 
+var typeNameSeq int
+
+// mustType creates a fresh account type with a unique title (CreateType
+// rejects duplicates) and returns its id — callers within the same test
+// that need more than one live type just call it again.
 func mustType(t *testing.T, svc *account.Service) string {
 	t.Helper()
-	typ, err := svc.CreateType(context.Background(), "Checking")
+	typeNameSeq++
+	typ, err := svc.CreateType(context.Background(), fmt.Sprintf("Checking-%d", typeNameSeq), "")
 	if err != nil {
 		t.Fatalf("CreateType: %v", err)
 	}
@@ -203,6 +210,130 @@ func TestOwnerLookup(t *testing.T) {
 	}
 	if ownerID != "u1" || currency != "USD" || disabled {
 		t.Fatalf("Owner = %q %q %v", ownerID, currency, disabled)
+	}
+}
+
+func TestCreateType(t *testing.T) {
+	svc, _ := newService(t)
+	typ, err := svc.CreateType(context.Background(), "Checking", "A day-to-day account")
+	if err != nil {
+		t.Fatalf("CreateType: %v", err)
+	}
+	if typ.Title != "Checking" || typ.Description != "A day-to-day account" || typ.Disabled {
+		t.Fatalf("typ = %+v", typ)
+	}
+}
+
+func TestCreateRejectsDisabledType(t *testing.T) {
+	svc, _ := newService(t)
+	typeID := mustType(t, svc)
+	if _, err := svc.DisableType(context.Background(), typeID); err != nil {
+		t.Fatal(err)
+	}
+	opening, _ := account.ParseDate("2024-01-01")
+	_, err := svc.Create(context.Background(), "u1", account.New{Title: "X", TypeID: typeID, Currency: "EUR", OpeningDate: opening})
+	if !errors.Is(err, account.ErrTypeDisabled) {
+		t.Fatalf("err = %v, want ErrTypeDisabled", err)
+	}
+}
+
+func TestUpdateRejectsWhenCurrentTypeIsDisabled(t *testing.T) {
+	svc, _ := newService(t)
+	typeID := mustType(t, svc)
+	opening, _ := account.ParseDate("2024-01-01")
+	acc, err := svc.Create(context.Background(), "u1", account.New{Title: "X", TypeID: typeID, Currency: "EUR", OpeningDate: opening})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.DisableType(context.Background(), typeID); err != nil {
+		t.Fatal(err)
+	}
+
+	// An update that doesn't touch type_id at all is still rejected, because
+	// the account's current (disabled) type is the effective one.
+	_, err = svc.Update(context.Background(), "u1", acc.ID, account.Update{
+		FinancialInstitute: ptr("Some Bank"),
+	})
+	if !errors.Is(err, account.ErrTypeDisabled) {
+		t.Fatalf("err = %v, want ErrTypeDisabled", err)
+	}
+
+	// Supplying a live type in the same update succeeds and un-sticks the
+	// account.
+	liveTypeID := mustType(t, svc)
+	got, err := svc.Update(context.Background(), "u1", acc.ID, account.Update{
+		FinancialInstitute: ptr("Some Bank"),
+		TypeID:             &liveTypeID,
+	})
+	if err != nil {
+		t.Fatalf("Update with live type: %v", err)
+	}
+	if got.TypeID != liveTypeID || got.FinancialInstitute != "Some Bank" {
+		t.Fatalf("got = %+v", got)
+	}
+
+	// A later edit no longer needs to resupply type_id.
+	if _, err := svc.Update(context.Background(), "u1", acc.ID, account.Update{
+		FinancialInstitute: ptr("Another Bank"),
+	}); err != nil {
+		t.Fatalf("follow-up Update: %v", err)
+	}
+}
+
+func TestUpdateRejectsAssigningADisabledType(t *testing.T) {
+	svc, _ := newService(t)
+	typeID := mustType(t, svc)
+	opening, _ := account.ParseDate("2024-01-01")
+	acc, err := svc.Create(context.Background(), "u1", account.New{Title: "X", TypeID: typeID, Currency: "EUR", OpeningDate: opening})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherTypeID := mustType(t, svc)
+	if _, err := svc.DisableType(context.Background(), otherTypeID); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = svc.Update(context.Background(), "u1", acc.ID, account.Update{TypeID: &otherTypeID})
+	if !errors.Is(err, account.ErrTypeDisabled) {
+		t.Fatalf("err = %v, want ErrTypeDisabled", err)
+	}
+}
+
+func TestDisableTypeDoesNotAffectExistingAccounts(t *testing.T) {
+	svc, _ := newService(t)
+	typeID := mustType(t, svc)
+	opening, _ := account.ParseDate("2024-01-01")
+	acc, err := svc.Create(context.Background(), "u1", account.New{Title: "X", TypeID: typeID, Currency: "EUR", OpeningDate: opening})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.DisableType(context.Background(), typeID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.Get(context.Background(), "u1", acc.ID)
+	if err != nil || got.TypeID != typeID {
+		t.Fatalf("Get after type disabled: %+v %v", got, err)
+	}
+
+	typ, err := svc.EnableType(context.Background(), typeID)
+	if err != nil || typ.Disabled {
+		t.Fatalf("EnableType: %+v %v", typ, err)
+	}
+}
+
+func TestDeleteTypeInUseRejectedRegardlessOfDisabled(t *testing.T) {
+	svc, _ := newService(t)
+	typeID := mustType(t, svc)
+	opening, _ := account.ParseDate("2024-01-01")
+	if _, err := svc.Create(context.Background(), "u1", account.New{Title: "X", TypeID: typeID, Currency: "EUR", OpeningDate: opening}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.DisableType(context.Background(), typeID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteType(context.Background(), typeID); !errors.Is(err, account.ErrTypeInUse) {
+		t.Fatalf("err = %v, want ErrTypeInUse", err)
 	}
 }
 

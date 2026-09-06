@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"strings"
 )
 
@@ -16,17 +17,31 @@ func NewService(store Store) *Service {
 	return &Service{store: store}
 }
 
+// resolveAssignableType checks that id may be (re)assigned as an account's
+// type_id: it must exist and not be disabled. A missing type_id is
+// ErrInvalidValue rather than ErrNotFound — it's caller-supplied input, the
+// same contract the old TypeExists-based check had.
+func (s *Service) resolveAssignableType(ctx context.Context, id string) error {
+	t, err := s.store.GetType(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return ErrInvalidValue
+	}
+	if err != nil {
+		return err
+	}
+	if t.Disabled {
+		return ErrTypeDisabled
+	}
+	return nil
+}
+
 // Create validates in and creates an account owned by ownerID.
 func (s *Service) Create(ctx context.Context, ownerID string, in New) (Account, error) {
 	if err := validateNew(in); err != nil {
 		return Account{}, err
 	}
-	ok, err := s.store.TypeExists(ctx, in.TypeID)
-	if err != nil {
+	if err := s.resolveAssignableType(ctx, in.TypeID); err != nil {
 		return Account{}, err
-	}
-	if !ok {
-		return Account{}, ErrInvalidValue
 	}
 	return s.store.Create(ctx, ownerID, in)
 }
@@ -56,7 +71,12 @@ func (s *Service) VisibleIDs(ctx context.Context, ownerID string) ([]string, err
 	return ids, nil
 }
 
-// Update validates and applies a partial change to ownerID's account.
+// Update validates and applies a partial change to ownerID's account. The
+// account's *effective* type_id — upd.TypeID if provided, else its current
+// one — must resolve to a non-disabled type: an account whose current type
+// has since been disabled therefore rejects every update (whatever else it
+// changes) until that same request also supplies a type_id for a
+// different, live type.
 func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (Account, error) {
 	current, err := s.store.Get(ctx, ownerID, id)
 	if err != nil {
@@ -65,14 +85,12 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (A
 	if err := validateUpdate(current, upd); err != nil {
 		return Account{}, err
 	}
+	effectiveTypeID := current.TypeID
 	if upd.TypeID != nil {
-		ok, err := s.store.TypeExists(ctx, *upd.TypeID)
-		if err != nil {
-			return Account{}, err
-		}
-		if !ok {
-			return Account{}, ErrInvalidValue
-		}
+		effectiveTypeID = *upd.TypeID
+	}
+	if err := s.resolveAssignableType(ctx, effectiveTypeID); err != nil {
+		return Account{}, err
 	}
 	return s.store.Update(ctx, ownerID, id, upd)
 }
@@ -100,30 +118,41 @@ func (s *Service) Owner(ctx context.Context, id string) (ownerID string, currenc
 	return s.store.Owner(ctx, id)
 }
 
-// ListTypes returns every account type.
+// ListTypes returns every account type, including disabled ones.
 func (s *Service) ListTypes(ctx context.Context) ([]Type, error) {
 	return s.store.ListTypes(ctx)
 }
 
 // CreateType creates a new account type. Authorization (admin-only) is the
 // handler's responsibility, matching internal/auth's convention.
-func (s *Service) CreateType(ctx context.Context, name string) (Type, error) {
-	if strings.TrimSpace(name) == "" {
+func (s *Service) CreateType(ctx context.Context, title, description string) (Type, error) {
+	if strings.TrimSpace(title) == "" {
 		return Type{}, ErrInvalidValue
 	}
-	return s.store.CreateType(ctx, name)
+	return s.store.CreateType(ctx, title, description)
 }
 
-// UpdateType renames an account type.
-func (s *Service) UpdateType(ctx context.Context, id, name string) (Type, error) {
-	if strings.TrimSpace(name) == "" {
+// UpdateType changes an account type's title and description.
+func (s *Service) UpdateType(ctx context.Context, id, title, description string) (Type, error) {
+	if strings.TrimSpace(title) == "" {
 		return Type{}, ErrInvalidValue
 	}
-	return s.store.UpdateType(ctx, id, name)
+	return s.store.UpdateType(ctx, id, title, description)
+}
+
+// DisableType blocks a type from being (re)assigned to an account, without
+// affecting any account already carrying it. Reversible via EnableType.
+func (s *Service) DisableType(ctx context.Context, id string) (Type, error) {
+	return s.store.SetTypeDisabled(ctx, id, true)
+}
+
+// EnableType reverses DisableType.
+func (s *Service) EnableType(ctx context.Context, id string) (Type, error) {
+	return s.store.SetTypeDisabled(ctx, id, false)
 }
 
 // DeleteType deletes an account type, or ErrTypeInUse if a non-deleted
-// account still references it.
+// account still references it — regardless of whether it is disabled.
 func (s *Service) DeleteType(ctx context.Context, id string) error {
 	return s.store.DeleteType(ctx, id)
 }
