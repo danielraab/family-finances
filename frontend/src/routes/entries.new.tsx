@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
+import { SignedAmountInput } from "../components/SignedAmountInput";
 import { TagInput } from "../components/TagInput";
 import { inputToAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
@@ -47,6 +48,8 @@ function NewEntry() {
   const [accountId, setAccountId] = useState(presetAccountId ?? "");
   const [kind, setKind] = useState<EntryKind>("transaction");
   const [amount, setAmount] = useState("");
+  const [transactionAmount, setTransactionAmount] = useState("");
+  const [transactionNegative, setTransactionNegative] = useState(true);
   const [bookingTimestamp, setBookingTimestamp] = useState(nowLocalInput);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -100,10 +103,20 @@ function NewEntry() {
       setInvalidField("title");
       return;
     }
-    const parsedAmount = inputToAmount(amount);
-    if (parsedAmount === null) {
-      setInvalidField("amount");
-      return;
+    let parsedAmount: number | null;
+    if (kind === "transaction") {
+      const magnitude = inputToAmount(transactionAmount);
+      if (magnitude === null || magnitude === 0) {
+        setInvalidField("amount");
+        return;
+      }
+      parsedAmount = transactionNegative ? -magnitude : magnitude;
+    } else {
+      parsedAmount = inputToAmount(amount);
+      if (parsedAmount === null) {
+        setInvalidField("amount");
+        return;
+      }
     }
     if (kind === "transaction" && !categoryId) {
       setInvalidField("category_id");
@@ -190,22 +203,43 @@ function NewEntry() {
           </div>
         </fieldset>
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          {t("entries.form.amount", { currency: account?.currency ?? "" })}
-          <input
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            inputMode="decimal"
-            placeholder="0.00"
-            className={inputClass}
-            required
-          />
-          {invalidField === "amount" && (
-            <span className="text-xs font-normal text-red-600 dark:text-red-400">
-              {t("entries.form.amountInvalid")}
-            </span>
-          )}
-        </label>
+        {kind === "transaction" ? (
+          <div className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.amount", { currency: account?.currency ?? "" })}
+            <SignedAmountInput
+              magnitude={transactionAmount}
+              onMagnitudeChange={setTransactionAmount}
+              negative={transactionNegative}
+              onNegativeChange={setTransactionNegative}
+              currency={account?.currency ?? ""}
+              invalid={invalidField === "amount"}
+            />
+            {invalidField === "amount" && (
+              <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                {inputToAmount(transactionAmount) === 0
+                  ? t("entries.form.amountZero")
+                  : t("entries.form.amountInvalid")}
+              </span>
+            )}
+          </div>
+        ) : (
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.amount", { currency: account?.currency ?? "" })}
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              inputMode="decimal"
+              placeholder="0.00"
+              className={inputClass}
+              required
+            />
+            {invalidField === "amount" && (
+              <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                {t("entries.form.amountInvalid")}
+              </span>
+            )}
+          </label>
+        )}
 
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           {t("entries.form.bookingTimestamp")}

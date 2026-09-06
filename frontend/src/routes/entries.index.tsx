@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
-import { formatAmount } from "../lib/amount";
+import { amountColorClass, formatAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
@@ -362,7 +362,11 @@ function EntriesListPage() {
                   {accounts.find((a) => a.id === entry.account_id)?.title ??
                     entry.account_id}
                 </td>
-                <td className="px-3 py-2 text-right font-mono tabular-nums">
+                <td
+                  className={`px-3 py-2 text-right font-mono tabular-nums ${amountColorClass(
+                    entry.amount,
+                  )} ${entry.kind === "balance_adjustment" ? "underline" : ""}`}
+                >
                   {formatAmount(
                     entry.amount,
                     accountCurrency(entry.account_id),

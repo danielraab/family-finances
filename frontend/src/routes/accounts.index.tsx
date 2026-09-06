@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
-import { formatAmount } from "../lib/amount";
+import { amountColorClass, formatAmount } from "../lib/amount";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
 
 export const Route = createFileRoute("/accounts/")({
@@ -145,7 +145,13 @@ function AccountsOverview() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-sm tabular-nums">
+                  <span
+                    className={`font-mono text-sm tabular-nums ${
+                      account.id in balances
+                        ? amountColorClass(balances[account.id] ?? 0)
+                        : ""
+                    }`}
+                  >
                     {account.id in balances
                       ? formatAmount(
                           balances[account.id] ?? 0,

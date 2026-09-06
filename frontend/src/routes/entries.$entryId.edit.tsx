@@ -9,6 +9,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
+import { SignedAmountInput } from "../components/SignedAmountInput";
 import { TagInput } from "../components/TagInput";
 import { amountToInput, inputToAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
@@ -43,6 +44,8 @@ function EditEntry() {
   const [tags, setTags] = useState<Tag[]>([]);
 
   const [amount, setAmount] = useState("");
+  const [transactionAmount, setTransactionAmount] = useState("");
+  const [transactionNegative, setTransactionNegative] = useState(true);
   const [bookingTimestamp, setBookingTimestamp] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -68,7 +71,12 @@ function EditEntry() {
       const e = entryRes.data ?? null;
       setEntry(e);
       if (e) {
-        setAmount(amountToInput(e.amount));
+        if (e.kind === "transaction") {
+          setTransactionNegative(e.amount < 0);
+          setTransactionAmount(amountToInput(Math.abs(e.amount)));
+        } else {
+          setAmount(amountToInput(e.amount));
+        }
         setBookingTimestamp(toLocalInput(e.booking_timestamp));
         setTitle(e.title);
         setDescription(e.description ?? "");
@@ -111,10 +119,20 @@ function EditEntry() {
       setInvalidField("title");
       return;
     }
-    const parsedAmount = inputToAmount(amount);
-    if (parsedAmount === null) {
-      setInvalidField("amount");
-      return;
+    let parsedAmount: number | null;
+    if (entry.kind === "transaction") {
+      const magnitude = inputToAmount(transactionAmount);
+      if (magnitude === null || magnitude === 0) {
+        setInvalidField("amount");
+        return;
+      }
+      parsedAmount = transactionNegative ? -magnitude : magnitude;
+    } else {
+      parsedAmount = inputToAmount(amount);
+      if (parsedAmount === null) {
+        setInvalidField("amount");
+        return;
+      }
     }
     if (entry.kind === "transaction" && !categoryId) {
       setInvalidField("category_id");
@@ -209,21 +227,42 @@ function EditEntry() {
           />
         </div>
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          {t("entries.form.amount", { currency: account?.currency ?? "" })}
-          <input
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            inputMode="decimal"
-            className={inputClass}
-            required
-          />
-          {invalidField === "amount" && (
-            <span className="text-xs font-normal text-red-600 dark:text-red-400">
-              {t("entries.form.amountInvalid")}
-            </span>
-          )}
-        </label>
+        {entry.kind === "transaction" ? (
+          <div className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.amount", { currency: account?.currency ?? "" })}
+            <SignedAmountInput
+              magnitude={transactionAmount}
+              onMagnitudeChange={setTransactionAmount}
+              negative={transactionNegative}
+              onNegativeChange={setTransactionNegative}
+              currency={account?.currency ?? ""}
+              invalid={invalidField === "amount"}
+            />
+            {invalidField === "amount" && (
+              <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                {inputToAmount(transactionAmount) === 0
+                  ? t("entries.form.amountZero")
+                  : t("entries.form.amountInvalid")}
+              </span>
+            )}
+          </div>
+        ) : (
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.amount", { currency: account?.currency ?? "" })}
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              inputMode="decimal"
+              className={inputClass}
+              required
+            />
+            {invalidField === "amount" && (
+              <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                {t("entries.form.amountInvalid")}
+              </span>
+            )}
+          </label>
+        )}
 
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           {t("entries.form.bookingTimestamp")}

@@ -49,3 +49,13 @@ export function inputToAmount(input: string): number | null {
   if (!Number.isFinite(n)) return null;
   return Math.round(n * 10 ** STORED_DECIMAL_PLACES);
 }
+
+/**
+ * Sign-based text color for a rendered amount — red/green/neutral, shared by
+ * every read-only display site and the entry form's amount field.
+ */
+export function amountColorClass(amount: number): string {
+  if (amount < 0) return "text-red-600 dark:text-red-400";
+  if (amount > 0) return "text-emerald-600 dark:text-emerald-400";
+  return "";
+}
