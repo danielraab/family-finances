@@ -70,7 +70,11 @@ function NewEntry() {
   }, []);
 
   const account = accounts.find((a) => a.id === accountId);
-  const categoryOptions = flattenCategoryTree(categories);
+  // A new entry never starts with a category, so a disabled one is simply
+  // never offered — unlike editing, there's no existing value to preserve.
+  const categoryOptions = flattenCategoryTree(
+    categories.filter((c) => !c.disabled),
+  );
 
   async function resolveTagIds(): Promise<string[]> {
     const ids: string[] = [];

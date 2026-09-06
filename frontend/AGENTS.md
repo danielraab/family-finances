@@ -52,7 +52,10 @@ git-ignored. Build-script allow-listing lives in `pnpm-workspace.yaml`
   `src/routes/settings.tsx` (+ `settings.index.tsx`, `settings.invitations.tsx`,
   `settings.users.tsx`, `settings.account-types.tsx`) → `/settings`,
   `/settings/invitations`, `/settings/users`, and `/settings/account-types`
-  — see "Settings" below.
+  — see "Settings" below. `src/routes/categories.tsx` → `/categories` — a
+  single self-contained route (no nested children — everything happens on
+  one page via dialogs) doing its own auth gate rather than splitting into
+  a layout + index pair — see "Categories" below.
 - Navigate with `@tanstack/react-router`'s `<Link to="…">` / `useNavigate()`;
   read the path with `useLocation()`. `to` is type-checked against the route
   tree.
@@ -183,6 +186,50 @@ per `AdminUser`) plus `<Outlet/>`.
   that type still renders as a non-selectable option (so the form doesn't
   look like it lost data) and the field stays invalid until a different,
   live type is chosen.
+
+## Categories
+
+`/categories` — the only page a category can be created or renamed from —
+lists the caller's own tree (`GET /api/categories`, per-user now, see
+`backend/AGENTS.md`'s "Categories" section) via `buildCategoryTree` in
+`src/lib/categoryTree.ts` (nests by `parent_id`, orders each level by
+`sort_order`) — a separate helper from that file's older
+`flattenCategoryTree`, which the entry form's category `<select>` still
+uses. Editing is entirely button-driven, deliberately no drag-and-drop, so
+it works the same on a phone as on a desktop:
+
+- Create (name + parent picker, defaulting to root) and rename go through
+  `POST`/`PATCH /api/categories`, the same inline-form-plus-table shape as
+  the Account Types settings tab.
+- ▲/▼ buttons call `POST /api/categories/{id}/move-up` / `/move-down`,
+  disabled at either end of a sibling group; the page re-fetches the whole
+  tree after a move rather than patching sort orders locally, kept simple.
+- A "Move to…" dialog (not a menu item next to the row — the reparent target
+  needs its own picker) lists the tree via `flattenCategoryTree`, filtered
+  to exclude the category's own subtree client-side (`subtreeIds` in
+  `categories.tsx`) as a UX nicety; the backend's cycle check
+  (`ErrCycle`, `422`) is still the real guard, surfaced as an inline dialog
+  error.
+- Disable/enable call `POST /api/categories/{id}/disable` / `/enable`
+  directly (no confirmation dialog needed — cheaply reversible, unlike
+  delete).
+- Delete is disabled client-side (greyed, with a hint) whenever the node
+  has any child in the already-fetched tree; whether it's referenced by an
+  entry isn't known client-side, so — mirroring
+  `settings.account-types.tsx`'s reactive-delete-error decision — the
+  button stays enabled for a childless node and a `409` from
+  `DELETE /api/categories/{id}` (still in use by an entry) surfaces as an
+  inline error instead of removing the row, behind the same
+  `@headlessui/react` `Dialog` confirmation pattern as everywhere else in
+  this app.
+- The entry form's category picker (`entries.new.tsx` /
+  `entries.$entryId.edit.tsx`) excludes disabled categories from new
+  selections; on the edit page, a category disabled since the entry was
+  categorized still renders as the current, selected-but-non-selectable
+  option (mirroring `AccountForm.tsx`'s disabled-account-type handling) —
+  but unlike a disabled account type, it does **not** block saving an
+  otherwise-untouched category, matching the backend's "only a category
+  explicitly supplied is validated" rule.
 
 ## Build output
 

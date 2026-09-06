@@ -32,3 +32,34 @@ export function flattenCategoryTree(categories: Category[]): CategoryOption[] {
   walk("", 0);
   return out;
 }
+
+export type CategoryNode = Category & { children: CategoryNode[] };
+
+/**
+ * Builds the nested tree the /categories management page renders: each
+ * node's children ordered by sort_order (falling back to id for a stable
+ * tiebreak), for the ▲/▼ reorder controls and the parent/child nesting
+ * itself.
+ */
+export function buildCategoryTree(categories: Category[]): CategoryNode[] {
+  const byParent = new Map<string, Category[]>();
+  for (const c of categories) {
+    const key = c.parent_id ?? "";
+    const siblings = byParent.get(key) ?? [];
+    siblings.push(c);
+    byParent.set(key, siblings);
+  }
+  for (const siblings of byParent.values()) {
+    siblings.sort(
+      (a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id),
+    );
+  }
+
+  function build(parentKey: string): CategoryNode[] {
+    return (byParent.get(parentKey) ?? []).map((c) => ({
+      ...c,
+      children: build(c.id),
+    }));
+  }
+  return build("");
+}

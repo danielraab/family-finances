@@ -2,7 +2,8 @@
   "nav": {
     "home": "Home",
     "accounts": "Accounts",
-    "entries": "Entries"
+    "entries": "Entries",
+    "categories": "Categories"
   },
   "sidebar": {
     "closeSidebar": "Close sidebar"
@@ -248,6 +249,7 @@
       "categoryPlaceholder": "Select a category…",
       "categoryNone": "No category",
       "categoryRequired": "Category is required for a transaction.",
+      "categoryDisabledOption": "disabled",
       "tags": "Tags",
       "tagsPlaceholder": "Add tag…",
       "removeTag": "Remove {{name}}",
@@ -263,6 +265,60 @@
       "delete": "Delete entry",
       "confirmDeleteTitle": "Delete this entry?",
       "confirmDeleteBody": "This cannot be undone here."
+    }
+  },
+  "categories": {
+    "title": "Categories",
+    "empty": "No categories yet. Create one to get started.",
+    "loadError": "Couldn't load your categories — please try again.",
+    "deleteError": "Couldn't delete \"{{name}}\" — it still has subcategories or entries referencing it.",
+    "create": {
+      "nameLabel": "Name",
+      "parentLabel": "Parent",
+      "parentRoot": "No parent (root category)",
+      "submit": "Add category",
+      "submitting": "Adding…",
+      "error": "Couldn't create the category — please try again."
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "actions": {
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "moveTo": "Move to…",
+      "edit": "Rename",
+      "disable": "Disable",
+      "enable": "Enable",
+      "delete": "Delete",
+      "deleteDisabledHint": "Only possible once it has no subcategories and no entry uses it."
+    },
+    "edit": {
+      "heading": "Rename category",
+      "nameLabel": "Name",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "error": "Couldn't save — please try again."
+    },
+    "move": {
+      "heading": "Move \"{{name}}\"",
+      "parentLabel": "New parent",
+      "root": "Make root category",
+      "confirm": "Move",
+      "moving": "Moving…",
+      "error": "Couldn't move this category there."
+    },
+    "confirm": {
+      "disableTitle": "Disable \"{{name}}\"?",
+      "disableBody": "It can no longer be selected on a new or edited entry. Entries already using it are unaffected, and this can be reversed at any time.",
+      "enableTitle": "Enable \"{{name}}\"?",
+      "enableBody": "It can be selected on entries again.",
+      "deleteTitle": "Delete \"{{name}}\"?",
+      "deleteBody": "This is only possible while it has no subcategories and no entry uses it. This cannot be undone here.",
+      "cancel": "Cancel",
+      "confirmAction": "Confirm"
     }
   }
 }

@@ -170,7 +170,15 @@ function EditEntry() {
     );
   }
 
-  const categoryOptions = flattenCategoryTree(categories);
+  // A category disabled since this entry was categorized still renders as
+  // the current, selected value (so the form doesn't look like it lost
+  // data) but isn't offered as a choice for switching to a different one —
+  // mirroring AccountForm.tsx's disabled account-type handling. Leaving it
+  // untouched and saving other fields is unaffected either way.
+  const currentCategory = categories.find((c) => c.id === categoryId);
+  const categoryOptions = flattenCategoryTree(
+    categories.filter((c) => !c.disabled || c.id === categoryId),
+  );
 
   return (
     <section className="mx-auto flex w-full max-w-xl flex-col gap-8 px-6 py-12 sm:px-10">
@@ -265,8 +273,15 @@ function EditEntry() {
                 : t("entries.form.categoryPlaceholder")}
             </option>
             {categoryOptions.map((c) => (
-              <option key={c.id} value={c.id}>
+              <option
+                key={c.id}
+                value={c.id}
+                disabled={currentCategory?.disabled && c.id === categoryId}
+              >
                 {c.label}
+                {currentCategory?.disabled && c.id === categoryId
+                  ? ` (${t("entries.form.categoryDisabledOption")})`
+                  : ""}
               </option>
             ))}
           </select>

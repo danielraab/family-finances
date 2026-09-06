@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountsRouteImport } from './routes/accounts'
+import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as EntriesRouteImport } from './routes/entries'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -35,6 +36,11 @@ const IndexRoute = IndexRouteImport.update({
 const AccountsRoute = AccountsRouteImport.update({
   id: '/accounts',
   path: '/accounts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CategoriesRoute = CategoriesRouteImport.update({
+  id: '/categories',
+  path: '/categories',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntriesRoute = EntriesRouteImport.update({
@@ -116,6 +122,7 @@ const EntriesEntryIdEditRoute = EntriesEntryIdEditRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRouteWithChildren
+  '/categories': typeof CategoriesRoute
   '/entries': typeof EntriesRouteWithChildren
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -134,6 +141,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/categories': typeof CategoriesRoute
   '/login': typeof LoginRoute
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
@@ -151,6 +159,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRouteWithChildren
+  '/categories': typeof CategoriesRoute
   '/entries': typeof EntriesRouteWithChildren
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/accounts'
+    | '/categories'
     | '/entries'
     | '/login'
     | '/settings'
@@ -190,6 +200,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/categories'
     | '/login'
     | '/accounts/new'
     | '/entries/new'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/accounts'
+    | '/categories'
     | '/entries'
     | '/login'
     | '/settings'
@@ -226,6 +238,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountsRoute: typeof AccountsRouteWithChildren
+  CategoriesRoute: typeof CategoriesRoute
   EntriesRoute: typeof EntriesRouteWithChildren
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -245,6 +258,13 @@ declare module '@tanstack/react-router' {
       path: '/accounts'
       fullPath: '/accounts'
       preLoaderRoute: typeof AccountsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/categories': {
+      id: '/categories'
+      path: '/categories'
+      fullPath: '/categories'
+      preLoaderRoute: typeof CategoriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entries': {
@@ -420,6 +440,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountsRoute: AccountsRouteWithChildren,
+  CategoriesRoute: CategoriesRoute,
   EntriesRoute: EntriesRouteWithChildren,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRouteWithChildren,

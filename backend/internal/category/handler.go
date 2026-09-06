@@ -38,6 +38,10 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("POST /api/categories", h.create)
 	h.mux.HandleFunc("PATCH /api/categories/{id}", h.update)
 	h.mux.HandleFunc("DELETE /api/categories/{id}", h.delete)
+	h.mux.HandleFunc("POST /api/categories/{id}/disable", h.disable)
+	h.mux.HandleFunc("POST /api/categories/{id}/enable", h.enable)
+	h.mux.HandleFunc("POST /api/categories/{id}/move-up", h.moveUp)
+	h.mux.HandleFunc("POST /api/categories/{id}/move-down", h.moveDown)
 
 	return h
 }
@@ -50,11 +54,12 @@ type categoryBody struct {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	if _, ok := auth.UserFromContext(r.Context()); !ok {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
 		writeUnauthorized(w)
 		return
 	}
-	cats, err := h.svc.List(r.Context())
+	cats, err := h.svc.List(r.Context(), user.ID)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -66,7 +71,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
 		return
 	}
 	var body categoryBody
@@ -78,7 +85,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if body.Name != nil {
 		in.Name = *body.Name
 	}
-	cat, err := h.svc.Create(r.Context(), in)
+	cat, err := h.svc.Create(r.Context(), user.ID, in)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -87,7 +94,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
 		return
 	}
 	var body categoryBody
@@ -95,7 +104,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	cat, err := h.svc.Update(r.Context(), r.PathValue("id"), Update{Name: body.Name, ParentID: body.ParentID})
+	cat, err := h.svc.Update(r.Context(), user.ID, r.PathValue("id"), Update{Name: body.Name, ParentID: body.ParentID})
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -104,29 +113,72 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
 		return
 	}
-	if err := h.svc.Delete(r.Context(), r.PathValue("id")); err != nil {
+	if err := h.svc.Delete(r.Context(), user.ID, r.PathValue("id")); err != nil {
 		h.renderError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// requireAdmin returns the authenticated admin user, or writes 401/403 and
-// returns ok=false — the same gate internal/auth established.
-func requireAdmin(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
+func (h *Handler) disable(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeUnauthorized(w)
-		return auth.User{}, false
+		return
 	}
-	if !user.IsAdmin {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return auth.User{}, false
+	cat, err := h.svc.Disable(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
 	}
-	return user, true
+	writeJSON(w, http.StatusOK, cat)
+}
+
+func (h *Handler) enable(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	cat, err := h.svc.Enable(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, cat)
+}
+
+func (h *Handler) moveUp(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	cat, err := h.svc.MoveUp(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, cat)
+}
+
+func (h *Handler) moveDown(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	cat, err := h.svc.MoveDown(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, cat)
 }
 
 func decodeJSON(r *http.Request, v any) error {

@@ -1,14 +1,4 @@
-# entry-categories Specification
-
-## Purpose
-
-A per-user, tree-structured category lookup entries are classified by —
-each user fully self-serves their own tree, no admin involvement. See
-`account-entries` for how a category is required for a transaction and
-optional for a balance adjustment, and for the owner-match and
-not-disabled rules an entry's `category_id` must satisfy.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Categories form a per-user tree the owner fully self-serves
 
@@ -88,6 +78,8 @@ detection is scoped to the caller's own tree.
 - **WHEN** a user updates category A, whose child is B, to set A's
   `parent_id` to B
 - **THEN** the response is `422` and no category's `parent_id` is changed
+
+## ADDED Requirements
 
 ### Requirement: Disabling a category blocks new use without touching history
 

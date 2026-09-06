@@ -44,7 +44,7 @@ func newEntryFixture(t *testing.T) entryFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cat, err := catStore.Create(ctx, category.New{Name: "Groceries-entry"})
+	cat, err := catStore.Create(ctx, owner.ID, category.New{Name: "Groceries-entry"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,11 +248,11 @@ func TestPGEntryListFiltersByCategorySubtree(t *testing.T) {
 	f := newEntryFixture(t)
 	ctx := context.Background()
 
-	child, err := f.cats.Create(ctx, category.New{ParentID: &f.catID, Name: "Snacks-entry"})
+	child, err := f.cats.Create(ctx, f.owner, category.New{ParentID: &f.catID, Name: "Snacks-entry"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := f.cats.Create(ctx, category.New{Name: "Other-entry"})
+	other, err := f.cats.Create(ctx, f.owner, category.New{Name: "Other-entry"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestPGEntryListFiltersByCategorySubtree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	subtree, err := f.cats.Subtree(ctx, f.catID)
+	subtree, err := f.cats.Subtree(ctx, f.owner, f.catID)
 	if err != nil {
 		t.Fatal(err)
 	}

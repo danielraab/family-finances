@@ -300,6 +300,45 @@ any non-deleted account still references it, disabled or not — disable is
 the reversible off-ramp, delete stays the one-way cleanup for a type
 nothing uses anymore.
 
+## Categories
+
+`internal/category`'s tree-structured `categories` lookup is **per-user**,
+not admin-managed — every operation is scoped to `owner_id = <authenticated
+caller>` (`Store` methods take an explicit `ownerID` parameter, mirroring
+`internal/account`), and a category belonging to a different owner reads as
+`ErrNotFound` (`404`), never `403`. There is no `is_admin` gate on any
+category endpoint. `parent_id` self-references form the tree, no depth
+limit; a self/descendant reparent is rejected (`ErrCycle`, `422`).
+
+- **`disabled`** (reversible, mirroring `account_types.disabled`): toggled
+  via `POST /api/categories/{id}/disable` / `/enable`. It blocks the
+  category from being **newly** selected on an entry (`internal/entry`'s
+  `CategoryLookup.Usable` checks it) without touching any entry or child
+  category already referencing it — and unlike a disabled account type,
+  it does *not* force reselection on an unrelated edit: an update that
+  doesn't touch `category_id` never re-checks the entry's current category.
+- **Soft delete** (`deleted_at`, one-way, no undelete) replaces what used to
+  be a hard delete: `DELETE /api/categories/{id}` is rejected (`409`
+  `ErrInUse`) while the category has a non-deleted child or is referenced
+  by a non-deleted entry. `disabled` and delete are independent — a
+  category need not be disabled first, and disabling never affects whether
+  it can subsequently be deleted.
+- **`sort_order`** orders siblings only (same `owner_id` + `parent_id`), not
+  the whole tree. A new category is appended to the end of its sibling
+  group; so is a reparented one, into its new parent's group.
+  `POST /api/categories/{id}/move-up` / `/move-down` each swap `sort_order`
+  with the immediate previous/next sibling — a no-op (`200`, unchanged) at
+  either end of the sibling list, never an error.
+- No naming-uniqueness constraint — deliberately dropped rather than
+  reworked into an owner-scoped one; duplicate sibling names are allowed.
+
+`internal/entry`'s `CategoryLookup` interface (`*category.Service` satisfies
+it structurally) is `Usable(ctx, ownerID, categoryID) (bool, error)` —
+exists, owned by `ownerID`, and not disabled, consulted only when a
+category is being newly set (creation, or an update that explicitly
+supplies `category_id`) — and `Subtree(ctx, ownerID, categoryID)
+([]string, error)`, scoped to that owner's own tree.
+
 ## Serving the frontend
 
 The compiled binary embeds and serves the frontend's Vite bundle — there is

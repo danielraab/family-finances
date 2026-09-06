@@ -1,8 +1,8 @@
-// Package category owns the global, tree-structured, admin-managed
-// category lookup that every transaction entry references. It follows the
-// repo's four-file shape (category.go, store.go, service.go, handler.go).
-// It imports internal/auth only for auth.UserFromContext — never its Store
-// or a database driver.
+// Package category owns per-user, tree-structured categories that entries
+// are classified by. Each owner fully self-serves their own tree — no
+// admin involvement. It follows the repo's four-file shape (category.go,
+// store.go, service.go, handler.go). It imports internal/auth only for
+// auth.UserFromContext — never its Store or a database driver.
 package category
 
 import (
@@ -11,13 +11,17 @@ import (
 	"time"
 )
 
-// Category is one node in the global category tree. ParentID is nil for a
-// root category.
+// Category is one node in a category tree private to its owner. ParentID
+// is nil for a root category.
 type Category struct {
-	ID        string    `json:"id"`
-	ParentID  *string   `json:"parent_id,omitempty"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `json:"id"`
+	ParentID  *string    `json:"parent_id,omitempty"`
+	Name      string     `json:"name"`
+	SortOrder int        `json:"sort_order"`
+	Disabled  bool       `json:"disabled"`
+	CreatedAt time.Time  `json:"created_at"`
+	OwnerID   string     `json:"-"`
+	DeletedAt *time.Time `json:"-"`
 }
 
 // OptionalID distinguishes a JSON key that is absent (Set is false) from
@@ -43,14 +47,18 @@ func (o *OptionalID) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// New is the input to creating a category.
+// New is the input to creating a category. SortOrder and Disabled are
+// never client-settable at creation — a new category always starts
+// enabled and appended to the end of its sibling group (see Service.Create).
 type New struct {
 	ParentID *string
 	Name     string
 }
 
 // Update is a partial change; a nil Name leaves it untouched. ParentID uses
-// OptionalID so a category can be explicitly reparented to root.
+// OptionalID so a category can be explicitly reparented to root. Disabled
+// and SortOrder are changed only through their own dedicated operations
+// (Disable/Enable, MoveUp/MoveDown), never through Update.
 type Update struct {
 	Name     *string
 	ParentID OptionalID
