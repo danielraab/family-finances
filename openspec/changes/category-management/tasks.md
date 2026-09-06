@@ -83,7 +83,11 @@
   list; a new category and a reparented category both land at the end of
   their (new) sibling group.
 - [x] 5.2 `internal/storage/postgres` integration tests for the migration
-  and every new/changed store method.
+  and every new/changed store method. Written, but **not run** in this
+  environment (no Docker/Postgres available here) — they self-skip locally
+  without `DATABASE_URL` per `backend/AGENTS.md`; run them for real via
+  `docker compose up -d db` + `go test ./internal/storage/postgres/...`, or
+  let the `backend-integration` CI job do it on the PR.
 
 ## 6. API contract
 
@@ -103,21 +107,21 @@
 
 ## 7. Frontend: sidebar + routing
 
-- [ ] 7.1 `frontend/src/components/Sidebar.tsx`: add a "Categories" entry
+- [x] 7.1 `frontend/src/components/Sidebar.tsx`: add a "Categories" entry
   to `NAV` (after "Entries"), with its own inline-SVG glyph following the
   existing `HomeGlyph`/`AccountsGlyph`/`EntriesGlyph` pattern.
-- [ ] 7.2 New route(s) under `frontend/src/routes/categories*.tsx`
+- [x] 7.2 New route(s) under `frontend/src/routes/categories*.tsx`
   (`/categories`), redirecting an anonymous visitor to `/login` the same
   way `entries.tsx`/`accounts.tsx` do.
 
 ## 8. Frontend: categories page
 
-- [ ] 8.1 Fetch `GET /api/categories` on mount; build the nested tree from
+- [x] 8.1 Fetch `GET /api/categories` on mount; build the nested tree from
   the flat list (group by `parent_id`, sort each group's children by
   `sort_order`) — a new tree-building helper alongside (not replacing)
   `frontend/src/lib/categoryTree.ts`'s existing flatten-for-`<select>`
   helper, which the entry form still needs.
-- [ ] 8.2 Render each node as a mobile-friendly row/card (see `design.md`):
+- [x] 8.2 Render each node as a mobile-friendly row/card (see `design.md`):
   name, disabled/enabled status, and action buttons — ▲/▼ (disabled at the
   ends of a sibling group), "Move to…", edit/rename, disable/enable
   toggle, delete (disabled client-side when the node has any child or any
@@ -126,37 +130,40 @@
   `account-types-settings-tab`'s reactive-delete-error decision: attempt
   the delete and surface a `409` inline if the client-side guess was
   stale).
-- [ ] 8.3 Create form/button (name + parent picker, defaulting to root or
+- [x] 8.3 Create form/button (name + parent picker, defaulting to root or
   the currently viewed node) calling `POST /api/categories`; rename calling
   `PATCH /api/categories/{id}` with `name`.
-- [ ] 8.4 ▲/▼ buttons call `POST /api/categories/{id}/move-up` /
+- [x] 8.4 ▲/▼ buttons call `POST /api/categories/{id}/move-up` /
   `/move-down` and refresh the affected siblings' order from the response
   (or a full re-fetch, kept simple).
-- [ ] 8.5 "Move to…" opens a picker (e.g. a `@headlessui/react` `Dialog` or
+- [x] 8.5 "Move to…" opens a picker (e.g. a `@headlessui/react` `Dialog` or
   `Listbox`, matching this codebase's existing component choices) listing
   the caller's tree plus a "make root" option; selecting calls
   `PATCH /api/categories/{id}` with `parent_id`; a `422` (cycle) surfaces
   as an inline error without mutating the displayed tree.
-- [ ] 8.6 Disable/enable toggle calls `POST /api/categories/{id}/disable`
+- [x] 8.6 Disable/enable toggle calls `POST /api/categories/{id}/disable`
   or `/enable`.
-- [ ] 8.7 Delete goes through a `@headlessui/react` `Dialog` confirmation,
+- [x] 8.7 Delete goes through a `@headlessui/react` `Dialog` confirmation,
   same pattern as the Users/Account Types settings tabs; a `409` surfaces
   as an inline error rather than removing the node from the list.
 
 ## 9. Frontend: entry form category picker
 
-- [ ] 9.1 `frontend/src/routes/entries.new.tsx` /
+- [x] 9.1 `frontend/src/routes/entries.new.tsx` /
   `entries.$entryId.edit.tsx`: filter the flattened category list (from
   `frontend/src/lib/categoryTree.ts`) to non-disabled categories for a new
   selection; when editing an entry whose current `category_id` is
-  disabled, include it as an extra, visibly-disabled option so the current
-  value still renders, and treat the field as invalid until a different
-  selection is made — same mechanism `AccountForm.tsx` already uses for a
-  disabled account type.
+  disabled, keep it in the list as a visibly-disabled, non-reselectable
+  option so the current value still renders — same visual treatment
+  `AccountForm.tsx` uses for a disabled account type, but **not** its
+  reselection-forcing validation: leaving the field untouched and saving
+  other changes stays allowed (see the corrected `specs/web-client-entries`
+  and `specs/account-entries` deltas — a disabled category, unlike a
+  disabled account type, never blocks an otherwise-unrelated edit).
 
 ## 10. i18n
 
-- [ ] 10.1 Add new keys to `frontend/src/i18n/locales/en.json` first, then
+- [x] 10.1 Add new keys to `frontend/src/i18n/locales/en.json` first, then
   `de.json`: sidebar label, page title/empty state, create/rename form
   labels, move/reorder/disable/enable/delete action labels and confirm
   copy, the "category is disabled — choose another" hint on the entry
@@ -164,25 +171,34 @@
 
 ## 11. Verify
 
-- [ ] 11.1 `cd backend && gofmt -l . && go vet ./... && go test ./...`
-  (including `internal/storage/postgres` integration tests against a real
-  Postgres, per `backend/AGENTS.md`).
-- [ ] 11.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build`.
-- [ ] 11.3 Manual pass on `/categories`, including a narrow (mobile)
-  viewport: create a small multi-level tree; reorder siblings; reparent via
-  "Move to…" (including a rejected cycle attempt); disable a category and
-  confirm it's excluded from the entry form's picker for a new selection
-  while an entry already on it still shows it read-only; confirm delete is
-  disabled on any category with children or entry references and enabled
-  once neither applies.
-- [ ] 11.4 Update `backend/AGENTS.md`'s "Account types" section (or add an
-  equivalent "Categories" note) and `frontend/AGENTS.md`'s routing section
-  if their existing descriptions of `internal/category` or the sidebar/
-  routes would otherwise go stale.
+- [x] 11.1 `cd backend && gofmt -l . && go vet ./... && go test ./...` — all
+  pass. The `internal/storage/postgres` integration tests did **not** run
+  against a real Postgres in this environment (no Docker daemon available
+  here); they self-skip without `DATABASE_URL`. Run them for real before
+  merging (`docker compose up -d db` + `go test
+  ./internal/storage/postgres/...`), or via the `backend-integration` CI job.
+- [x] 11.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build` — all
+  pass (`pnpm generate-routes` was also needed once, for the new route).
+- [ ] 11.3 Manual pass on `/categories` in a real browser against the real
+  backend — **not done**: no Postgres available in this environment to run
+  the backend against. What *was* verified here: the built frontend
+  compiles/type-checks/lints clean, and a headless-browser check of
+  `/categories` against the Vite dev server (no backend reachable) shows
+  the auth-gate redirect to `/login` working with no console/page errors.
+  Still needs a real pass against a running backend: create a small
+  multi-level tree; reorder siblings; reparent via "Move to…" (including a
+  rejected cycle attempt); disable a category and confirm it's excluded
+  from the entry form's picker for a new selection while an entry already
+  on it still shows it read-only and unrelated edits still save; confirm
+  delete is disabled on any category with children and enabled once none
+  apply, with a live `409` (entry-referenced) surfacing inline; try it on a
+  narrow (mobile) viewport.
+- [x] 11.4 Update `backend/AGENTS.md`'s (new "Categories" section) and
+  `frontend/AGENTS.md`'s routing section + new "Categories" section.
 
 ## 12. Spec sync
 
-- [ ] 12.1 Apply this change's `specs/entry-categories`, `specs/
+- [x] 12.1 Apply this change's `specs/entry-categories`, `specs/
   account-entries`, and `specs/web-client-entries` deltas onto
   `openspec/specs/` by hand (the `openspec` CLI is unavailable in this
   environment, as for prior changes); add `specs/web-client-categories` as

@@ -423,10 +423,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the full category tree */
+        /** List the caller's category tree */
         get: operations["getCategories"];
         put?: never;
-        /** Create a category (admin only) */
+        /**
+         * Create a category
+         * @description Appended to the end of its sibling group (same parent_id, or root if omitted).
+         */
         post: operations["postCategories"];
         delete?: never;
         options?: never;
@@ -445,17 +448,94 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Delete a category (admin only)
-         * @description 409 if it has child categories or is referenced by a non-deleted entry — deletion is never cascaded.
+         * Delete a category
+         * @description A soft delete (irreversible — no undelete). 409 if it has a non-deleted child category or is referenced by a non-deleted entry — deletion is never cascaded.
          */
         delete: operations["deleteCategory"];
         options?: never;
         head?: never;
         /**
-         * Update a category (admin only)
-         * @description Reparenting onto the category itself or one of its own descendants is rejected with 422.
+         * Update a category
+         * @description Reparenting onto the category itself or one of its own descendants is rejected with 422. A reparent is appended to the end of the new parent's sibling group.
          */
         patch: operations["patchCategory"];
+        trace?: never;
+    };
+    "/api/categories/{id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable a category
+         * @description Reversible via enable. Blocks the category from being newly selected on an entry; does not affect any entry or child category already referencing it.
+         */
+        post: operations["postCategoryDisable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/categories/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-enable a disabled category */
+        post: operations["postCategoryEnable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/categories/{id}/move-down": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a category down among its siblings
+         * @description Swaps sort_order with the immediate next sibling (same parent_id). A no-op — 200, order unchanged — if the category is already last among its siblings.
+         */
+        post: operations["postCategoryMoveDown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/categories/{id}/move-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a category up among its siblings
+         * @description Swaps sort_order with the immediate previous sibling (same parent_id). A no-op — 200, order unchanged — if the category is already first among its siblings.
+         */
+        post: operations["postCategoryMoveUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/entries": {
@@ -682,10 +762,14 @@ export interface components {
         Category: {
             /** Format: date-time */
             created_at: string;
+            /** @description Blocks the category from being newly selected on an entry; existing entries and child categories referencing it are unaffected. */
+            disabled: boolean;
             id: string;
             name: string;
             /** @description Absent for a root category. */
             parent_id?: string;
+            /** @description Meaningful only among siblings sharing the same parent_id. */
+            sort_order: number;
         };
         CategoryWrite: {
             name?: string;
@@ -1621,7 +1705,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Every category, including its parent_id. */
+            /** @description Every non-deleted category the caller owns, including its parent_id. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1657,7 +1741,6 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
         };
     };
     deleteCategory: {
@@ -1679,7 +1762,6 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };
@@ -1710,9 +1792,104 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    postCategoryDisable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The category, now disabled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    postCategoryEnable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The category, now enabled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    postCategoryMoveDown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The category, with its updated (or unchanged) sort_order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    postCategoryMoveUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The category, with its updated (or unchanged) sort_order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getEntries: {

@@ -2,7 +2,8 @@
   "nav": {
     "home": "Start",
     "accounts": "Konten",
-    "entries": "Buchungen"
+    "entries": "Buchungen",
+    "categories": "Kategorien"
   },
   "sidebar": {
     "closeSidebar": "Seitenleiste schließen"
@@ -248,6 +249,7 @@
       "categoryPlaceholder": "Kategorie auswählen…",
       "categoryNone": "Keine Kategorie",
       "categoryRequired": "Für eine Transaktion ist eine Kategorie erforderlich.",
+      "categoryDisabledOption": "deaktiviert",
       "tags": "Tags",
       "tagsPlaceholder": "Tag hinzufügen…",
       "removeTag": "{{name}} entfernen",
@@ -263,6 +265,60 @@
       "delete": "Buchung löschen",
       "confirmDeleteTitle": "Diese Buchung löschen?",
       "confirmDeleteBody": "Dies kann hier nicht rückgängig gemacht werden."
+    }
+  },
+  "categories": {
+    "title": "Kategorien",
+    "empty": "Noch keine Kategorien. Erstelle eine, um loszulegen.",
+    "loadError": "Kategorien konnten nicht geladen werden — bitte versuche es erneut.",
+    "deleteError": "„{{name}}“ konnte nicht gelöscht werden — es gibt noch Unterkategorien oder Buchungen, die darauf verweisen.",
+    "create": {
+      "nameLabel": "Name",
+      "parentLabel": "Übergeordnete Kategorie",
+      "parentRoot": "Keine (oberste Ebene)",
+      "submit": "Kategorie hinzufügen",
+      "submitting": "Wird hinzugefügt…",
+      "error": "Kategorie konnte nicht erstellt werden — bitte versuche es erneut."
+    },
+    "status": {
+      "active": "Aktiv",
+      "disabled": "Deaktiviert"
+    },
+    "actions": {
+      "moveUp": "Nach oben",
+      "moveDown": "Nach unten",
+      "moveTo": "Verschieben…",
+      "edit": "Umbenennen",
+      "disable": "Deaktivieren",
+      "enable": "Aktivieren",
+      "delete": "Löschen",
+      "deleteDisabledHint": "Erst möglich, wenn sie keine Unterkategorien und keine Buchungen mehr hat."
+    },
+    "edit": {
+      "heading": "Kategorie umbenennen",
+      "nameLabel": "Name",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "cancel": "Abbrechen",
+      "error": "Speichern fehlgeschlagen — bitte versuche es erneut."
+    },
+    "move": {
+      "heading": "„{{name}}“ verschieben",
+      "parentLabel": "Neue übergeordnete Kategorie",
+      "root": "Zur obersten Ebene machen",
+      "confirm": "Verschieben",
+      "moving": "Wird verschoben…",
+      "error": "Verschieben an diese Stelle nicht möglich."
+    },
+    "confirm": {
+      "disableTitle": "„{{name}}“ deaktivieren?",
+      "disableBody": "Sie kann dann nicht mehr für neue oder bearbeitete Buchungen ausgewählt werden. Buchungen, die sie bereits verwenden, sind davon nicht betroffen, und dies kann jederzeit rückgängig gemacht werden.",
+      "enableTitle": "„{{name}}“ aktivieren?",
+      "enableBody": "Sie kann wieder für Buchungen ausgewählt werden.",
+      "deleteTitle": "„{{name}}“ löschen?",
+      "deleteBody": "Dies ist nur möglich, solange sie keine Unterkategorien hat und keine Buchung sie verwendet. Dies kann hier nicht rückgängig gemacht werden.",
+      "cancel": "Abbrechen",
+      "confirmAction": "Bestätigen"
     }
   }
 }
