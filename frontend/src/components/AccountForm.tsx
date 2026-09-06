@@ -6,6 +6,22 @@ import { compact } from "../lib/compact";
 
 type AccountType = components["schemas"]["AccountType"];
 type AccountCreate = components["schemas"]["AccountCreate"];
+type Account = components["schemas"]["Account"];
+
+/** Feature-detects Intl.supportedValuesOf, absent from older engines. */
+function listCurrencies(): string[] {
+  const supportedValuesOf = (
+    Intl as unknown as { supportedValuesOf?: (key: string) => string[] }
+  ).supportedValuesOf;
+  if (!supportedValuesOf) {
+    return [];
+  }
+  try {
+    return supportedValuesOf("currency").map((code) => code.toUpperCase());
+  } catch {
+    return [];
+  }
+}
 
 export type AccountFormValues = {
   title: string;
@@ -64,13 +80,31 @@ export function AccountForm({
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
   const [types, setTypes] = useState<AccountType[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [currencies] = useState(listCurrencies);
   const [invalidField, setInvalidField] = useState<string | null>(null);
 
   useEffect(() => {
-    api.GET("/api/account-types").then(({ data }) => {
-      if (data) setTypes(data);
-    });
+    Promise.all([api.GET("/api/account-types"), api.GET("/api/accounts")]).then(
+      ([typesRes, accountsRes]) => {
+        if (typesRes.data) setTypes(typesRes.data);
+        if (accountsRes.data) setAccounts(accountsRes.data);
+      },
+    );
   }, []);
+
+  const institutes = Array.from(
+    new Set(
+      accounts
+        .map((account) => account.financial_institute?.trim())
+        .filter((value): value is string => !!value),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+  const instituteSuggestions = institutes.filter((institute) =>
+    institute
+      .toLowerCase()
+      .includes(values.financial_institute.trim().toLowerCase()),
+  );
 
   // The account's current type may have been disabled since it was
   // assigned — still shown (as a non-selectable option) so the form
@@ -166,18 +200,28 @@ export function AccountForm({
         )}
       </label>
 
-      <div className="flex gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row">
         <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">
           {t("accounts.form.currency")}
-          <input
+          <select
             value={values.currency}
-            maxLength={3}
-            onChange={(event) =>
-              set("currency", event.target.value.toUpperCase())
-            }
-            className={`${inputClass} uppercase`}
+            onChange={(event) => set("currency", event.target.value)}
+            className={inputClass}
             required
-          />
+          >
+            <option value="" disabled>
+              {t("accounts.form.currencyPlaceholder")}
+            </option>
+            {!currencies.includes(values.currency) &&
+              values.currency !== "" && (
+                <option value={values.currency}>{values.currency}</option>
+              )}
+            {currencies.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
           {invalidField === "currency" && (
             <span className="text-xs font-normal text-red-600 dark:text-red-400">
               {t("accounts.form.currencyInvalid")}
@@ -185,13 +229,27 @@ export function AccountForm({
           )}
         </label>
 
-        <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">
+        <label className="group flex flex-1 flex-col gap-1.5 text-sm font-medium">
           {t("accounts.form.financialInstitute")}
           <input
             value={values.financial_institute}
             onChange={(event) => set("financial_institute", event.target.value)}
             className={inputClass}
           />
+          {instituteSuggestions.length > 0 && (
+            <div className="hidden flex-wrap gap-1.5 group-focus-within:flex">
+              {instituteSuggestions.map((institute) => (
+                <button
+                  key={institute}
+                  type="button"
+                  onClick={() => set("financial_institute", institute)}
+                  className="rounded-full border border-black/10 px-2 py-0.5 text-xs text-zinc-600 hover:bg-black/[.04] dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/[.06]"
+                >
+                  {institute}
+                </button>
+              ))}
+            </div>
+          )}
         </label>
       </div>
 

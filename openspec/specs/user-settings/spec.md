@@ -2,24 +2,25 @@
 
 ## Purpose
 
-Per-user preferences — display language, timezone, and default currency —
-their storage shape, hardcoded-default resolution, validation, and the
-GET/PUT /api/settings endpoints. See `web-client-settings` for the client
-surface and `web-client-i18n` for how the language preference interacts
-with browser detection.
+Per-user preferences — display language, timezone, default currency, and
+displayed decimal places — their storage shape, hardcoded-default
+resolution, validation, and the GET/PUT /api/settings endpoints. See
+`web-client-settings` for the client surface and `web-client-i18n` for how
+the language preference interacts with browser detection.
 
 ## Requirements
 
 ### Requirement: Per-user settings storage with hardcoded defaults
 
 The backend SHALL store per-user preferences — display language, timezone,
-and default currency — in a `user_settings` table with one row per user keyed
-by `user_id`, each preference column nullable. A missing row and a row whose
-column is `NULL` SHALL be treated identically: both resolve to a hardcoded
-application default (`language: "en"`, `timezone: "UTC"`,
-`default_currency: "EUR"`). No row SHALL be created automatically at account
-creation; a row SHALL be created (or updated) only when a preference is
-explicitly set.
+default currency, and displayed decimal places — in a `user_settings`
+table with one row per user keyed by `user_id`, each preference column
+nullable. A missing row and a row whose column is `NULL` SHALL be treated
+identically: both resolve to a hardcoded application default
+(`language: "en"`, `timezone: "UTC"`, `default_currency: "EUR"`,
+`displayed_decimal_places: 2`). No row SHALL be created automatically at
+account creation; a row SHALL be created (or updated) only when a
+preference is explicitly set.
 
 Resolution (substituting the hardcoded default for a `NULL` or absent value)
 SHALL happen once, in the settings service, so every consumer — the HTTP
@@ -30,14 +31,15 @@ values, never `NULL`.
 
 - **WHEN** a user has no `user_settings` row
 - **THEN** the resolved settings are `{ language: "en", timezone: "UTC",
-  default_currency: "EUR" }`
+  default_currency: "EUR", displayed_decimal_places: 2 }`
 
 #### Scenario: Partial preferences set
 
-- **WHEN** a user's `user_settings` row has `language = "de"` and `timezone`
-  and `default_currency` both `NULL`
+- **WHEN** a user's `user_settings` row has `language = "de"` and
+  `timezone`, `default_currency`, and `displayed_decimal_places` all
+  `NULL`
 - **THEN** the resolved settings are `{ language: "de", timezone: "UTC",
-  default_currency: "EUR" }`
+  default_currency: "EUR", displayed_decimal_places: 2 }`
 
 ### Requirement: Settings validation
 
@@ -45,8 +47,11 @@ values, never `NULL`.
 accepted only as a value `time.LoadLocation` (or equivalent IANA-tzdata
 lookup) resolves successfully. `default_currency` SHALL be accepted only as
 three uppercase ASCII letters (ISO-4217 shape); it is not checked against a
-canonical currency list. An invalid value for any field SHALL be rejected
-without changing any other field's stored value.
+canonical currency list. `displayed_decimal_places` SHALL be accepted only
+as an integer between `0` and `4` inclusive — the upper bound matches
+`account-entries`' fixed storage precision, since displaying more decimal
+digits than are ever stored would be meaningless. An invalid value for any
+field SHALL be rejected without changing any other field's stored value.
 
 #### Scenario: Invalid language rejected
 
@@ -64,14 +69,20 @@ without changing any other field's stored value.
   three uppercase letters) or `default_currency: "US"`
 - **THEN** the request is rejected and no field is changed
 
+#### Scenario: Out-of-range displayed decimal places rejected
+
+- **WHEN** a settings update is submitted with `displayed_decimal_places: 5`
+  or `displayed_decimal_places: -1`
+- **THEN** the request is rejected and no field is changed
+
 ### Requirement: Settings endpoints
 
 `GET /api/settings` SHALL require authentication and SHALL return the
-authenticated user's resolved settings (all three fields always populated).
+authenticated user's resolved settings (all four fields always populated).
 `PUT /api/settings` SHALL require authentication and SHALL accept a partial
-body containing any subset of `language`, `timezone`, `default_currency`;
-only the fields present SHALL be changed, and the response SHALL be the
-resulting resolved settings.
+body containing any subset of `language`, `timezone`, `default_currency`,
+`displayed_decimal_places`; only the fields present SHALL be changed, and
+the response SHALL be the resulting resolved settings.
 
 #### Scenario: Reading resolved settings
 
@@ -85,6 +96,13 @@ resulting resolved settings.
   `PUT /api/settings` with `{ "timezone": "Europe/Vienna" }`
 - **THEN** the response shows `language: "de"` and `timezone:
   "Europe/Vienna"`, and a subsequent `GET /api/settings` returns the same
+
+#### Scenario: Updating displayed decimal places
+
+- **WHEN** an authenticated user calls `PUT /api/settings` with
+  `{ "displayed_decimal_places": 0 }`
+- **THEN** the response shows `displayed_decimal_places: 0`, and every
+  other field is unchanged
 
 #### Scenario: Unauthenticated access is rejected
 

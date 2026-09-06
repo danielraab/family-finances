@@ -150,13 +150,22 @@ function AccountDetails() {
           <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
             {t("accounts.details.recentEntries")}
           </h2>
-          <Link
-            to="/entries"
-            search={{ account_id: accountId }}
-            className="text-sm font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            {t("accounts.details.seeAll")}
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              to="/entries"
+              search={{ account_id: accountId }}
+              className="text-sm font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              {t("accounts.details.seeAll")}
+            </Link>
+            <Link
+              to="/entries/new"
+              search={{ account_id: accountId }}
+              className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {t("entries.create")}
+            </Link>
+          </div>
         </div>
 
         {recent === null ? null : recent.length === 0 ? (
