@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
-import { formatAmount } from "../lib/amount";
+import { amountColorClass, formatAmount } from "../lib/amount";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
 
 export const Route = createFileRoute("/accounts/$accountId/")({
@@ -96,7 +96,11 @@ function AccountDetails() {
           <dt className="text-zinc-500 dark:text-zinc-400">
             {t("accounts.details.balance")}
           </dt>
-          <dd className="font-mono text-lg tabular-nums">
+          <dd
+            className={`font-mono text-lg tabular-nums ${
+              balance === null ? "" : amountColorClass(balance)
+            }`}
+          >
             {balance === null
               ? "…"
               : formatAmount(
@@ -189,7 +193,11 @@ function AccountDetails() {
                       )}
                     </span>
                   </div>
-                  <span className="font-mono text-sm tabular-nums">
+                  <span
+                    className={`font-mono text-sm tabular-nums ${amountColorClass(
+                      entry.amount,
+                    )} ${entry.kind === "balance_adjustment" ? "underline" : ""}`}
+                  >
                     {formatAmount(
                       entry.amount,
                       account.currency,
