@@ -84,6 +84,80 @@ func TestCreateAgainstDisabledAccountRejected(t *testing.T) {
 	}
 }
 
+func TestCreateWithForeignCategoryRejected(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.addOwnedBy("cat1", "u2")
+
+	_, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: 100,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "X", CategoryID: ptr("cat1"),
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestCreateWithDisabledCategoryRejected(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	categories.disable("cat1")
+
+	_, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: 100,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "X", CategoryID: ptr("cat1"),
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateUnrelatedFieldKeepsSinceDisabledCategory(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	e, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: 100,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "X", CategoryID: ptr("cat1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	categories.disable("cat1")
+
+	got, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{Title: ptr("Y")})
+	if err != nil {
+		t.Fatalf("Update with an unrelated field on a since-disabled category: %v", err)
+	}
+	if got.Title != "Y" || got.CategoryID == nil || *got.CategoryID != "cat1" {
+		t.Fatalf("got = %+v", got)
+	}
+}
+
+func TestUpdateExplicitlySettingDisabledCategoryRejected(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	categories.add("cat2")
+	e, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: 100,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "X", CategoryID: ptr("cat1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	categories.disable("cat2")
+
+	_, err = svc.Update(context.Background(), "u1", e.ID, entry.Update{
+		CategoryID: entry.OptionalID{Set: true, Value: ptr("cat2")},
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
 func TestCreateWithForeignTagRejected(t *testing.T) {
 	svc, accounts, categories, tags := newFixture()
 	accounts.add("acc1", "u1", "EUR")

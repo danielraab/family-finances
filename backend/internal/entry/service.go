@@ -37,7 +37,7 @@ func (s *Service) Create(ctx context.Context, ownerID string, in New) (Entry, er
 	}
 
 	if in.CategoryID != nil {
-		ok, err := s.categories.Exists(ctx, *in.CategoryID)
+		ok, err := s.categories.Usable(ctx, ownerID, *in.CategoryID)
 		if err != nil {
 			return Entry{}, err
 		}
@@ -86,8 +86,11 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (E
 	if current.Kind == KindTransaction && newCategoryID == nil {
 		return Entry{}, ErrInvalidValue
 	}
-	if newCategoryID != nil {
-		ok, err := s.categories.Exists(ctx, *newCategoryID)
+	// Only a category explicitly supplied in this request is validated —
+	// an update that doesn't touch category_id never re-checks the
+	// entry's existing (possibly since-disabled) category.
+	if upd.CategoryID.Set && upd.CategoryID.Value != nil {
+		ok, err := s.categories.Usable(ctx, ownerID, *upd.CategoryID.Value)
 		if err != nil {
 			return Entry{}, err
 		}
@@ -146,7 +149,7 @@ func (s *Service) List(ctx context.Context, ownerID string, f Filter) ([]Entry, 
 	}
 
 	if f.CategoryID != nil {
-		ids, err := s.categories.Subtree(ctx, *f.CategoryID)
+		ids, err := s.categories.Subtree(ctx, ownerID, *f.CategoryID)
 		if err != nil {
 			return nil, nil, err
 		}

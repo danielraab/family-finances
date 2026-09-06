@@ -30,7 +30,7 @@ tags:
       Bookkeeping accounts, each owned by exactly one user, and the
       admin-managed account_types lookup they reference.
   - name: categories
-    description: The global, tree-structured, admin-managed category lookup.
+    description: The caller's own tree-structured category lookup.
   - name: tags
     description: Per-user tags, private to their owner.
   - name: entries
@@ -790,11 +790,11 @@ paths:
   /api/categories:
     get:
       operationId: getCategories
-      summary: List the full category tree
+      summary: List the caller's category tree
       tags: [categories]
       responses:
         "200":
-          description: Every category, including its parent_id.
+          description: Every non-deleted category the caller owns, including its parent_id.
           content:
             application/json:
               schema:
@@ -805,7 +805,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
     post:
       operationId: postCategories
-      summary: Create a category (admin only)
+      summary: Create a category
+      description: >-
+        Appended to the end of its sibling group (same parent_id, or root if
+        omitted).
       tags: [categories]
       requestBody:
         required: true
@@ -824,16 +827,15 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
 
   /api/categories/{id}:
     patch:
       operationId: patchCategory
-      summary: Update a category (admin only)
+      summary: Update a category
       description: >-
         Reparenting onto the category itself or one of its own descendants
-        is rejected with 422.
+        is rejected with 422. A reparent is appended to the end of the new
+        parent's sibling group.
       tags: [categories]
       parameters:
         - name: id
@@ -858,18 +860,17 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
     delete:
       operationId: deleteCategory
-      summary: Delete a category (admin only)
+      summary: Delete a category
       description: >-
-        409 if it has child categories or is referenced by a non-deleted
-        entry — deletion is never cascaded.
+        A soft delete (irreversible — no undelete). 409 if it has a
+        non-deleted child category or is referenced by a non-deleted entry —
+        deletion is never cascaded.
       tags: [categories]
       parameters:
         - name: id
@@ -882,12 +883,114 @@ paths:
           description: The category is deleted.
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  /api/categories/{id}/disable:
+    post:
+      operationId: postCategoryDisable
+      summary: Disable a category
+      description: >-
+        Reversible via enable. Blocks the category from being newly selected
+        on an entry; does not affect any entry or child category already
+        referencing it.
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The category, now disabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/categories/{id}/enable:
+    post:
+      operationId: postCategoryEnable
+      summary: Re-enable a disabled category
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The category, now enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/categories/{id}/move-up:
+    post:
+      operationId: postCategoryMoveUp
+      summary: Move a category up among its siblings
+      description: >-
+        Swaps sort_order with the immediate previous sibling (same
+        parent_id). A no-op — 200, order unchanged — if the category is
+        already first among its siblings.
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The category, with its updated (or unchanged) sort_order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/categories/{id}/move-down:
+    post:
+      operationId: postCategoryMoveDown
+      summary: Move a category down among its siblings
+      description: >-
+        Swaps sort_order with the immediate next sibling (same parent_id). A
+        no-op — 200, order unchanged — if the category is already last
+        among its siblings.
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The category, with its updated (or unchanged) sort_order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/tags:
     get:
@@ -1626,7 +1729,7 @@ components:
 
     Category:
       type: object
-      required: [id, name, created_at]
+      required: [id, name, sort_order, disabled, created_at]
       properties:
         id:
           type: string
@@ -1635,6 +1738,16 @@ components:
           description: Absent for a root category.
         name:
           type: string
+        sort_order:
+          type: integer
+          description: >-
+            Meaningful only among siblings sharing the same parent_id.
+        disabled:
+          type: boolean
+          description: >-
+            Blocks the category from being newly selected on an entry;
+            existing entries and child categories referencing it are
+            unaffected.
         created_at:
           type: string
           format: date-time

@@ -46,22 +46,30 @@ func (s *stubAccounts) VisibleIDs(_ context.Context, ownerID string) ([]string, 
 var errNotFound = errors.New("account not found")
 
 type stubCategories struct {
-	exists map[string]bool
+	owner    map[string]string // categoryID -> ownerID
+	disabled map[string]bool
 	// children maps a category id to its direct children, for Subtree.
 	children map[string][]string
 }
 
 func newStubCategories() *stubCategories {
-	return &stubCategories{exists: map[string]bool{}, children: map[string][]string{}}
+	return &stubCategories{owner: map[string]string{}, disabled: map[string]bool{}, children: map[string][]string{}}
 }
 
-func (c *stubCategories) add(id string) { c.exists[id] = true }
+// add registers id as owned by "u1", the fixture owner used throughout
+// this package's tests.
+func (c *stubCategories) add(id string) { c.owner[id] = "u1" }
 
-func (c *stubCategories) Exists(_ context.Context, id string) (bool, error) {
-	return c.exists[id], nil
+func (c *stubCategories) addOwnedBy(id, owner string) { c.owner[id] = owner }
+
+func (c *stubCategories) disable(id string) { c.disabled[id] = true }
+
+func (c *stubCategories) Usable(_ context.Context, ownerID, id string) (bool, error) {
+	owner, ok := c.owner[id]
+	return ok && owner == ownerID && !c.disabled[id], nil
 }
 
-func (c *stubCategories) Subtree(_ context.Context, id string) ([]string, error) {
+func (c *stubCategories) Subtree(_ context.Context, _, id string) ([]string, error) {
 	out := []string{id}
 	queue := []string{id}
 	for len(queue) > 0 {

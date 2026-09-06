@@ -1,6 +1,6 @@
 ## 1. Backend: schema
 
-- [ ] 1.1 Add migration
+- [x] 1.1 Add migration
   `backend/internal/storage/postgres/migrations/0014_category_ownership.sql`:
   drop the `categories_parent_id_name_key` unique constraint; add
   `owner_id uuid NOT NULL REFERENCES users(id)`,
@@ -10,38 +10,38 @@
 
 ## 2. Backend: `internal/category` domain + store
 
-- [ ] 2.1 `category.go`: add `OwnerID string` (`json:"-"`),
+- [x] 2.1 `category.go`: add `OwnerID string` (`json:"-"`),
   `SortOrder int` (`json:"sort_order"`), `Disabled bool`
   (`json:"disabled"`), `DeletedAt *time.Time` (`json:"-"`) to `Category`.
   `New`/`Update` stay `ParentID`/`Name` only — `owner_id`, `sort_order`,
   and `disabled` are never client-settable directly.
-- [ ] 2.2 `store.go`: add `ownerID` as the first parameter to every
+- [x] 2.2 `store.go`: add `ownerID` as the first parameter to every
   existing `Store` method (`List`, `Get`, `Create`, `Update`, `Delete`,
   `Exists`, `Subtree`); add `SetDisabled(ctx, ownerID, id string, disabled
   bool) (Category, error)`, `MoveUp(ctx, ownerID, id string) (Category,
   error)`, `MoveDown(ctx, ownerID, id string) (Category, error)`. Update
   the doc comment on `ErrInUse`/`Delete` to describe the soft-delete
   behavior.
-- [ ] 2.3 `service.go`: thread `ownerID` through every method (from
+- [x] 2.3 `service.go`: thread `ownerID` through every method (from
   `auth.UserFromContext` in `handler.go`); `Create` computes the
   append-to-end `sort_order` for the target `(owner_id, parent_id)` group;
   `Update`'s reparent path recomputes `sort_order` for the new parent
   group; add `Disable`/`Enable` wrapping `SetDisabled`, and
   `MoveUp`/`MoveDown` wrapping the store methods.
-- [ ] 2.4 `handler.go`: remove `requireAdmin` from every category route;
+- [x] 2.4 `handler.go`: remove `requireAdmin` from every category route;
   every handler resolves `ownerID` via `auth.UserFromContext`; extend the
   category response body with `disabled`, `sort_order`; add
   `POST /api/categories/{id}/disable`, `/enable`, `/move-up`, `/move-down`.
 
 ## 3. Backend: store implementations
 
-- [ ] 3.1 `internal/storage/memory`: update every `CategoryStore` method
+- [x] 3.1 `internal/storage/memory`: update every `CategoryStore` method
   for the new `ownerID` scoping; `Delete` becomes a soft delete (set
   `DeletedAt`, still guarded by the children/entry-reference checks, now
   scoped to non-deleted rows); implement `SetDisabled`, `MoveUp`,
   `MoveDown`; `Create` and the reparent path in `Update` compute
   append-to-end `sort_order` within `(ownerID, parentID)`.
-- [ ] 3.2 `internal/storage/postgres/category.go`: same scoping —
+- [x] 3.2 `internal/storage/postgres/category.go`: same scoping —
   `categoryCols` gains `owner_id::text` (internal use only, not returned to
   callers directly beyond the scoping `WHERE`), `sort_order`, `disabled`;
   every query adds `owner_id = $ownerID AND deleted_at IS NULL` (dropped
@@ -59,16 +59,16 @@
 
 ## 4. Backend: `internal/entry` category ownership
 
-- [ ] 4.1 Extend the existing per-entry ownership check (the one already
+- [x] 4.1 Extend the existing per-entry ownership check (the one already
   enforcing "a tag on an entry must belong to the entry's owner") to also
   require `category_id`, when present, to belong to the entry's owner —
   same `422` treatment, on both create and update.
-- [ ] 4.2 Unit + handler tests: creating/updating an entry with a
+- [x] 4.2 Unit + handler tests: creating/updating an entry with a
   `category_id` owned by a different user is rejected (`422`).
 
 ## 5. Backend: tests
 
-- [ ] 5.1 `internal/category` unit + handler tests: cross-owner access
+- [x] 5.1 `internal/category` unit + handler tests: cross-owner access
   reads as `404` on every verb (`GET` single, `PATCH`, `DELETE`,
   `/disable`, `/enable`, `/move-up`, `/move-down`); any authenticated user
   (no `is_admin` check) can fully manage their own categories; disabling a
@@ -82,12 +82,12 @@
   and no-op (still `200`, unchanged order) at either end of the sibling
   list; a new category and a reparented category both land at the end of
   their (new) sibling group.
-- [ ] 5.2 `internal/storage/postgres` integration tests for the migration
+- [x] 5.2 `internal/storage/postgres` integration tests for the migration
   and every new/changed store method.
 
 ## 6. API contract
 
-- [ ] 6.1 `openapi/openapi.yaml`: `Category` — add `disabled` (boolean,
+- [x] 6.1 `openapi/openapi.yaml`: `Category` — add `disabled` (boolean,
   required) and `sort_order` (integer, required). Update the
   `GET`/`POST`/`PATCH`/`DELETE /api/categories...` summaries and
   descriptions to drop every "(admin only)" note and drop their `403`
@@ -95,10 +95,10 @@
   `POST /api/categories/{id}/disable`, `/enable`, `/move-up`, `/move-down`
   (`200` → `Category`, `401`, `404`), documented with every status code the
   handler can return, matching `/api/accounts/{id}/disable`'s shape.
-- [ ] 6.2 `cd backend && go generate ./...` to sync `backend/openapi.yaml`.
-- [ ] 6.3 `cd frontend && pnpm generate:api` to regenerate
+- [x] 6.2 `cd backend && go generate ./...` to sync `backend/openapi.yaml`.
+- [x] 6.3 `cd frontend && pnpm generate:api` to regenerate
   `src/api/schema.d.ts`.
-- [ ] 6.4 Add `internal/openapicheck.AssertResponse` assertions to the
+- [x] 6.4 Add `internal/openapicheck.AssertResponse` assertions to the
   new/changed handler tests; lint the spec with spectral.
 
 ## 7. Frontend: sidebar + routing

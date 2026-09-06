@@ -41,10 +41,16 @@ type AccountLookup interface {
 // CategoryLookup is the narrow view of internal/category that entry needs.
 // *category.Service satisfies this structurally.
 type CategoryLookup interface {
-	Exists(ctx context.Context, categoryID string) (bool, error)
-	// Subtree returns categoryID and every descendant id, used to resolve
-	// a category filter to "this category or any of its descendants."
-	Subtree(ctx context.Context, categoryID string) ([]string, error)
+	// Usable reports whether categoryID exists, is owned by ownerID, and
+	// is not disabled. Consulted only when a category is being newly set
+	// on an entry (creation, or an update that explicitly touches
+	// category_id) — never for a value merely carried over unchanged, so
+	// disabling a category never disturbs entries already referencing it.
+	Usable(ctx context.Context, ownerID, categoryID string) (bool, error)
+	// Subtree returns categoryID and every descendant id within ownerID's
+	// own tree, used to resolve a category filter to "this category or
+	// any of its descendants."
+	Subtree(ctx context.Context, ownerID, categoryID string) ([]string, error)
 }
 
 // TagLookup is the narrow view of internal/tag that entry needs.
