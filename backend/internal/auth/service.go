@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -54,6 +55,18 @@ type LanguageLookup interface {
 	Language(ctx context.Context, userID string) (*string, error)
 }
 
+// NewUserHook is run once for a brand-new user account — never on sign-in
+// to an existing one — identified by the id they'll own whatever the hook
+// seeds. internal/account and internal/category each satisfy this
+// structurally via their own SeedDefaults method, to give a fresh user a
+// starter set of account types and categories; wiring hooks via
+// WithNewUserHooks is optional. auth declares this interface itself rather
+// than importing either package — the same one-way-dependency shape
+// LanguageLookup uses.
+type NewUserHook interface {
+	SeedDefaults(ctx context.Context, ownerID string) error
+}
+
 // Params is the slice of configuration the service needs, mapped from
 // config.Config by package main.
 type Params struct {
@@ -72,12 +85,13 @@ type Params struct {
 // Service is the auth use-case layer. It depends only on the Store interface
 // and the two side-effect interfaces above.
 type Service struct {
-	store  Store
-	mailer Mailer
-	oidc   OIDCClient     // nil when no provider is configured
-	lang   LanguageLookup // nil when not wired
-	p      Params
-	now    func() time.Time
+	store        Store
+	mailer       Mailer
+	oidc         OIDCClient     // nil when no provider is configured
+	lang         LanguageLookup // nil when not wired
+	newUserHooks []NewUserHook
+	p            Params
+	now          func() time.Time
 }
 
 // Option customizes a Service (used by tests).
@@ -89,6 +103,15 @@ func WithClock(fn func() time.Time) Option { return func(s *Service) { s.now = f
 // WithLanguageLookup wires the raw-language-preference source for
 // GET /api/auth/me. package main passes internal/settings' Service.
 func WithLanguageLookup(l LanguageLookup) Option { return func(s *Service) { s.lang = l } }
+
+// WithNewUserHooks wires hooks to run once each brand-new user account is
+// created. package main passes internal/account's and internal/category's
+// services. A hook's error is logged, not surfaced — a user who
+// successfully signed up should never be told signup failed because a
+// starter dataset couldn't be seeded.
+func WithNewUserHooks(hooks ...NewUserHook) Option {
+	return func(s *Service) { s.newUserHooks = hooks }
+}
 
 // NewService builds the auth service. mailer must be non-nil; oidc may be nil,
 // in which case the OIDC routes return ErrOIDCNotConfigured.
@@ -671,7 +694,18 @@ func (s *Service) resolveIdentity(ctx context.Context, in identityInput) (User, 
 		if err != nil {
 			return User{}, err
 		}
+		s.notifyUserCreated(ctx, user.ID)
 		return user, nil
+	}
+}
+
+// notifyUserCreated runs every wired NewUserHook for a brand-new user,
+// logging (not returning) a hook's error — see WithNewUserHooks.
+func (s *Service) notifyUserCreated(ctx context.Context, userID string) {
+	for _, h := range s.newUserHooks {
+		if err := h.SeedDefaults(ctx, userID); err != nil {
+			slog.Error("auth: new-user hook failed", "user_id", userID, "error", err)
+		}
 	}
 }
 

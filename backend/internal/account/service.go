@@ -18,11 +18,12 @@ func NewService(store Store) *Service {
 }
 
 // resolveAssignableType checks that id may be (re)assigned as an account's
-// type_id: it must exist and not be disabled. A missing type_id is
-// ErrInvalidValue rather than ErrNotFound — it's caller-supplied input, the
-// same contract the old TypeExists-based check had.
-func (s *Service) resolveAssignableType(ctx context.Context, id string) error {
-	t, err := s.store.GetType(ctx, id)
+// type_id: it must exist, belong to ownerID, and not be disabled. A missing
+// or cross-owner type_id is ErrInvalidValue rather than ErrNotFound — it's
+// caller-supplied input, the same contract the old TypeExists-based check
+// had.
+func (s *Service) resolveAssignableType(ctx context.Context, ownerID, id string) error {
+	t, err := s.store.GetType(ctx, ownerID, id)
 	if errors.Is(err, ErrNotFound) {
 		return ErrInvalidValue
 	}
@@ -40,7 +41,7 @@ func (s *Service) Create(ctx context.Context, ownerID string, in New) (Account, 
 	if err := validateNew(in); err != nil {
 		return Account{}, err
 	}
-	if err := s.resolveAssignableType(ctx, in.TypeID); err != nil {
+	if err := s.resolveAssignableType(ctx, ownerID, in.TypeID); err != nil {
 		return Account{}, err
 	}
 	return s.store.Create(ctx, ownerID, in)
@@ -89,7 +90,7 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (A
 	if upd.TypeID != nil {
 		effectiveTypeID = *upd.TypeID
 	}
-	if err := s.resolveAssignableType(ctx, effectiveTypeID); err != nil {
+	if err := s.resolveAssignableType(ctx, ownerID, effectiveTypeID); err != nil {
 		return Account{}, err
 	}
 	return s.store.Update(ctx, ownerID, id, upd)
@@ -118,41 +119,50 @@ func (s *Service) Owner(ctx context.Context, id string) (ownerID string, currenc
 	return s.store.Owner(ctx, id)
 }
 
-// ListTypes returns every account type, including disabled ones.
-func (s *Service) ListTypes(ctx context.Context) ([]Type, error) {
-	return s.store.ListTypes(ctx)
+// ListTypes returns every account type ownerID owns, including disabled
+// ones.
+func (s *Service) ListTypes(ctx context.Context, ownerID string) ([]Type, error) {
+	return s.store.ListTypes(ctx, ownerID)
 }
 
-// CreateType creates a new account type. Authorization (admin-only) is the
-// handler's responsibility, matching internal/auth's convention.
-func (s *Service) CreateType(ctx context.Context, title, description string) (Type, error) {
+// CreateType creates a new account type owned by ownerID. Any authenticated
+// user may create their own types — there is no admin gate.
+func (s *Service) CreateType(ctx context.Context, ownerID, title, description string) (Type, error) {
 	if strings.TrimSpace(title) == "" {
 		return Type{}, ErrInvalidValue
 	}
-	return s.store.CreateType(ctx, title, description)
+	return s.store.CreateType(ctx, ownerID, title, description)
 }
 
-// UpdateType changes an account type's title and description.
-func (s *Service) UpdateType(ctx context.Context, id, title, description string) (Type, error) {
+// UpdateType changes ownerID's account type's title and description.
+func (s *Service) UpdateType(ctx context.Context, ownerID, id, title, description string) (Type, error) {
 	if strings.TrimSpace(title) == "" {
 		return Type{}, ErrInvalidValue
 	}
-	return s.store.UpdateType(ctx, id, title, description)
+	return s.store.UpdateType(ctx, ownerID, id, title, description)
 }
 
 // DisableType blocks a type from being (re)assigned to an account, without
 // affecting any account already carrying it. Reversible via EnableType.
-func (s *Service) DisableType(ctx context.Context, id string) (Type, error) {
-	return s.store.SetTypeDisabled(ctx, id, true)
+func (s *Service) DisableType(ctx context.Context, ownerID, id string) (Type, error) {
+	return s.store.SetTypeDisabled(ctx, ownerID, id, true)
 }
 
 // EnableType reverses DisableType.
-func (s *Service) EnableType(ctx context.Context, id string) (Type, error) {
-	return s.store.SetTypeDisabled(ctx, id, false)
+func (s *Service) EnableType(ctx context.Context, ownerID, id string) (Type, error) {
+	return s.store.SetTypeDisabled(ctx, ownerID, id, false)
 }
 
-// DeleteType deletes an account type, or ErrTypeInUse if a non-deleted
-// account still references it — regardless of whether it is disabled.
-func (s *Service) DeleteType(ctx context.Context, id string) error {
-	return s.store.DeleteType(ctx, id)
+// DeleteType deletes ownerID's account type, or ErrTypeInUse if a
+// non-deleted account still references it — regardless of whether it is
+// disabled.
+func (s *Service) DeleteType(ctx context.Context, ownerID, id string) error {
+	return s.store.DeleteType(ctx, ownerID, id)
+}
+
+// SeedDefaults seeds ownerID — a brand-new user — with DefaultTypeTitles.
+// It satisfies internal/auth's NewUserHook interface structurally, wired in
+// by package main via auth.WithNewUserHooks.
+func (s *Service) SeedDefaults(ctx context.Context, ownerID string) error {
+	return s.store.SeedDefaultTypes(ctx, ownerID)
 }

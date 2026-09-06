@@ -6,12 +6,12 @@ The authenticated /settings page: the sidebar link to it, its auth gate,
 its Common tab (language/timezone/default-currency/displayed-decimal-places
 preferences), its My
 Invitations tab (every authenticated visitor's own sent invitations, with
-revoke), its admin-only Users tab
-(list/invite/disable/enable/delete/revoke), and its admin-only Account
-Types tab (list/create/edit/disable/enable/delete). See `user-settings` and
-`user-administration` for the backend capabilities the Users tab calls, and
-`internal/account`'s account-type slice (`backend/AGENTS.md`) for the
-Account Types tab.
+revoke), its Account Types tab, open to every authenticated visitor
+(list/create/edit/disable/enable/delete their own account types), and its
+admin-only Users tab (list/invite/disable/enable/delete/revoke). See
+`user-settings` and `user-administration` for the backend capabilities the
+Users tab calls, and `internal/account`'s account-type slice
+(`backend/AGENTS.md`) for the Account Types tab.
 
 ## Requirements
 
@@ -214,55 +214,45 @@ tab SHALL show text stating that plainly instead of an empty list.
 - **THEN** the tab displays text saying there are none, instead of rendering
   an empty list
 
-### Requirement: Account Types tab is admin-only
-
-The settings page SHALL offer an **Account Types** tab only when the
-authenticated visitor's `is_admin` is `true`; for a non-admin, the tab
-SHALL NOT be rendered in the tab list, and navigating directly to
-`/settings/account-types` SHALL redirect to `/settings` rather than
-rendering the tab's content — the same defense-in-depth pattern the
-existing Users tab uses.
-
-#### Scenario: Non-admin does not see the Account Types tab
-
-- **WHEN** a non-admin authenticated visitor opens `/settings`
-- **THEN** the Account Types tab is not shown in the tab list
-
-#### Scenario: Non-admin is redirected away from a direct link
-
-- **WHEN** a non-admin authenticated visitor navigates directly to
-  `/settings/account-types`
-- **THEN** the client redirects them to `/settings`
-
 ### Requirement: Account Types tab lists, creates, edits, disables/enables, and deletes account types
 
-The Account Types tab SHALL list every account type (`GET
-/api/account-types`) showing its title, description, and an Active/Disabled
-status, with actions to create a new type, edit an existing type's title and
-description, disable or enable it, and delete it. Each state-changing
-action SHALL be confirmed via the same `@headlessui/react` `Dialog` pattern
-already used by the Users tab. A delete rejected by the backend (`409`,
-still referenced by an account) SHALL surface an inline error rather than
-silently doing nothing.
+The settings page SHALL offer an **Account Types** tab to every
+authenticated visitor, positioned alongside Common and My Invitations —
+not gated on `is_admin`. The tab SHALL list only the caller's own account
+types (`GET /api/account-types`) showing each type's title, description,
+and an Active/Disabled status, with actions to create a new type, edit an
+existing type's title and description, disable or enable it, and delete
+it. Each state-changing action SHALL be confirmed via the same
+`@headlessui/react` `Dialog` pattern already used by the Users tab. A
+delete rejected by the backend (`409`, still referenced by one of the
+caller's own accounts) SHALL surface an inline error rather than silently
+doing nothing.
 
-#### Scenario: Admin creates a new account type
+#### Scenario: Any authenticated visitor sees the Account Types tab
 
-- **WHEN** an admin submits the create form with a title and a description
+- **WHEN** an authenticated visitor (admin or not) opens `/settings`
+- **THEN** the Account Types tab is shown in the tab list
+
+#### Scenario: A visitor creates a new account type
+
+- **WHEN** an authenticated visitor submits the create form with a title
+  and a description
 - **THEN** `POST /api/account-types` is called and the new type appears in
   the list, Active
 
-#### Scenario: Admin disables a type in use
+#### Scenario: A visitor disables a type in use
 
-- **WHEN** an admin disables a type that existing accounts reference
+- **WHEN** an authenticated visitor disables a type that their own
+  accounts reference
 - **THEN** the type's status shows Disabled, and those accounts are
   unaffected
 
 #### Scenario: Deleting an in-use type shows an error
 
-- **WHEN** an admin confirms deleting a type that a non-deleted account
-  still references
-- **THEN** the request fails and the tab shows an inline error instead of
-  removing the type from the list
+- **WHEN** an authenticated visitor attempts to delete a type still
+  referenced by one of their own accounts
+- **THEN** the backend's `409` surfaces as an inline error and the type
+  remains in the list
 
 ### Requirement: The account form only offers live types for a new assignment
 

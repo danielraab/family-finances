@@ -108,7 +108,7 @@ change adds a narrow hook interface to `internal/auth`, the same pattern
 ```go
 // internal/auth/service.go
 type NewUserHook interface {
-    OnUserCreated(ctx context.Context, userID string) error
+    SeedDefaults(ctx context.Context, ownerID string) error
 }
 ```
 

@@ -9,10 +9,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List every account type */
+        /** List the caller's own account types */
         get: operations["getAccountTypes"];
         put?: never;
-        /** Create an account type (admin only) */
+        /** Create an account type, owned by the caller */
         post: operations["postAccountTypes"];
         delete?: never;
         options?: never;
@@ -31,13 +31,13 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Delete an account type (admin only)
+         * Delete the caller's own account type
          * @description 409 if a non-deleted account still references it (disabled or not) — deletion is never cascaded.
          */
         delete: operations["deleteAccountType"];
         options?: never;
         head?: never;
-        /** Update an account type's title and description (admin only) */
+        /** Update the caller's own account type's title and description */
         patch: operations["patchAccountType"];
         trace?: never;
     };
@@ -51,7 +51,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Disable an account type (admin only)
+         * Disable the caller's own account type
          * @description Reversible via enable. Blocks the type from being (re)assigned to an account — including on an existing account's next edit, if its current type is this one — without affecting any account already carrying it.
          */
         post: operations["postAccountTypeDisable"];
@@ -70,7 +70,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Re-enable a disabled account type (admin only) */
+        /** Re-enable the caller's own disabled account type */
         post: operations["postAccountTypeEnable"];
         delete?: never;
         options?: never;
@@ -983,7 +983,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Every account type. */
+            /** @description Every account type the caller owns. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1019,7 +1019,6 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
         };
     };
     deleteAccountType: {
@@ -1041,7 +1040,6 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
         };
@@ -1072,7 +1070,6 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -1097,7 +1094,6 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -1122,7 +1118,6 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

@@ -282,12 +282,17 @@ resolved one from `GET /api/settings`) has to be the one on `/me`.
 ## Account types
 
 `internal/account`'s `account_types` lookup (`title`, optional
-`description`, `disabled`) is admin-managed and instance-global —
-`GET /api/account-types` is open to any authenticated user,
-create/update/delete/disable/enable require `is_admin`. `disabled` is a
-reversible flag (`POST /api/account-types/{id}/disable` / `/enable`,
-mirroring `Account.Disable`/`Enable`) that blocks a type from being
-*newly* (re)assigned without touching any account already carrying it: an
+`description`, `disabled`) is **per-user, self-managed** — every
+`Store`/`Service` method for types takes an explicit `ownerID`, mirroring
+`internal/category`'s ownership scoping. `GET /api/account-types` returns
+only the caller's own types; create/update/delete/disable/enable require
+only authentication, no `is_admin` gate. A type belonging to a different
+owner behaves as if it does not exist (`ErrNotFound`, `404` — or
+`ErrInvalidValue` when referenced as another user's account's `type_id`),
+never `403`. `disabled` is a reversible flag
+(`POST /api/account-types/{id}/disable` / `/enable`, mirroring
+`Account.Disable`/`Enable`) that blocks a type from being *newly*
+(re)assigned without touching any account already carrying it: an
 account's `type_id` may never resolve to a disabled type after a
 create/update, which for `PATCH` means the *effective* `type_id` (the
 request's value, or the account's current one if the request doesn't
@@ -299,6 +304,18 @@ before this flag existed: hard delete, rejected (`409` `ErrTypeInUse`) if
 any non-deleted account still references it, disabled or not — disable is
 the reversible off-ramp, delete stays the one-way cleanup for a type
 nothing uses anymore.
+
+A brand-new user is seeded with a fixed starter set (`account.DefaultTypeTitles`
+— Checking, Savings, Cash, Credit Card, Loan, Investment) via
+`Service.SeedDefaults`, which structurally satisfies `internal/auth`'s
+`NewUserHook` interface; `internal/category`'s `Service.SeedDefaults` does
+the same for a starter set of root categories (`category.DefaultNames`).
+Neither `internal/account` nor `internal/category` is imported by
+`internal/auth` — `main.go` wires both services in via
+`auth.WithNewUserHooks(accountSvc, categorySvc)`, called once,
+right after a brand-new user account is created (never on sign-in to an
+existing one). A hook's error is logged, not surfaced — signup never fails
+because a starter dataset couldn't be seeded.
 
 ## Categories
 

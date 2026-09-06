@@ -15,6 +15,28 @@ func newService() *category.Service {
 	return category.NewService(memory.NewCategoryStore())
 }
 
+func TestSeedDefaultsInsertsStarterSetInOrder(t *testing.T) {
+	svc := newService()
+	if err := svc.SeedDefaults(context.Background(), "u1"); err != nil {
+		t.Fatalf("SeedDefaults: %v", err)
+	}
+	got, err := svc.List(context.Background(), "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(category.DefaultNames) {
+		t.Fatalf("List after SeedDefaults = %+v, want %d categories", got, len(category.DefaultNames))
+	}
+	for i, c := range got {
+		if c.Name != category.DefaultNames[i] {
+			t.Fatalf("category %d name = %q, want %q (in order)", i, c.Name, category.DefaultNames[i])
+		}
+		if c.ParentID != nil {
+			t.Fatalf("category %d = %+v, want a root category", i, c)
+		}
+	}
+}
+
 func TestCreateRootCategory(t *testing.T) {
 	svc := newService()
 	c, err := svc.Create(context.Background(), "u1", category.New{Name: "Groceries"})

@@ -638,11 +638,11 @@ paths:
   /api/account-types:
     get:
       operationId: getAccountTypes
-      summary: List every account type
+      summary: List the caller's own account types
       tags: [accounts]
       responses:
         "200":
-          description: Every account type.
+          description: Every account type the caller owns.
           content:
             application/json:
               schema:
@@ -653,7 +653,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
     post:
       operationId: postAccountTypes
-      summary: Create an account type (admin only)
+      summary: Create an account type, owned by the caller
       tags: [accounts]
       requestBody:
         required: true
@@ -672,13 +672,11 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
 
   /api/account-types/{id}:
     patch:
       operationId: patchAccountType
-      summary: Update an account type's title and description (admin only)
+      summary: Update the caller's own account type's title and description
       tags: [accounts]
       parameters:
         - name: id
@@ -703,13 +701,11 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
       operationId: deleteAccountType
-      summary: Delete an account type (admin only)
+      summary: Delete the caller's own account type
       description: >-
         409 if a non-deleted account still references it (disabled or not)
         — deletion is never cascaded.
@@ -725,8 +721,6 @@ paths:
           description: The account type is deleted.
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -735,7 +729,7 @@ paths:
   /api/account-types/{id}/disable:
     post:
       operationId: postAccountTypeDisable
-      summary: Disable an account type (admin only)
+      summary: Disable the caller's own account type
       description: >-
         Reversible via enable. Blocks the type from being (re)assigned to
         an account — including on an existing account's next edit, if its
@@ -757,15 +751,13 @@ paths:
                 $ref: "#/components/schemas/AccountType"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
   /api/account-types/{id}/enable:
     post:
       operationId: postAccountTypeEnable
-      summary: Re-enable a disabled account type (admin only)
+      summary: Re-enable the caller's own disabled account type
       tags: [accounts]
       parameters:
         - name: id
@@ -782,8 +774,6 @@ paths:
                 $ref: "#/components/schemas/AccountType"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 

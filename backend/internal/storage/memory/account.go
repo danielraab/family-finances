@@ -146,45 +146,48 @@ func (s *AccountStore) Owner(_ context.Context, id string) (string, string, bool
 	return acc.OwnerID, acc.Currency, acc.Disabled, nil
 }
 
-func (s *AccountStore) ListTypes(_ context.Context) ([]account.Type, error) {
+func (s *AccountStore) ListTypes(_ context.Context, ownerID string) ([]account.Type, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []account.Type
 	for _, t := range s.types {
-		out = append(out, t)
+		if t.OwnerID == ownerID {
+			out = append(out, t)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
 	return out, nil
 }
 
-func (s *AccountStore) GetType(_ context.Context, id string) (account.Type, error) {
+func (s *AccountStore) GetType(_ context.Context, ownerID, id string) (account.Type, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.types[id]
-	if !ok {
+	if !ok || t.OwnerID != ownerID {
 		return account.Type{}, account.ErrNotFound
 	}
 	return t, nil
 }
 
-func (s *AccountStore) CreateType(_ context.Context, title, description string) (account.Type, error) {
+func (s *AccountStore) CreateType(_ context.Context, ownerID, title, description string) (account.Type, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, t := range s.types {
-		if t.Title == title {
-			return account.Type{}, account.ErrInvalidValue
-		}
+	t := account.Type{
+		ID:          s.nextID("atype"),
+		OwnerID:     ownerID,
+		Title:       title,
+		Description: description,
+		CreatedAt:   time.Now().UTC(),
 	}
-	t := account.Type{ID: s.nextID("atype"), Title: title, Description: description, CreatedAt: time.Now().UTC()}
 	s.types[t.ID] = t
 	return t, nil
 }
 
-func (s *AccountStore) UpdateType(_ context.Context, id, title, description string) (account.Type, error) {
+func (s *AccountStore) UpdateType(_ context.Context, ownerID, id, title, description string) (account.Type, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.types[id]
-	if !ok {
+	if !ok || t.OwnerID != ownerID {
 		return account.Type{}, account.ErrNotFound
 	}
 	t.Title = title
@@ -193,11 +196,11 @@ func (s *AccountStore) UpdateType(_ context.Context, id, title, description stri
 	return t, nil
 }
 
-func (s *AccountStore) SetTypeDisabled(_ context.Context, id string, disabled bool) (account.Type, error) {
+func (s *AccountStore) SetTypeDisabled(_ context.Context, ownerID, id string, disabled bool) (account.Type, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.types[id]
-	if !ok {
+	if !ok || t.OwnerID != ownerID {
 		return account.Type{}, account.ErrNotFound
 	}
 	t.Disabled = disabled
@@ -205,10 +208,11 @@ func (s *AccountStore) SetTypeDisabled(_ context.Context, id string, disabled bo
 	return t, nil
 }
 
-func (s *AccountStore) DeleteType(_ context.Context, id string) error {
+func (s *AccountStore) DeleteType(_ context.Context, ownerID, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.types[id]; !ok {
+	t, ok := s.types[id]
+	if !ok || t.OwnerID != ownerID {
 		return account.ErrNotFound
 	}
 	for _, acc := range s.accounts {
@@ -217,5 +221,16 @@ func (s *AccountStore) DeleteType(_ context.Context, id string) error {
 		}
 	}
 	delete(s.types, id)
+	return nil
+}
+
+func (s *AccountStore) SeedDefaultTypes(_ context.Context, ownerID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC()
+	for _, title := range account.DefaultTypeTitles {
+		t := account.Type{ID: s.nextID("atype"), OwnerID: ownerID, Title: title, CreatedAt: now}
+		s.types[t.ID] = t
+	}
 	return nil
 }

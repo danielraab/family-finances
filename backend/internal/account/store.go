@@ -50,17 +50,24 @@ type Store interface {
 
 	// --- account types ---
 
-	ListTypes(ctx context.Context) ([]Type, error)
-	// GetType returns ErrNotFound if id does not exist. Used both to
-	// resolve a type for display and to check whether a type_id may be
-	// (re)assigned (see Service.resolveAssignableType).
-	GetType(ctx context.Context, id string) (Type, error)
-	CreateType(ctx context.Context, title, description string) (Type, error)
-	UpdateType(ctx context.Context, id, title, description string) (Type, error)
+	// ListTypes returns every type owned by ownerID.
+	ListTypes(ctx context.Context, ownerID string) ([]Type, error)
+	// GetType returns ErrNotFound if id does not exist or belongs to a
+	// different owner. Used both to resolve a type for display and to
+	// check whether a type_id may be (re)assigned (see
+	// Service.resolveAssignableType).
+	GetType(ctx context.Context, ownerID, id string) (Type, error)
+	CreateType(ctx context.Context, ownerID, title, description string) (Type, error)
+	UpdateType(ctx context.Context, ownerID, id, title, description string) (Type, error)
 	// SetTypeDisabled toggles whether a type may be newly (re)assigned.
 	// It does not affect any account already carrying it.
-	SetTypeDisabled(ctx context.Context, id string, disabled bool) (Type, error)
+	SetTypeDisabled(ctx context.Context, ownerID, id string, disabled bool) (Type, error)
 	// DeleteType returns ErrTypeInUse if a non-deleted account still
-	// references it, ErrNotFound if it does not exist.
-	DeleteType(ctx context.Context, id string) error
+	// references it, ErrNotFound if it does not exist or belongs to a
+	// different owner.
+	DeleteType(ctx context.Context, ownerID, id string) error
+	// SeedDefaultTypes inserts DefaultTypeTitles for a brand-new ownerID.
+	// Called unconditionally — there is nothing to collide with for a
+	// fresh owner.
+	SeedDefaultTypes(ctx context.Context, ownerID string) error
 }

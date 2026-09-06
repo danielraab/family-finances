@@ -66,4 +66,11 @@ type Store interface {
 	// resolve internal/entry's "this category or any of its descendants"
 	// filter.
 	Subtree(ctx context.Context, ownerID, id string) ([]string, error)
+
+	// SeedDefaults inserts DefaultNames, as root categories in that order,
+	// for ownerID. Called unconditionally for a brand-new user — there is
+	// nothing to collide with yet (the migration's existing-user backfill,
+	// pure SQL, is the only caller that needs to guard against a non-empty
+	// tree, since it isn't calling this method).
+	SeedDefaults(ctx context.Context, ownerID string) error
 }

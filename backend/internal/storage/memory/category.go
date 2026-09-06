@@ -231,6 +231,23 @@ func (s *CategoryStore) Exists(_ context.Context, ownerID, id string) (bool, err
 	return ok && visible(c, ownerID), nil
 }
 
+func (s *CategoryStore) SeedDefaults(_ context.Context, ownerID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC()
+	for i, name := range category.DefaultNames {
+		c := category.Category{
+			ID:        s.nextID(),
+			OwnerID:   ownerID,
+			Name:      name,
+			SortOrder: i,
+			CreatedAt: now,
+		}
+		s.cats[c.ID] = c
+	}
+	return nil
+}
+
 func (s *CategoryStore) Subtree(_ context.Context, ownerID, id string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

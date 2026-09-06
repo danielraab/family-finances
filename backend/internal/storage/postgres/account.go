@@ -171,8 +171,11 @@ func scanType(row pgx.Row) (account.Type, error) {
 	return t, err
 }
 
-func (s *AccountStore) ListTypes(ctx context.Context) ([]account.Type, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+accountTypeCols+` FROM account_types ORDER BY title`)
+func (s *AccountStore) ListTypes(ctx context.Context, ownerID string) ([]account.Type, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+accountTypeCols+` FROM account_types WHERE owner_id = $1 ORDER BY title`,
+		ownerID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -189,42 +192,43 @@ func (s *AccountStore) ListTypes(ctx context.Context) ([]account.Type, error) {
 	return out, rows.Err()
 }
 
-func (s *AccountStore) GetType(ctx context.Context, id string) (account.Type, error) {
-	return scanType(s.pool.QueryRow(ctx, `SELECT `+accountTypeCols+` FROM account_types WHERE id = $1`, id))
-}
-
-func (s *AccountStore) CreateType(ctx context.Context, title, description string) (account.Type, error) {
-	t, err := scanType(s.pool.QueryRow(ctx,
-		`INSERT INTO account_types (title, description) VALUES ($1, NULLIF($2, '')) RETURNING `+accountTypeCols,
-		title, description,
-	))
-	if isUniqueViolation(err) {
-		return account.Type{}, account.ErrInvalidValue
-	}
-	return t, err
-}
-
-func (s *AccountStore) UpdateType(ctx context.Context, id, title, description string) (account.Type, error) {
-	t, err := scanType(s.pool.QueryRow(ctx,
-		`UPDATE account_types SET title = $2, description = NULLIF($3, '') WHERE id = $1 RETURNING `+accountTypeCols,
-		id, title, description,
-	))
-	if isUniqueViolation(err) {
-		return account.Type{}, account.ErrInvalidValue
-	}
-	return t, err
-}
-
-func (s *AccountStore) SetTypeDisabled(ctx context.Context, id string, disabled bool) (account.Type, error) {
+func (s *AccountStore) GetType(ctx context.Context, ownerID, id string) (account.Type, error) {
 	return scanType(s.pool.QueryRow(ctx,
-		`UPDATE account_types SET disabled = $2 WHERE id = $1 RETURNING `+accountTypeCols,
-		id, disabled,
+		`SELECT `+accountTypeCols+` FROM account_types WHERE id = $1 AND owner_id = $2`,
+		id, ownerID,
 	))
 }
 
-func (s *AccountStore) DeleteType(ctx context.Context, id string) error {
+func (s *AccountStore) CreateType(ctx context.Context, ownerID, title, description string) (account.Type, error) {
+	t, err := scanType(s.pool.QueryRow(ctx,
+		`INSERT INTO account_types (owner_id, title, description) VALUES ($1, $2, NULLIF($3, '')) RETURNING `+accountTypeCols,
+		ownerID, title, description,
+	))
+	if isForeignKeyViolation(err) {
+		return account.Type{}, account.ErrInvalidValue
+	}
+	return t, err
+}
+
+func (s *AccountStore) UpdateType(ctx context.Context, ownerID, id, title, description string) (account.Type, error) {
+	return scanType(s.pool.QueryRow(ctx,
+		`UPDATE account_types SET title = $3, description = NULLIF($4, '') WHERE id = $1 AND owner_id = $2 RETURNING `+accountTypeCols,
+		id, ownerID, title, description,
+	))
+}
+
+func (s *AccountStore) SetTypeDisabled(ctx context.Context, ownerID, id string, disabled bool) (account.Type, error) {
+	return scanType(s.pool.QueryRow(ctx,
+		`UPDATE account_types SET disabled = $3 WHERE id = $1 AND owner_id = $2 RETURNING `+accountTypeCols,
+		id, ownerID, disabled,
+	))
+}
+
+func (s *AccountStore) DeleteType(ctx context.Context, ownerID, id string) error {
 	var exists bool
-	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM account_types WHERE id = $1)`, id).Scan(&exists); err != nil {
+	if err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM account_types WHERE id = $1 AND owner_id = $2)`, id, ownerID,
+	).Scan(&exists); err != nil {
 		return err
 	}
 	if !exists {
@@ -232,9 +236,9 @@ func (s *AccountStore) DeleteType(ctx context.Context, id string) error {
 	}
 	tag, err := s.pool.Exec(ctx, `
 		DELETE FROM account_types
-		WHERE id = $1 AND NOT EXISTS (
+		WHERE id = $1 AND owner_id = $2 AND NOT EXISTS (
 			SELECT 1 FROM accounts WHERE type_id = $1 AND deleted_at IS NULL
-		)`, id,
+		)`, id, ownerID,
 	)
 	if err != nil {
 		return err
@@ -243,4 +247,12 @@ func (s *AccountStore) DeleteType(ctx context.Context, id string) error {
 		return account.ErrTypeInUse
 	}
 	return nil
+}
+
+func (s *AccountStore) SeedDefaultTypes(ctx context.Context, ownerID string) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO account_types (owner_id, title) SELECT $1, unnest($2::text[])`,
+		ownerID, account.DefaultTypeTitles,
+	)
+	return err
 }
