@@ -100,11 +100,21 @@ their Postgres stores) itself, the same construction `main.go`'s
 construction inline. This isn't a new architectural allowance:
 `internal/cli` already imports `internal/auth` directly for `Admin`, so
 `internal/cli` depending on domain-package `Service` types is already the
-established shape, just extended to three more packages. `Seed` also
-builds its own `auth.Service` (needed for `CreateUserWithIdentity` and the
-new `IssueSession`) with the same `auth.WithNewUserHooks(accountSvc,
-categorySvc)` wiring `main.go` uses, so the three testers get their
-starter data exactly like a real signup would.
+established shape, just extended to three more packages.
+
+**Revised during implementation**: the three testers are created via
+`AuthStore.CreateUserWithIdentity` directly (see the next decision), which
+bypasses `auth.Service.resolveIdentity` entirely — the one place
+`NewUserHook`s fire. Wiring `auth.WithNewUserHooks(accountSvc,
+categorySvc)` into `Seed`'s own `auth.Service` would therefore do nothing.
+`NewUserHook` exists so `internal/auth` — which cannot import
+`internal/account`/`internal/category` — can still notify them; `internal/cli`
+has no such restriction, since it already imports both directly. So `Seed`
+calls each user's `accountSvc.SeedDefaults(ctx, userID)` and
+`categorySvc.SeedDefaults(ctx, userID)` itself, right after creating them —
+simpler than routing through an indirection built to solve a
+dependency-direction problem `internal/cli` doesn't have. `Seed`'s
+`auth.Service` is used only for `IssueSession`.
 
 ### Decision: users are created in a fixed order so tester1 is always the bootstrap admin
 
@@ -141,6 +151,19 @@ func (s *Service) IssueSession(ctx context.Context, userID string) (token string
 `SessionContext{Client: ClientAPI}` mirrors what a `client=api` sign-in
 already produces (a bearer token, not a cookie) — the right shape for
 something printed to a terminal.
+
+**Caught during manual verification**: `IssueSession`'s expiry comes from
+`s.p.SessionTTL` (`issueSessionToken` sets `ExpiresAt: now.Add(s.p.SessionTTL)`).
+`Seed`'s first draft built its `auth.Service` with a zero-value
+`auth.Params{}` — fine for `Admin`, which never mints a session, but for
+`Seed` it meant every printed token had `ExpiresAt == the instant it was
+created`, so pasting it into a request came back `401` immediately. Fixed
+by passing `auth.Params{SessionTTL: cfg.Auth.SessionTTL, SessionMaxTTL:
+cfg.Auth.SessionMaxTTL}` — the real configured values, matching what
+`main.go`'s `buildAuth` uses. A regression test
+(`TestSeedTestersTokensAreImmediatelyUsable`) now asserts each printed
+token actually authenticates, not just that stdout contains the string
+"session=".
 
 ### Decision: fixture shape — fixed constants, deterministic RNG
 

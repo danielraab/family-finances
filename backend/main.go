@@ -34,6 +34,8 @@ func main() {
 			os.Exit(healthcheck())
 		case "admin":
 			os.Exit(cli.Admin(ctx, os.Args[2:]))
+		case "seed":
+			os.Exit(cli.Seed(ctx, os.Args[2:]))
 		}
 	}
 

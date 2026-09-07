@@ -1,93 +1,99 @@
 ## 1. Backend: `auth.Service.IssueSession`
 
-- [ ] 1.1 `internal/auth/service.go`: add
+- [x] 1.1 `internal/auth/service.go`: add
   `IssueSession(ctx, userID string) (token string, err error)` — looks up
   the user via `store.UserByID`, then calls the existing (unexported)
   `issueSessionToken` with `SessionContext{Client: ClientAPI}`. Never
   routed through `internal/httpapi` — CLI-only.
-- [ ] 1.2 Unit test: `IssueSession` returns a token `Authenticate` resolves
+- [x] 1.2 Unit test: `IssueSession` returns a token `Authenticate` resolves
   back to the same user; unknown `userID` returns `ErrNotFound`.
 
 ## 2. Backend: `internal/cli` reset + user creation
 
-- [ ] 2.1 `internal/cli/seed.go` (new): `Seed(ctx, args) int`, mirroring
+- [x] 2.1 `internal/cli/seed.go` (new): `Seed(ctx, args) int`, mirroring
   `Admin`'s shape — load `config`, build a `postgres.Pool`, run
   `postgres.Migrate`, then dispatch on `--yes`.
-- [ ] 2.2 Bare `server seed` (no `--yes`): query
-  `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND
-  tablename <> 'schema_migrations'` plus a row count per table, print the
-  list to stdout, return a non-zero, non-1 exit code (`2`, matching the
-  existing usage-error convention) without opening a write transaction.
-- [ ] 2.3 `server seed --yes`: `TRUNCATE <every table from 2.2> RESTART
-  IDENTITY CASCADE` in one transaction.
-- [ ] 2.4 After truncation, build `postgres.AuthStore`, an `auth.Service`
-  wired with `auth.WithNewUserHooks(accountSvc, categorySvc)` (built per
-  task 3.1), and create `tester1@draab.at`, `tester2@draab.at`,
-  `tester3@draab.at` in that order via `CreateUserWithIdentity` with a
-  pre-verified email identity each (mirroring `cli_test.go`'s existing
-  `seedUser` helper). Confirm `tester1@draab.at` lands as admin (empty
-  `users` table ⇒ existing bootstrap path).
-- [ ] 2.5 For each created user, call `svc.IssueSession` and collect
+- [x] 2.2 Bare `server seed` (no `--yes`): `postgres.TableCounts` lists
+  every data table + row count, printed to stdout; returns `2` without
+  opening a write transaction.
+- [x] 2.3 `server seed --yes`: `postgres.ResetAll` — `TRUNCATE` every data
+  table (read at runtime via `pg_tables`, not hardcoded) in one
+  transaction. Both `TableCounts`/`ResetAll` landed in
+  `internal/storage/postgres/reset.go` rather than inline SQL in
+  `internal/cli`, keeping SQL details in the package that already owns
+  them.
+- [x] 2.4 After truncation, build `postgres.AuthStore` and the three
+  testers via `CreateUserWithIdentity` with a pre-verified email identity
+  each (mirroring `cli_test.go`'s existing `seedUser` helper).
+  `tester1@draab.at` lands as admin via the existing bootstrap path.
+  **Revised from the original plan**: rather than wiring
+  `auth.WithNewUserHooks` into `Seed`'s own `auth.Service` (which would
+  never fire — `CreateUserWithIdentity` bypasses `resolveIdentity`
+  entirely), `Seed` calls `accountSvc.SeedDefaults`/
+  `categorySvc.SeedDefaults` directly for each tester, since
+  `internal/cli` already imports both packages (see design.md).
+- [x] 2.5 For each created user, call `svc.IssueSession` and print
   `(email, isAdmin, token)`.
 
 ## 3. Backend: fixture generator
 
-- [ ] 3.1 `internal/cli/fixtures.go` (new): build `account.Service`,
+- [x] 3.1 `internal/cli/fixtures.go` (new): build `account.Service`,
   `category.Service`, `entry.Service` over `postgres.NewAccountStore`,
   `postgres.NewCategoryStore`, `postgres.NewEntryStore` — the same
   construction `main.go`'s `buildAccount`/`buildCategory`/`buildEntry`
   already do.
-- [ ] 3.2 A single `rand.New(rand.NewPCG(fixedSeed, fixedSeed))` (fixed
-  constant) shared across the whole run — never the package-level
-  `math/rand/v2` functions, which aren't reproducible.
-- [ ] 3.3 `seedUserFixtures(ctx, ownerID string, accountSvc *account.Service,
-  categorySvc *category.Service, entrySvc *entry.Service, rng *rand.Rand)
-  error`:
-  - List `ownerID`'s seeded account types (from the `NewUserHook`) and
-    categories; pick 2–4 accounts, each a random type + a random currency
-    from `{EUR, USD, GBP}` + a random `opening_date` within the past 2
-    years, via `accountSvc.Create`.
-  - Per account, create 15–60 transaction entries via `entrySvc.Create`:
-    random `booking_timestamp` in the past 12 months, random category
-    from the seeded set, amount sign/magnitude keyed to category (Salary
-    positive/larger, everything else negative/smaller — see design.md),
-    title from a small per-category string pool.
-- [ ] 3.4 Unit tests (against `storage/memory`): the generator produces
-  the expected account/entry count ranges; two runs with the same fixed
-  seed produce identical output; category/amount-sign pairing holds
-  (Salary entries are always positive, others always negative).
+- [x] 3.2 A single `rand.New(rand.NewPCG(fixedSeed, fixedSeed))` (fixed
+  constants `seedRNGSeed1`/`seedRNGSeed2`) shared across the whole run.
+- [x] 3.3 `generateFixtures`: lists `ownerID`'s seeded account types and
+  categories (sorted locally by title/name before being indexed by the
+  RNG — a `Store` only guarantees "every type/category," not a
+  particular order, and `storage/memory`'s `ListTypes` ties on
+  `CreatedAt` for a freshly seeded set, which surfaced as a real
+  nondeterminism bug during testing); picks 2–4 accounts, each a random
+  type + currency + `opening_date`, via `accountSvc.Create`; per account,
+  15–60 transaction entries via `entrySvc.Create` with random category,
+  category-shaped amount sign/magnitude, and a title from a small
+  per-category pool.
+- [x] 3.4 Unit tests (against `storage/memory`): account/entry counts
+  land in range; two runs with the same fixed seed produce identical
+  account titles; `Salary` entries are always positive, every other
+  category always negative.
 
 ## 4. Wiring
 
-- [ ] 4.1 `backend/main.go`: dispatch `os.Args[1] == "seed"` to
+- [x] 4.1 `backend/main.go`: dispatch `os.Args[1] == "seed"` to
   `os.Exit(cli.Seed(ctx, os.Args[2:]))`, alongside the existing
   `healthcheck`/`admin` dispatch.
-- [ ] 4.2 `internal/cli/seed.go`: after 2.5 and the fixtures in section 3
-  complete, print one line per tester to stdout:
+- [x] 4.2 `internal/cli/seed.go` / `fixtures.go`: after user creation +
+  fixture generation, print one line per tester to stdout:
   `tester1@draab.at (admin) session=<token>` (and the same without
   `(admin)` for the other two).
 
 ## 5. Verify
 
-- [ ] 5.1 `cd backend && gofmt -l . && go vet ./... && go test ./...`.
-- [ ] 5.2 `internal/storage/postgres` integration test (needs
-  `DATABASE_URL`): seed unrelated rows into a throwaway database, run the
-  `TRUNCATE` step directly, confirm every listed table is empty except
-  `schema_migrations`.
-- [ ] 5.3 Manual pass: `go run . seed` (bare) against a local Postgres —
-  confirm it prints the table/row-count list and the database is
-  unchanged; `go run . seed --yes` — confirm exactly three users exist,
-  `tester1@draab.at` is admin, each has starter account types/categories
-  plus generated accounts/entries; paste one printed token as
-  `Authorization: Bearer` and confirm `GET /api/auth/me`,
-  `GET /api/accounts`, `GET /api/entries` all return that tester's data;
-  run `go run . seed --yes` a second time and confirm the same three
-  users/fixture shape result (no duplicates, same counts).
+- [x] 5.1 `cd backend && gofmt -l . && go vet ./... && go test ./...`.
+- [x] 5.2 `internal/storage/postgres` integration test (needs
+  `DATABASE_URL`): `TestResetAllTruncatesEveryDataTable` seeds unrelated
+  rows into a throwaway database, runs `ResetAll`, confirms every listed
+  table is empty; `TestTableCountsExcludesSchemaMigrations` confirms
+  `schema_migrations` is never in the list.
+- [x] 5.3 Manual pass (built binary + real Postgres): `go run . seed`
+  (bare) printed the table/row-count list and left the database
+  untouched; `go run . seed --yes` created exactly three users,
+  `tester1@draab.at` admin, each with the full starter account
+  types/categories plus 2–4 generated accounts and dozens of entries;
+  pasted a printed token as `Authorization: Bearer` and confirmed
+  `GET /api/auth/me`, `GET /api/accounts`, `GET /api/entries` all
+  returned that tester's own data, correctly isolated from the other two;
+  confirmed `Salary` entries were positive and every other category's
+  entries negative. **This pass caught a real bug** — see task 1's
+  `IssueSession` note and design.md — fixed and re-verified against a
+  freshly rebuilt binary before considering this task done.
 
 ## 6. Docs
 
-- [ ] 6.1 `backend/AGENTS.md`: add a short "Seeding fake data" note
-  (mirroring the existing `admin` CLI note) — command, what `--yes` does,
-  that it's a full destructive reset, and that it's built on the same
-  `NewUserHook`/`CreateUserWithIdentity` mechanisms `account-types-per-user`
-  introduced.
+- [x] 6.1 `backend/AGENTS.md`: added a "Seeding fake data" section
+  (mirroring the existing `admin` CLI note) — the command, what `--yes`
+  does, the direct-`SeedDefaults`-call decision (and why `NewUserHook`
+  doesn't apply here), the `IssueSession`/`SessionTTL` gotcha, and the
+  fixture shape.
