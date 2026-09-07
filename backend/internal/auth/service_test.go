@@ -461,6 +461,27 @@ func TestNewUserHookErrorDoesNotFailSignup(t *testing.T) {
 	}
 }
 
+func TestIssueSessionMintsUsableToken(t *testing.T) {
+	svc, _, mailer, _ := newSvc(t, baseParams())
+	user, _ := signInEmail(t, svc, mailer, "issue-session@example.com")
+
+	tok, err := svc.IssueSession(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("IssueSession: %v", err)
+	}
+	got, err := svc.Authenticate(context.Background(), tok)
+	if err != nil || got.ID != user.ID {
+		t.Fatalf("Authenticate(IssueSession token) = %+v, err %v", got, err)
+	}
+}
+
+func TestIssueSessionUnknownUser(t *testing.T) {
+	svc, _, _, _ := newSvc(t, baseParams())
+	if _, err := svc.IssueSession(context.Background(), "nope"); !errors.Is(err, auth.ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestSecondMethodLinksToSameAccount(t *testing.T) {
 	p := baseParams()
 	oidc := &stubOIDC{claims: auth.OIDCClaims{Issuer: "https://idp.example", Subject: "sub-1", Email: "person@example.com", EmailVerified: true}}

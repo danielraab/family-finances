@@ -444,6 +444,17 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return err
 }
 
+// IssueSession mints a new session for userID directly, without a sign-in
+// flow — used by the seed CLI to hand back an immediately usable session
+// token for a user it just created. Never exposed over HTTP.
+func (s *Service) IssueSession(ctx context.Context, userID string) (string, error) {
+	user, err := s.store.UserByID(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return s.issueSessionToken(ctx, user, SessionContext{Client: ClientAPI})
+}
+
 // --- admin ------------------------------------------------------------------
 
 // SetAdmin sets or clears the admin flag for the user with this email.

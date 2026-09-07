@@ -356,6 +356,53 @@ category is being newly set (creation, or an update that explicitly
 supplies `category_id`) — and `Subtree(ctx, ownerID, categoryID)
 ([]string, error)`, scoped to that owner's own tree.
 
+## Seeding fake data
+
+`server seed --yes <email1,email2,...>` (`internal/cli.Seed`, dispatched
+from `main.go` alongside `healthcheck`/`admin`) resets the database and
+creates one user per given email with randomly generated accounts and
+entries — for local/demo use, not anything a product feature depends on.
+The emails are entirely CLI-supplied — nothing is hardcoded — via
+`parseSeedEmails` (splits on `,`, `auth.NormalizeEmail`s and
+`auth.ValidateEmail`s each, rejects an empty list, an invalid address, or
+a duplicate before touching the database).
+
+- **It is a full, irreversible reset**, not scoped to the given users:
+  every table except `schema_migrations` is `TRUNCATE`d
+  (`postgres.ResetAll`/`postgres.TableCounts`, `internal/storage/postgres`)
+  before anything is recreated. Bare `server seed`, or anything other than
+  exactly `--yes` followed by a comma-separated email list, only prints
+  the table/row-count list via `TableCounts` and exits `2` — it never opens
+  a write transaction. `--yes` is required precisely because this ships in
+  the same binary as production and `admin`'s no-confirmation style isn't
+  strict enough for a whole-database wipe.
+- Users are created, in the given order, directly via
+  `AuthStore.CreateUserWithIdentity` (pre-verified email, no magic-link
+  round-trip) — the same mechanism `internal/cli`'s own tests already used.
+  Because the reset just emptied `users`, the first given email lands as
+  the bootstrap admin through the ordinary zero-users-means-admin path.
+- Creating each user this way bypasses `auth.Service.resolveIdentity`
+  entirely, so `internal/auth`'s `NewUserHook`s (see "Account types" above)
+  never fire — `internal/cli` already imports `internal/account` and
+  `internal/category` directly (the same way `main.go`'s builders do), so
+  `Seed` calls each user's `SeedDefaults` itself instead of relying on that
+  indirection, which exists only so `internal/auth` — which cannot import
+  either package — can still notify them.
+- `auth.Service.IssueSession(ctx, userID)` mints a session directly,
+  without a sign-in flow — added for this command, never exposed over
+  HTTP. It reuses the same TTL-driven expiry every other session gets, so
+  it needs `auth.Params.SessionTTL`/`SessionMaxTTL` populated from real
+  config, not a zero-value `Params{}` (a zero `SessionTTL` mints a session
+  whose `ExpiresAt` is already in the past).
+- Fixture shape (`internal/cli/fixtures.go`): 2-4 accounts per user
+  (random seeded type + currency), 15-60 transaction entries per account
+  (random seeded category, amount sign/magnitude keyed to category —
+  `Salary` positive, everything else negative). A single fixed-seed
+  `math/rand/v2` generator drives the whole run, so `--yes` produces the
+  same fixture every time; types/categories are sorted locally before
+  being indexed by the RNG, since a `Store` is only contracted to return
+  "every type/category," not in a particular order.
+
 ## Serving the frontend
 
 The compiled binary embeds and serves the frontend's Vite bundle — there is
