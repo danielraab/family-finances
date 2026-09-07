@@ -256,6 +256,10 @@
       "tags": "Tags",
       "tagsPlaceholder": "Tag hinzufügen…",
       "removeTag": "{{name}} entfernen",
+      "changeAccount": "Konto ändern",
+      "cancelAccountChange": "Kontoänderung abbrechen",
+      "accountDisabledOption": "deaktiviert",
+      "accountCurrencyWarning": "Die Währung dieses Kontos ({{currency}}) unterscheidet sich vom ursprünglichen Konto der Buchung ({{originalCurrency}}). Es findet keine Umrechnung statt.",
       "create": "Buchung erstellen",
       "save": "Änderungen speichern",
       "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut."
@@ -267,7 +271,10 @@
       "title": "Buchung bearbeiten",
       "delete": "Buchung löschen",
       "confirmDeleteTitle": "Diese Buchung löschen?",
-      "confirmDeleteBody": "Dies kann hier nicht rückgängig gemacht werden."
+      "confirmDeleteBody": "Dies kann hier nicht rückgängig gemacht werden.",
+      "confirmAccountChangeTitle": "Diese Buchung verschieben?",
+      "confirmAccountChangeBody": "Diese Buchung wird nach „{{account}}“ verschoben.",
+      "confirmAccountChangeConfirm": "Buchung verschieben"
     }
   },
   "categories": {
