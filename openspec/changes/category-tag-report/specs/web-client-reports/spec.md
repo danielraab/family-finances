@@ -123,7 +123,12 @@ that, when activated, fetches `GET /api/entries` (for display) and
 `GET /api/entries/summary` (for the sum) using the currently selected
 filters. Changing a filter after a report has been generated SHALL leave
 the previously generated results on screen until "Generate report" is
-activated again.
+activated again — but SHALL show text indicating the displayed results no
+longer match the current filter selection, distinguishing it from a
+freshly generated, up-to-date report. That indication SHALL disappear as
+soon as the filter controls again match the filters the displayed report
+was generated with (for example, undoing the change that caused it), even
+without activating "Generate report" again.
 
 #### Scenario: Arriving with filters in the URL does not auto-generate
 
@@ -143,6 +148,21 @@ activated again.
   already been generated
 - **THEN** the previously generated entries and sum remain displayed
   unchanged until "Generate report" is activated again
+
+#### Scenario: Changing a filter after generating shows a stale-results hint
+
+- **WHEN** an authenticated visitor changes a filter after a report has
+  already been generated
+- **THEN** text is shown indicating the displayed results no longer match
+  the current filters and that "Generate report" should be activated again
+
+#### Scenario: Reverting a filter change clears the stale-results hint
+
+- **WHEN** an authenticated visitor changes a filter (triggering the
+  stale-results hint) and then changes it back to the value the displayed
+  report was generated with
+- **THEN** the stale-results hint disappears, without "Generate report"
+  having been activated again
 
 #### Scenario: Neither category nor tag selected
 

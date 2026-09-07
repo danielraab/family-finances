@@ -141,3 +141,17 @@
       confirmed both by the full `go test ./...` suite (including
       `storage/postgres`'s integration tests against a real database) and
       by design (see design.md's additive-parameter decision).
+
+## 6. Follow-up: stale-results hint and home page card
+
+- [x] 6.1 In `src/routes/reports.tsx`, add an `isStale` comparison between
+      `generatedFilter` and the live `search` draft, and render a hint
+      (distinct styling from the other status texts) whenever they
+      diverge — disappearing again if the draft is changed back to match.
+      Add the `reports.staleHint` key to `en.json`/`de.json`.
+- [x] 6.2 Add a fifth card to `src/components/FeatureOverview.tsx`
+      (`BarChart3` from `lucide-react`, already a dependency) introducing
+      the reports feature, with `home.features.reports.title`/`.description`
+      added to `en.json`/`de.json`.
+- [x] 6.3 Ran `pnpm lint`, `pnpm exec tsc`, and `pnpm build` from
+      `frontend/` — all pass.

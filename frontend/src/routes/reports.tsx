@@ -229,6 +229,20 @@ function ReportsPage() {
     });
   }
 
+  /** Whether the live filter controls have moved away from the filters the
+   * displayed report was generated with — the signal for the "results are
+   * out of date" hint, not for re-fetching anything on its own. */
+  function isStale(gf: GeneratedFilter, s: ReportsSearch): boolean {
+    return (
+      gf.categoryId !== s.category_id ||
+      gf.includeSubcategories !== (s.include_subcategories ?? true) ||
+      gf.tagId !== s.tag_id ||
+      gf.accountId !== s.account_id ||
+      gf.from !== s.from ||
+      gf.to !== s.to
+    );
+  }
+
   if (status !== "authenticated") {
     return null;
   }
@@ -238,6 +252,7 @@ function ReportsPage() {
     accounts.find((a) => a.id === accountId)?.currency ?? "";
   const canGenerate = Boolean(search.category_id || search.tag_id);
   const hasGenerated = generatedFilter !== null;
+  const stale = generatedFilter !== null && isStale(generatedFilter, search);
 
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-12 sm:px-10">
@@ -343,6 +358,12 @@ function ReportsPage() {
           {t("reports.generate")}
         </button>
       </div>
+
+      {stale && (
+        <p className="text-sm text-amber-600 dark:text-amber-400">
+          {t("reports.staleHint")}
+        </p>
+      )}
 
       {!hasGenerated && (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
