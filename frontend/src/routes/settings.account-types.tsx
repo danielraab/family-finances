@@ -4,7 +4,7 @@ import {
   DialogPanel,
   DialogTitle,
 } from "@headlessui/react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -23,14 +23,13 @@ const inputClass =
   "rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
 
 /**
- * The admin-only Account Types tab: lists account types and can
- * create/edit/disable/enable/(hard) delete one. Guards itself against a
- * direct link from a non-admin — the tab link itself is already hidden by
- * settings.tsx's tab list, but a bookmarked/typed URL still needs this.
+ * The Account Types tab: lists the caller's own account types and can
+ * create/edit/disable/enable/(hard) delete one. Open to every authenticated
+ * user — the backend scopes everything to the caller, so there's nothing
+ * admin-only left to guard here.
  */
 function AccountTypesSettingsTab() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const { t } = useTranslation();
 
   const [types, setTypes] = useState<AccountType[] | null>(null);
@@ -53,13 +52,7 @@ function AccountTypesSettingsTab() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user && !user.is_admin) {
-      navigate({ to: "/settings", replace: true });
-    }
-  }, [user, navigate]);
-
-  useEffect(() => {
-    if (!user?.is_admin) return;
+    if (!user) return;
     let cancelled = false;
     api.GET("/api/account-types").then(({ data }) => {
       if (cancelled || !data) return;
@@ -68,9 +61,9 @@ function AccountTypesSettingsTab() {
     return () => {
       cancelled = true;
     };
-  }, [user?.is_admin]);
+  }, [user]);
 
-  if (!user?.is_admin) {
+  if (!user) {
     return null;
   }
 

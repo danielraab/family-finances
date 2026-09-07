@@ -11,6 +11,22 @@ import (
 	"time"
 )
 
+// DefaultNames is the starter set of root categories seeded for every new
+// user (Service.SeedDefaults, invoked as an internal/auth.NewUserHook), in
+// the order they're assigned sort_order — the same set regardless of the
+// user's language, since a seeded category is immediately theirs to rename
+// like any other.
+var DefaultNames = []string{
+	"Salary",
+	"Groceries",
+	"Rent",
+	"Utilities",
+	"Transportation",
+	"Entertainment",
+	"Health",
+	"Other",
+}
+
 // Category is one node in a category tree private to its owner. ParentID
 // is nil for a root category.
 type Category struct {

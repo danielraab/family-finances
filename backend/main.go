@@ -67,15 +67,15 @@ func main() {
 	}
 
 	settingsSvc, settingsHandler := buildSettings(pool)
+	accountSvc, accountHandler := buildAccount(pool)
+	categorySvc, categoryHandler := buildCategory(pool)
 
-	authSvc, authHandler, err := buildAuth(ctx, cfg, pool, settingsSvc)
+	authSvc, authHandler, err := buildAuth(ctx, cfg, pool, settingsSvc, accountSvc, categorySvc)
 	if err != nil {
 		slog.Error("build auth", "error", err)
 		os.Exit(1)
 	}
 
-	accountSvc, accountHandler := buildAccount(pool)
-	categorySvc, categoryHandler := buildCategory(pool)
 	tagSvc, tagHandler := buildTag(pool)
 	entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc)
 
@@ -147,8 +147,11 @@ func buildEntry(pool *postgres.Pool, accountSvc *account.Service, categorySvc *c
 // buildAuth constructs the auth service and its HTTP handler: the Postgres
 // store, the SMTP mailer, and — only when OIDC_ISSUER is set — a discovered
 // OIDC client. settingsSvc is wired in as the raw-language-preference source
-// for GET /api/auth/me (see internal/settings' design note).
-func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, settingsSvc *settings.Service) (*auth.Service, http.Handler, error) {
+// for GET /api/auth/me (see internal/settings' design note); accountSvc and
+// categorySvc are wired in as NewUserHooks so a brand-new user is seeded
+// with starter account types and categories (see account-types-per-user's
+// design note).
+func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, settingsSvc *settings.Service, accountSvc *account.Service, categorySvc *category.Service) (*auth.Service, http.Handler, error) {
 	store := postgres.NewAuthStore(pool)
 
 	mail := mailer.New(mailer.Config{
@@ -188,7 +191,7 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, sett
 		MagicLinkTTL:        cfg.Auth.MagicLinkTTL,
 		OIDCIssuer:          cfg.OIDC.Issuer,
 		OIDCLabel:           cfg.OIDC.Label,
-	}, auth.WithLanguageLookup(settingsSvc))
+	}, auth.WithLanguageLookup(settingsSvc), auth.WithNewUserHooks(accountSvc, categorySvc))
 
 	handler := auth.NewHandler(svc, auth.HandlerOptions{
 		RenderError:  httpapi.WriteError,

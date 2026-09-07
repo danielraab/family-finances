@@ -132,3 +132,10 @@ func (s *Service) Usable(ctx context.Context, ownerID, id string) (bool, error) 
 func (s *Service) Subtree(ctx context.Context, ownerID, id string) ([]string, error) {
 	return s.store.Subtree(ctx, ownerID, id)
 }
+
+// SeedDefaults seeds ownerID — a brand-new user — with DefaultNames as root
+// categories. It satisfies internal/auth's NewUserHook interface
+// structurally, wired in by package main via auth.WithNewUserHooks.
+func (s *Service) SeedDefaults(ctx context.Context, ownerID string) error {
+	return s.store.SeedDefaults(ctx, ownerID)
+}

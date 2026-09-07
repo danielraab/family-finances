@@ -207,27 +207,13 @@ func (h *Handler) enable(w http.ResponseWriter, r *http.Request) {
 
 // --- account types ---------------------------------------------------
 
-// requireAdmin returns the authenticated admin user, or writes 401/403 and
-// returns ok=false — the same gate internal/auth established.
-func requireAdmin(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
+func (h *Handler) listTypes(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeUnauthorized(w)
-		return auth.User{}, false
-	}
-	if !user.IsAdmin {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return auth.User{}, false
-	}
-	return user, true
-}
-
-func (h *Handler) listTypes(w http.ResponseWriter, r *http.Request) {
-	if _, ok := auth.UserFromContext(r.Context()); !ok {
-		writeUnauthorized(w)
 		return
 	}
-	types, err := h.svc.ListTypes(r.Context())
+	types, err := h.svc.ListTypes(r.Context(), user.ID)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -244,7 +230,9 @@ type accountTypeBody struct {
 }
 
 func (h *Handler) createType(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
 		return
 	}
 	var body accountTypeBody
@@ -252,7 +240,7 @@ func (h *Handler) createType(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	t, err := h.svc.CreateType(r.Context(), body.Title, body.Description)
+	t, err := h.svc.CreateType(r.Context(), user.ID, body.Title, body.Description)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -261,7 +249,9 @@ func (h *Handler) createType(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) updateType(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
 		return
 	}
 	var body accountTypeBody
@@ -269,7 +259,7 @@ func (h *Handler) updateType(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	t, err := h.svc.UpdateType(r.Context(), r.PathValue("id"), body.Title, body.Description)
+	t, err := h.svc.UpdateType(r.Context(), user.ID, r.PathValue("id"), body.Title, body.Description)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -278,10 +268,12 @@ func (h *Handler) updateType(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deleteType(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
 		return
 	}
-	if err := h.svc.DeleteType(r.Context(), r.PathValue("id")); err != nil {
+	if err := h.svc.DeleteType(r.Context(), user.ID, r.PathValue("id")); err != nil {
 		h.renderError(w, r, err)
 		return
 	}
@@ -289,10 +281,12 @@ func (h *Handler) deleteType(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) disableType(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
 		return
 	}
-	t, err := h.svc.DisableType(r.Context(), r.PathValue("id"))
+	t, err := h.svc.DisableType(r.Context(), user.ID, r.PathValue("id"))
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -301,10 +295,12 @@ func (h *Handler) disableType(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) enableType(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireAdmin(w, r); !ok {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
 		return
 	}
-	t, err := h.svc.EnableType(r.Context(), r.PathValue("id"))
+	t, err := h.svc.EnableType(r.Context(), user.ID, r.PathValue("id"))
 	if err != nil {
 		h.renderError(w, r, err)
 		return

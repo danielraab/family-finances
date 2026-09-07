@@ -141,9 +141,9 @@ that check is informational only and never blocks merging.
 
 `/settings` is the first route that requires authentication: `settings.tsx`
 (the layout route) redirects an anonymous `useAuth` to `/login`, renders
-nothing while `loading`, and otherwise renders the tab nav (Common and My
-Invitations for everyone; Users and Account Types only when `user.is_admin`,
-per `AdminUser`) plus `<Outlet/>`.
+nothing while `loading`, and otherwise renders the tab nav (Common, My
+Invitations, and Account Types for everyone; Users only when
+`user.is_admin`) plus `<Outlet/>`.
 
 - `settings.index.tsx` (`/settings`, Common tab) — language/timezone/default
   currency. Each field calls `PUT /api/settings` with only itself on change
@@ -172,8 +172,9 @@ per `AdminUser`) plus `<Outlet/>`.
   the `401`. The invitation row rendering (status, inviter line, Revoke
   action) is shared with `settings.invitations.tsx` via
   `src/components/InviteList.tsx`.
-- `settings.account-types.tsx` (`/settings/account-types`, admin-only) —
-  same direct-link redirect guard as the Users tab. Lists account types
+- `settings.account-types.tsx` (`/settings/account-types`, open to every
+  authenticated visitor — not admin-gated; the backend scopes everything
+  to the caller). Lists the caller's own account types
   (`GET /api/account-types`, title/description/Active-or-Disabled status),
   and can create (`POST`), edit title/description (`PATCH`),
   disable/enable (`POST .../disable` / `.../enable`), and delete
@@ -185,7 +186,9 @@ per `AdminUser`) plus `<Outlet/>`.
   account being edited currently holds a type that's since been disabled,
   that type still renders as a non-selectable option (so the form doesn't
   look like it lost data) and the field stays invalid until a different,
-  live type is chosen.
+  live type is chosen. A brand-new user already has a starter set of types
+  (and, on `/categories`, a starter set of categories) seeded on the
+  backend at signup — see `backend/AGENTS.md`'s "Account types" section.
 
 ## Categories
 

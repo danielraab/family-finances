@@ -32,7 +32,7 @@ func TestPGAccountCreateGetList(t *testing.T) {
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner@example.com")
 
-	typ, err := store.CreateType(ctx, "Checking", "")
+	typ, err := store.CreateType(ctx, owner.ID, "Checking", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestPGAccountCrossOwnerNotFound(t *testing.T) {
 	owner := mustUser(t, authStore, "owner2@example.com")
 	other := mustUser(t, authStore, "other2@example.com")
 
-	typ, _ := store.CreateType(ctx, "Checking2", "")
+	typ, _ := store.CreateType(ctx, owner.ID, "Checking2", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := store.Create(ctx, owner.ID, account.New{
 		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
@@ -103,7 +103,7 @@ func TestPGAccountUpdateClosingDateClear(t *testing.T) {
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner4@example.com")
 
-	typ, _ := store.CreateType(ctx, "Checking4", "")
+	typ, _ := store.CreateType(ctx, owner.ID, "Checking4", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	closing, _ := account.ParseDate("2024-06-01")
 	acc, err := store.Create(ctx, owner.ID, account.New{
@@ -129,7 +129,7 @@ func TestPGAccountSoftDeleteExcludesFromListing(t *testing.T) {
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner5@example.com")
 
-	typ, _ := store.CreateType(ctx, "Checking5", "")
+	typ, _ := store.CreateType(ctx, owner.ID, "Checking5", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := store.Create(ctx, owner.ID, account.New{
 		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
@@ -154,7 +154,7 @@ func TestPGAccountDisableEnable(t *testing.T) {
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner6@example.com")
 
-	typ, _ := store.CreateType(ctx, "Checking6", "")
+	typ, _ := store.CreateType(ctx, owner.ID, "Checking6", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := store.Create(ctx, owner.ID, account.New{
 		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
@@ -178,7 +178,7 @@ func TestPGAccountTypeDeleteInUseConflict(t *testing.T) {
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner7@example.com")
 
-	typ, _ := store.CreateType(ctx, "Checking7", "")
+	typ, _ := store.CreateType(ctx, owner.ID, "Checking7", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	if _, err := store.Create(ctx, owner.ID, account.New{
 		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
@@ -186,28 +186,59 @@ func TestPGAccountTypeDeleteInUseConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := store.DeleteType(ctx, typ.ID); !errors.Is(err, account.ErrTypeInUse) {
+	if err := store.DeleteType(ctx, owner.ID, typ.ID); !errors.Is(err, account.ErrTypeInUse) {
 		t.Fatalf("err = %v, want ErrTypeInUse", err)
 	}
 }
 
-func TestPGAccountTypeDuplicateNameRejected(t *testing.T) {
-	store, _ := newAccountStore(t)
+func TestPGAccountTypeSameTitleAllowedAcrossOwners(t *testing.T) {
+	store, authStore := newAccountStore(t)
 	ctx := context.Background()
+	owner1 := mustUser(t, authStore, "owner8a@example.com")
+	owner2 := mustUser(t, authStore, "owner8b@example.com")
 
-	if _, err := store.CreateType(ctx, "Savings-dup", ""); err != nil {
+	if _, err := store.CreateType(ctx, owner1.ID, "Savings-dup", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateType(ctx, "Savings-dup", ""); !errors.Is(err, account.ErrInvalidValue) {
-		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	// No instance-wide uniqueness anymore: a second owner (or the same one)
+	// can use the same title.
+	if _, err := store.CreateType(ctx, owner2.ID, "Savings-dup", ""); err != nil {
+		t.Fatalf("second owner's CreateType with the same title: %v", err)
+	}
+}
+
+func TestPGAccountTypeCrossOwnerNotFound(t *testing.T) {
+	store, authStore := newAccountStore(t)
+	ctx := context.Background()
+	owner := mustUser(t, authStore, "owner8c@example.com")
+	other := mustUser(t, authStore, "owner8d@example.com")
+
+	typ, err := store.CreateType(ctx, owner.ID, "Checking8c", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetType(ctx, other.ID, typ.ID); !errors.Is(err, account.ErrNotFound) {
+		t.Fatalf("cross-owner GetType err = %v, want ErrNotFound", err)
+	}
+	if _, err := store.UpdateType(ctx, other.ID, typ.ID, "Hijacked", ""); !errors.Is(err, account.ErrNotFound) {
+		t.Fatalf("cross-owner UpdateType err = %v, want ErrNotFound", err)
+	}
+
+	types, err := store.ListTypes(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(types) != 1 {
+		t.Fatalf("ListTypes(owner) = %+v, want exactly the one type owner created", types)
 	}
 }
 
 func TestPGAccountTypeTitleDescriptionRoundTrip(t *testing.T) {
-	store, _ := newAccountStore(t)
+	store, authStore := newAccountStore(t)
 	ctx := context.Background()
+	owner := mustUser(t, authStore, "owner9@example.com")
 
-	typ, err := store.CreateType(ctx, "Checking8", "A day-to-day account")
+	typ, err := store.CreateType(ctx, owner.ID, "Checking8", "A day-to-day account")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,12 +246,12 @@ func TestPGAccountTypeTitleDescriptionRoundTrip(t *testing.T) {
 		t.Fatalf("typ = %+v", typ)
 	}
 
-	got, err := store.GetType(ctx, typ.ID)
+	got, err := store.GetType(ctx, owner.ID, typ.ID)
 	if err != nil || got.Title != "Checking8" {
 		t.Fatalf("GetType = %+v, err = %v", got, err)
 	}
 
-	updated, err := store.UpdateType(ctx, typ.ID, "Checking8 Renamed", "Updated description")
+	updated, err := store.UpdateType(ctx, owner.ID, typ.ID, "Checking8 Renamed", "Updated description")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,28 +261,47 @@ func TestPGAccountTypeTitleDescriptionRoundTrip(t *testing.T) {
 }
 
 func TestPGAccountTypeDisableEnable(t *testing.T) {
-	store, _ := newAccountStore(t)
+	store, authStore := newAccountStore(t)
 	ctx := context.Background()
+	owner := mustUser(t, authStore, "owner10@example.com")
 
-	typ, err := store.CreateType(ctx, "Checking9", "")
+	typ, err := store.CreateType(ctx, owner.ID, "Checking9", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	disabled, err := store.SetTypeDisabled(ctx, typ.ID, true)
+	disabled, err := store.SetTypeDisabled(ctx, owner.ID, typ.ID, true)
 	if err != nil || !disabled.Disabled {
 		t.Fatalf("SetTypeDisabled true: got=%+v err=%v", disabled, err)
 	}
 
-	enabled, err := store.SetTypeDisabled(ctx, typ.ID, false)
+	enabled, err := store.SetTypeDisabled(ctx, owner.ID, typ.ID, false)
 	if err != nil || enabled.Disabled {
 		t.Fatalf("SetTypeDisabled false: got=%+v err=%v", enabled, err)
 	}
 }
 
 func TestPGAccountTypeGetUnknownIsNotFound(t *testing.T) {
-	store, _ := newAccountStore(t)
-	if _, err := store.GetType(context.Background(), "00000000-0000-0000-0000-000000000000"); !errors.Is(err, account.ErrNotFound) {
+	store, authStore := newAccountStore(t)
+	owner := mustUser(t, authStore, "owner11@example.com")
+	if _, err := store.GetType(context.Background(), owner.ID, "00000000-0000-0000-0000-000000000000"); !errors.Is(err, account.ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestPGAccountTypeSeedDefaults(t *testing.T) {
+	store, authStore := newAccountStore(t)
+	ctx := context.Background()
+	owner := mustUser(t, authStore, "owner12@example.com")
+
+	if err := store.SeedDefaultTypes(ctx, owner.ID); err != nil {
+		t.Fatalf("SeedDefaultTypes: %v", err)
+	}
+	got, err := store.ListTypes(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(account.DefaultTypeTitles) {
+		t.Fatalf("ListTypes after SeedDefaultTypes = %+v, want %d types", got, len(account.DefaultTypeTitles))
 	}
 }

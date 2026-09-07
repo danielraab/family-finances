@@ -99,8 +99,8 @@ type Account struct {
 	DeletedAt          *time.Time `json:"-"`
 }
 
-// Type is one row of the admin-managed, instance-global account_types
-// lookup. Disabled blocks it from being (re)assigned to an account — see
+// Type is one row of the account_types lookup, private to the user who
+// owns it. Disabled blocks it from being (re)assigned to an account — see
 // Service.resolveAssignableType — without affecting any account already
 // carrying it.
 type Type struct {
@@ -109,6 +109,20 @@ type Type struct {
 	Description string    `json:"description,omitempty"`
 	Disabled    bool      `json:"disabled"`
 	CreatedAt   time.Time `json:"created_at"`
+	OwnerID     string    `json:"-"`
+}
+
+// DefaultTypeTitles is the starter set of account types seeded for every
+// new user (Service.SeedDefaults, invoked as an internal/auth.NewUserHook)
+// — the same set regardless of the user's language, since a seeded type is
+// immediately theirs to rename like any other.
+var DefaultTypeTitles = []string{
+	"Checking",
+	"Savings",
+	"Cash",
+	"Credit Card",
+	"Loan",
+	"Investment",
 }
 
 // New is the input to creating an account.

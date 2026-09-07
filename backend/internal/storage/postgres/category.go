@@ -242,6 +242,16 @@ func (s *CategoryStore) Exists(ctx context.Context, ownerID, id string) (bool, e
 	return exists, err
 }
 
+func (s *CategoryStore) SeedDefaults(ctx context.Context, ownerID string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO categories (owner_id, name, sort_order)
+		SELECT $1, name, ord - 1
+		FROM unnest($2::text[]) WITH ORDINALITY AS t(name, ord)`,
+		ownerID, category.DefaultNames,
+	)
+	return err
+}
+
 // Subtree returns id and every descendant id, scoped to ownerID's own
 // tree, via a recursive CTE.
 func (s *CategoryStore) Subtree(ctx context.Context, ownerID, id string) ([]string, error) {

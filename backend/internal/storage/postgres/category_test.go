@@ -241,3 +241,25 @@ func TestPGCategoryReparentAppendsToNewParentsSiblingOrder(t *testing.T) {
 		t.Fatalf("SortOrder = %d, want > existing child's %d", got.SortOrder, existingChild.SortOrder)
 	}
 }
+
+func TestPGCategorySeedDefaults(t *testing.T) {
+	store, authStore := newCategoryStore(t)
+	ctx := context.Background()
+	owner := mustUser(t, authStore, "cat-seed@example.com").ID
+
+	if err := store.SeedDefaults(ctx, owner); err != nil {
+		t.Fatalf("SeedDefaults: %v", err)
+	}
+	got, err := store.List(ctx, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(category.DefaultNames) {
+		t.Fatalf("List after SeedDefaults = %+v, want %d categories", got, len(category.DefaultNames))
+	}
+	for i, c := range got {
+		if c.Name != category.DefaultNames[i] {
+			t.Fatalf("category %d name = %q, want %q (in order)", i, c.Name, category.DefaultNames[i])
+		}
+	}
+}

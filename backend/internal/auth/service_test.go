@@ -103,7 +103,11 @@ func newSvc(t *testing.T, p auth.Params, opts ...svcOpt) (*auth.Service, *memory
 	for _, o := range opts {
 		o(&cfg)
 	}
-	svc := auth.NewService(store, mailer, cfg.oidc, p, auth.WithClock(cfg.clock.Now))
+	svcOpts := []auth.Option{auth.WithClock(cfg.clock.Now)}
+	if cfg.hooks != nil {
+		svcOpts = append(svcOpts, auth.WithNewUserHooks(cfg.hooks...))
+	}
+	svc := auth.NewService(store, mailer, cfg.oidc, p, svcOpts...)
 	return svc, store, mailer, cfg.clock
 }
 
@@ -123,11 +127,37 @@ type svcConfig struct {
 	clock *clock
 	oidc  auth.OIDCClient
 	label string
+	hooks []auth.NewUserHook
 }
 type svcOpt func(*svcConfig)
 
 func withOIDC(o auth.OIDCClient) svcOpt { return func(c *svcConfig) { c.oidc = o } }
 func withOIDCLabel(label string) svcOpt { return func(c *svcConfig) { c.label = label } }
+func withNewUserHooks(h ...auth.NewUserHook) svcOpt {
+	return func(c *svcConfig) { c.hooks = h }
+}
+
+// stubNewUserHook records which owner ids SeedDefaults was called for, and
+// can be made to fail without affecting the caller (see
+// TestNewUserHookErrorDoesNotFailSignup).
+type stubNewUserHook struct {
+	mu        sync.Mutex
+	calledFor []string
+	err       error
+}
+
+func (h *stubNewUserHook) SeedDefaults(_ context.Context, ownerID string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.calledFor = append(h.calledFor, ownerID)
+	return h.err
+}
+
+func (h *stubNewUserHook) calls() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]string(nil), h.calledFor...)
+}
 
 // signInEmail runs a full magic-link sign-in and returns the resulting user
 // and session token.
@@ -381,6 +411,53 @@ func TestLogoutRevokesSession(t *testing.T) {
 	// Idempotent.
 	if err := svc.Logout(context.Background(), tok); err != nil {
 		t.Fatalf("second Logout: %v", err)
+	}
+}
+
+func TestNewUserHooksRunOnceForABrandNewMagicLinkSignup(t *testing.T) {
+	hook := &stubNewUserHook{}
+	svc, _, mailer, _ := newSvc(t, baseParams(), withNewUserHooks(hook))
+
+	user, _ := signInEmail(t, svc, mailer, "fresh-hook@example.com")
+	if got := hook.calls(); len(got) != 1 || got[0] != user.ID {
+		t.Fatalf("hook calls = %v, want exactly one call for %q", got, user.ID)
+	}
+
+	// Signing in again (existing user, not a new one) must not re-run it.
+	signInEmail(t, svc, mailer, "fresh-hook@example.com")
+	if got := hook.calls(); len(got) != 1 {
+		t.Fatalf("hook calls after repeat sign-in = %v, want still exactly one", got)
+	}
+}
+
+func TestNewUserHooksRunOnceForABrandNewOIDCSignup(t *testing.T) {
+	hook := &stubNewUserHook{}
+	oidc := &stubOIDC{claims: auth.OIDCClaims{Issuer: "https://idp.example", Subject: "sub-hook", Email: "oidc-hook@example.com", EmailVerified: true}}
+	svc, _, _, _ := newSvc(t, baseParams(), withOIDC(oidc), withNewUserHooks(hook))
+
+	redirect, err := svc.StartOIDC(context.Background(), "")
+	if err != nil {
+		t.Fatalf("StartOIDC: %v", err)
+	}
+	state := redirect[strings.Index(redirect, "state=")+len("state="):]
+	user, _, _, err := svc.CompleteOIDC(context.Background(), state, "code", "", auth.SessionContext{})
+	if err != nil {
+		t.Fatalf("CompleteOIDC: %v", err)
+	}
+	if got := hook.calls(); len(got) != 1 || got[0] != user.ID {
+		t.Fatalf("hook calls = %v, want exactly one call for %q", got, user.ID)
+	}
+}
+
+func TestNewUserHookErrorDoesNotFailSignup(t *testing.T) {
+	hook := &stubNewUserHook{err: errors.New("seeding boom")}
+	svc, _, mailer, _ := newSvc(t, baseParams(), withNewUserHooks(hook))
+
+	// A user who successfully signs up must never see signup fail just
+	// because a starter dataset couldn't be seeded.
+	user, _ := signInEmail(t, svc, mailer, "hook-fails@example.com")
+	if got := hook.calls(); len(got) != 1 || got[0] != user.ID {
+		t.Fatalf("hook calls = %v, want exactly one call for %q despite its error", got, user.ID)
 	}
 }
 
