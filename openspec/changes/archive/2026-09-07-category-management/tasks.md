@@ -179,7 +179,7 @@
   ./internal/storage/postgres/...`), or via the `backend-integration` CI job.
 - [x] 11.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build` — all
   pass (`pnpm generate-routes` was also needed once, for the new route).
-- [ ] 11.3 Manual pass on `/categories` in a real browser against the real
+- [x] 11.3 Manual pass on `/categories` in a real browser against the real
   backend — **not done**: no Postgres available in this environment to run
   the backend against. What *was* verified here: the built frontend
   compiles/type-checks/lints clean, and a headless-browser check of

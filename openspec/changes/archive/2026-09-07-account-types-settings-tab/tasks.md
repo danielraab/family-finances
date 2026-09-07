@@ -114,7 +114,7 @@
 - [x] 9.1 Apply this change's `specs/web-client-settings` delta onto
   `openspec/specs/web-client-settings/spec.md` by hand (the `openspec` CLI
   is unavailable in this environment, as for prior changes).
-- [ ] 9.2 `specs/accounts` is intentionally **not** synced onto
+- [x] 9.2 `specs/accounts` is intentionally **not** synced onto
   `openspec/specs/` yet: that capability doesn't exist there at all — it's
   still pending from the un-archived `add-accounts-entries` change,
   alongside whose own account-type requirements this change's delta
