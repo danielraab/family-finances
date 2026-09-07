@@ -2,6 +2,7 @@ package entry
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 )
@@ -132,6 +133,42 @@ func (s *Service) Delete(ctx context.Context, ownerID, id string) error {
 	return s.store.SoftDelete(ctx, ownerID, id)
 }
 
+// resolveFilter applies the account-visibility and category resolution
+// shared by List and Sum: narrows f.AccountIDs to ownerID's own visible
+// accounts (intersected with any caller-supplied AccountIDs), and — when
+// f.CategoryID is set — resolves f.CategoryIDs to either the category's
+// full subtree (the default) or the category alone (CategoryMode:
+// ModeExact).
+func (s *Service) resolveFilter(ctx context.Context, ownerID string, f Filter) (Filter, error) {
+	if !f.CategoryMode.valid() {
+		return Filter{}, ErrInvalidValue
+	}
+
+	visible, err := s.accounts.VisibleIDs(ctx, ownerID)
+	if err != nil {
+		return Filter{}, err
+	}
+	if len(f.AccountIDs) > 0 {
+		f.AccountIDs = intersect(f.AccountIDs, visible)
+	} else {
+		f.AccountIDs = visible
+	}
+
+	if f.CategoryID != nil {
+		if f.CategoryMode == ModeExact {
+			f.CategoryIDs = []string{*f.CategoryID}
+		} else {
+			ids, err := s.categories.Subtree(ctx, ownerID, *f.CategoryID)
+			if err != nil {
+				return Filter{}, err
+			}
+			f.CategoryIDs = ids
+		}
+	}
+
+	return f, nil
+}
+
 // List resolves f's caller-supplied AccountIDs/CategoryID against the
 // caller's visible accounts and the category tree, applies defaults for
 // Sort/Dir/Limit, and returns a page of ownerID's matching entries.
@@ -153,25 +190,52 @@ func (s *Service) List(ctx context.Context, ownerID string, f Filter) ([]Entry, 
 		return nil, nil, ErrInvalidValue
 	}
 
-	visible, err := s.accounts.VisibleIDs(ctx, ownerID)
+	f, err := s.resolveFilter(ctx, ownerID, f)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(f.AccountIDs) > 0 {
-		f.AccountIDs = intersect(f.AccountIDs, visible)
-	} else {
-		f.AccountIDs = visible
-	}
-
-	if f.CategoryID != nil {
-		ids, err := s.categories.Subtree(ctx, ownerID, *f.CategoryID)
-		if err != nil {
-			return nil, nil, err
-		}
-		f.CategoryIDs = ids
-	}
 
 	return s.store.List(ctx, ownerID, f)
+}
+
+// Sum resolves f the same way List does (account visibility, category
+// exact/subtree resolution), then returns the matching kind: transaction
+// entries' amounts summed per account currency — Store.Sum forces the
+// transaction-only restriction regardless of f.Kind. Currencies are
+// resolved per matching account via AccountLookup.Owner, since Store has
+// no notion of an account's currency.
+func (s *Service) Sum(ctx context.Context, ownerID string, f Filter) (Summary, error) {
+	f, err := s.resolveFilter(ctx, ownerID, f)
+	if err != nil {
+		return Summary{}, err
+	}
+
+	perAccount, count, err := s.store.Sum(ctx, ownerID, f)
+	if err != nil {
+		return Summary{}, err
+	}
+
+	totals := make(map[string]int64, len(perAccount))
+	for accountID, amount := range perAccount {
+		_, currency, _, err := s.accounts.Owner(ctx, accountID)
+		if err != nil {
+			return Summary{}, err
+		}
+		totals[currency] += amount
+	}
+
+	currencies := make([]string, 0, len(totals))
+	for currency := range totals {
+		currencies = append(currencies, currency)
+	}
+	sort.Strings(currencies)
+
+	sums := make([]CurrencySum, 0, len(currencies))
+	for _, currency := range currencies {
+		sums = append(sums, CurrencySum{Currency: currency, Amount: totals[currency]})
+	}
+
+	return Summary{Sums: sums, Count: count}, nil
 }
 
 // Balance confirms ownerID owns accountID, then returns its live balance as

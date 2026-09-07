@@ -3,7 +3,8 @@
     "home": "Home",
     "accounts": "Accounts",
     "entries": "Entries",
-    "categories": "Categories"
+    "categories": "Categories",
+    "reports": "Reports"
   },
   "sidebar": {
     "closeSidebar": "Close sidebar"
@@ -349,6 +350,32 @@
       "deleteBody": "This is only possible while it has no subcategories and no entry uses it. This cannot be undone here.",
       "cancel": "Cancel",
       "confirmAction": "Confirm"
+    }
+  },
+  "reports": {
+    "title": "Reports",
+    "filters": {
+      "category": "Category",
+      "selectCategory": "Select a category…",
+      "includeSubcategories": "Include subcategories",
+      "tag": "Tag",
+      "selectTag": "Select a tag…",
+      "account": "Account",
+      "allAccounts": "All accounts",
+      "from": "From",
+      "to": "To"
+    },
+    "generate": "Generate report",
+    "selectOneHint": "Select a category or a tag, then generate the report.",
+    "beforeGenerate": "Select a category or a tag above, then click \"Generate report\" to see the matching entries and their total.",
+    "loading": "Loading…",
+    "emptyFiltered": "No entries match this report's filters.",
+    "sumsTitle": "Total",
+    "columns": {
+      "date": "Date",
+      "title": "Title",
+      "account": "Account",
+      "amount": "Amount"
     }
   }
 }

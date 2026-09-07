@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -39,6 +40,7 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 
 	h.mux.HandleFunc("GET /api/entries", h.list)
 	h.mux.HandleFunc("POST /api/entries", h.create)
+	h.mux.HandleFunc("GET /api/entries/summary", h.summary)
 	h.mux.HandleFunc("GET /api/entries/{id}", h.get)
 	h.mux.HandleFunc("PATCH /api/entries/{id}", h.update)
 	h.mux.HandleFunc("DELETE /api/entries/{id}", h.delete)
@@ -169,6 +171,42 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// parseCommonFilter parses the account_id, category_id/category_mode,
+// tag_id, from, to, and q query parameters shared by GET /api/entries and
+// GET /api/entries/summary. list additionally parses sort, dir, kind,
+// limit, and after; summary uses no other parameters — it always sums
+// kind: transaction entries regardless of what the caller passes.
+func parseCommonFilter(q url.Values) (Filter, error) {
+	f := Filter{
+		AccountIDs: q["account_id"],
+		Query:      q.Get("q"),
+	}
+	if v := q.Get("category_id"); v != "" {
+		f.CategoryID = &v
+	}
+	if v := q.Get("category_mode"); v != "" {
+		f.CategoryMode = CategoryMode(v)
+	}
+	if v := q.Get("tag_id"); v != "" {
+		f.TagID = &v
+	}
+	if v := q.Get("from"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return Filter{}, ErrInvalidValue
+		}
+		f.From = &t
+	}
+	if v := q.Get("to"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return Filter{}, ErrInvalidValue
+		}
+		f.To = &t
+	}
+	return f, nil
+}
+
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
@@ -177,37 +215,16 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 
-	f := Filter{
-		AccountIDs: q["account_id"],
-		Sort:       SortField(q.Get("sort")),
-		Dir:        SortDir(q.Get("dir")),
-		Query:      q.Get("q"),
+	f, err := parseCommonFilter(q)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
 	}
-	if v := q.Get("category_id"); v != "" {
-		f.CategoryID = &v
-	}
-	if v := q.Get("tag_id"); v != "" {
-		f.TagID = &v
-	}
+	f.Sort = SortField(q.Get("sort"))
+	f.Dir = SortDir(q.Get("dir"))
 	if v := q.Get("kind"); v != "" {
 		k := Kind(v)
 		f.Kind = &k
-	}
-	if v := q.Get("from"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			h.renderError(w, r, ErrInvalidValue)
-			return
-		}
-		f.From = &t
-	}
-	if v := q.Get("to"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			h.renderError(w, r, ErrInvalidValue)
-			return
-		}
-		f.To = &t
 	}
 	if v := q.Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -240,6 +257,26 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		page.Items = []Entry{}
 	}
 	writeJSON(w, http.StatusOK, page)
+}
+
+func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	f, err := parseCommonFilter(r.URL.Query())
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+
+	sum, err := h.svc.Sum(r.Context(), user.ID, f)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sum)
 }
 
 func (h *Handler) balance(w http.ResponseWriter, r *http.Request) {

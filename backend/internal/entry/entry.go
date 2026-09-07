@@ -63,6 +63,22 @@ func (d SortDir) valid() bool {
 	return d == DirAsc || d == DirDesc
 }
 
+// CategoryMode controls how Filter.CategoryID is resolved. It has no effect
+// when CategoryID is nil.
+type CategoryMode string
+
+const (
+	// ModeSubtree (the default) resolves CategoryID to itself plus every
+	// descendant in the category tree.
+	ModeSubtree CategoryMode = "subtree"
+	// ModeExact resolves CategoryID to itself alone.
+	ModeExact CategoryMode = "exact"
+)
+
+func (m CategoryMode) valid() bool {
+	return m == "" || m == ModeSubtree || m == ModeExact
+}
+
 // Entry is a transaction or balance adjustment recorded against exactly one
 // account. It has exactly one owner (the account's owner at creation time,
 // its own column — see design.md) and is visible only to them.
@@ -150,18 +166,32 @@ type Cursor struct {
 // caller's own visible accounts (optionally narrowed further by the
 // caller-supplied AccountIDs) before reaching Store.
 type Filter struct {
-	AccountIDs  []string
-	CategoryID  *string
-	CategoryIDs []string
-	TagID       *string
-	Kind        *Kind
-	From        *time.Time
-	To          *time.Time
-	Query       string
-	Sort        SortField
-	Dir         SortDir
-	After       *Cursor
-	Limit       int
+	AccountIDs   []string
+	CategoryID   *string
+	CategoryMode CategoryMode
+	CategoryIDs  []string
+	TagID        *string
+	Kind         *Kind
+	From         *time.Time
+	To           *time.Time
+	Query        string
+	Sort         SortField
+	Dir          SortDir
+	After        *Cursor
+	Limit        int
+}
+
+// CurrencySum is one currency's total within a Summary.
+type CurrencySum struct {
+	Currency string `json:"currency"`
+	Amount   int64  `json:"amount"`
+}
+
+// Summary is the result of summing a Filter's matching transaction entries,
+// grouped by their account's currency — see Service.Sum.
+type Summary struct {
+	Sums  []CurrencySum `json:"sums"`
+	Count int           `json:"count"`
 }
 
 const (

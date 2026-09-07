@@ -394,6 +394,88 @@ func TestBalanceCrossOwnerAccountNotFound(t *testing.T) {
 	}
 }
 
+// --- summing -----------------------------------------------------------
+
+func TestSumGroupsByCurrencyAndExcludesBalanceAdjustments(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "USD")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -100, "2024-01-01T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -50, "2024-01-02T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc2", entry.KindTransaction, -20, "2024-01-03T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindBalanceAdjustment, 99999, "2024-01-01T00:00:00Z", nil)
+
+	summary, err := svc.Sum(context.Background(), "u1", entry.Filter{CategoryID: ptr("cat1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Count != 3 {
+		t.Fatalf("Count = %d, want 3 (balance adjustment excluded)", summary.Count)
+	}
+	byCurrency := map[string]int64{}
+	for _, s := range summary.Sums {
+		byCurrency[s.Currency] = s.Amount
+	}
+	if len(byCurrency) != 2 || byCurrency["EUR"] != -150 || byCurrency["USD"] != -20 {
+		t.Fatalf("Sums = %+v, want EUR -150 and USD -20", summary.Sums)
+	}
+}
+
+func TestSumWithNoMatchesReturnsEmpty(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	summary, err := svc.Sum(context.Background(), "u1", entry.Filter{CategoryID: ptr("cat1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Count != 0 || len(summary.Sums) != 0 {
+		t.Fatalf("summary = %+v, want empty", summary)
+	}
+}
+
+func TestSumIgnoresKindFilterAlwaysExcludingBalanceAdjustments(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -10, "2024-01-01T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindBalanceAdjustment, 500, "2024-01-01T00:00:00Z", nil)
+
+	bal := entry.KindBalanceAdjustment
+	summary, err := svc.Sum(context.Background(), "u1", entry.Filter{Kind: &bal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Count != 1 || len(summary.Sums) != 1 || summary.Sums[0].Amount != -10 {
+		t.Fatalf("summary = %+v, want the single transaction only, "+
+			"even though Kind asked for balance_adjustment", summary)
+	}
+}
+
+func TestSumExactCategoryModeExcludesDescendants(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("parent")
+	categories.add("child")
+	categories.children["parent"] = []string{"child"}
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -10, "2024-01-01T00:00:00Z", ptr("parent"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -5, "2024-01-02T00:00:00Z", ptr("child"))
+
+	summary, err := svc.Sum(context.Background(), "u1", entry.Filter{
+		CategoryID: ptr("parent"), CategoryMode: entry.ModeExact,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Count != 1 || len(summary.Sums) != 1 || summary.Sums[0].Amount != -10 {
+		t.Fatalf("summary = %+v, want only the parent-category entry", summary)
+	}
+}
+
 func mustCreate(t *testing.T, svc *entry.Service, owner, accountID string, kind entry.Kind, amount int64, ts string, categoryID *string) entry.Entry {
 	t.Helper()
 	e, err := svc.Create(context.Background(), owner, entry.New{
@@ -426,6 +508,40 @@ func TestListFiltersByCategoryIncludingDescendants(t *testing.T) {
 	}
 	if len(items) != 2 {
 		t.Fatalf("items = %v, want 2 (parent + child)", items)
+	}
+}
+
+func TestListFiltersByCategoryExactExcludesDescendants(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("parent")
+	categories.add("child")
+	categories.children["parent"] = []string{"child"}
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 1, "2024-01-01T00:00:00Z", ptr("child"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 2, "2024-01-02T00:00:00Z", ptr("parent"))
+
+	items, _, err := svc.List(context.Background(), "u1", entry.Filter{
+		CategoryID: ptr("parent"), CategoryMode: entry.ModeExact,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].CategoryID == nil || *items[0].CategoryID != "parent" {
+		t.Fatalf("items = %+v, want just the parent-category entry", items)
+	}
+}
+
+func TestListInvalidCategoryModeRejected(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	_, _, err := svc.List(context.Background(), "u1", entry.Filter{
+		CategoryID: ptr("cat1"), CategoryMode: entry.CategoryMode("bogus"),
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
 	}
 }
 

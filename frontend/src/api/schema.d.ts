@@ -584,6 +584,26 @@ export interface paths {
         patch: operations["patchEntry"];
         trace?: never;
     };
+    "/api/entries/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sum the caller's matching entries per currency, without paging
+         * @description Accepts the same account_id, category_id/category_mode, tag_id, from/to, and q filters as GET /api/entries (no sort, dir, after, or limit — this is an aggregate, not a page). Always additionally restricted to kind=transaction, regardless of the caller's other filters — a balance_adjustment is an absolute reading, not a categorized delta. Computed directly rather than by paging through results, so it is accurate however many entries match.
+         */
+        get: operations["getEntriesSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/healthz": {
         parameters: {
             query?: never;
@@ -776,6 +796,11 @@ export interface components {
             /** @description Explicit null makes it a root category. */
             parent_id?: string | null;
         };
+        CurrencySum: {
+            /** Format: int64 */
+            amount: number;
+            currency: string;
+        };
         EmailStartRequest: {
             /** Format: email */
             email: string;
@@ -818,6 +843,11 @@ export interface components {
         EntryPage: {
             items: components["schemas"]["Entry"][];
             next_cursor: string | null;
+        };
+        EntrySummary: {
+            /** Format: int64 */
+            count: number;
+            sums: components["schemas"]["CurrencySum"][];
         };
         /** @description No kind field — it is immutable after creation. account_id may be set to move the entry to a different account the caller owns (see account-entries); it must not be disabled, the same rule creation applies. No currency conversion or validation is performed. */
         EntryUpdate: {
@@ -1895,8 +1925,10 @@ export interface operations {
                 account_id?: string[];
                 /** @description Opaque cursor from a previous response's next_cursor. */
                 after?: string;
-                /** @description Matches this category and every descendant. */
+                /** @description Matches this category, plus every descendant unless category_mode=exact. */
                 category_id?: string;
+                /** @description Only meaningful together with category_id. subtree (the default) matches the category and every descendant; exact matches only that category. */
+                category_mode?: "subtree" | "exact";
                 dir?: "asc" | "desc";
                 /** @description Inclusive booking_timestamp lower bound, RFC3339. */
                 from?: string;
@@ -2029,6 +2061,41 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getEntriesSummary: {
+        parameters: {
+            query?: {
+                /** @description Repeatable. Omitted means every account the caller owns. */
+                account_id?: string[];
+                /** @description Matches this category, plus every descendant unless category_mode=exact. */
+                category_id?: string;
+                category_mode?: "subtree" | "exact";
+                /** @description Inclusive booking_timestamp lower bound, RFC3339. */
+                from?: string;
+                /** @description Case-insensitive substring match against title or description. */
+                q?: string;
+                tag_id?: string;
+                /** @description Inclusive booking_timestamp upper bound, RFC3339. */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The matching transaction entries' amounts, summed per currency. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntrySummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     getHealthz: {

@@ -338,6 +338,93 @@ func TestPGEntryListFiltersByCategorySubtree(t *testing.T) {
 	}
 }
 
+func TestPGEntrySumGroupsByAccountAndExcludesBalanceAdjustments(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	opening, _ := account.ParseDate("2024-01-01")
+	acc2, err := f.accounts.Create(ctx, f.owner, account.New{
+		Title: "Savings-sum", TypeID: mustType(t, f.accounts, f.owner), Currency: "USD", OpeningDate: opening,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: -100,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "x", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: -50,
+		BookingTimestamp: at("2024-01-02T00:00:00Z"), Title: "y", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: acc2.ID, Kind: entry.KindTransaction, Amount: -20,
+		BookingTimestamp: at("2024-01-03T00:00:00Z"), Title: "z", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindBalanceAdjustment, Amount: 99999,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "adj",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	perAccount, count, err := f.entries.Sum(ctx, f.owner, entry.Filter{
+		AccountIDs: []string{f.accID, acc2.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 3 {
+		t.Fatalf("count = %d, want 3 (balance adjustment excluded)", count)
+	}
+	if perAccount[f.accID] != -150 {
+		t.Fatalf("perAccount[accID] = %d, want -150", perAccount[f.accID])
+	}
+	if perAccount[acc2.ID] != -20 {
+		t.Fatalf("perAccount[acc2.ID] = %d, want -20", perAccount[acc2.ID])
+	}
+}
+
+func TestPGEntrySumExactModeExcludesDescendants(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	child, err := f.cats.Create(ctx, f.owner, category.New{ParentID: &f.catID, Name: "Snacks-entry-sum"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: -10,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "parent-cat", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: -5,
+		BookingTimestamp: at("2024-01-02T00:00:00Z"), Title: "child-cat", CategoryID: &child.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	perAccount, count, err := f.entries.Sum(ctx, f.owner, entry.Filter{
+		AccountIDs: []string{f.accID}, CategoryID: &f.catID, CategoryIDs: []string{f.catID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 || perAccount[f.accID] != -10 {
+		t.Fatalf("perAccount = %v, count = %d, want {accID: -10}, 1 (exact category only)", perAccount, count)
+	}
+}
+
 func TestPGEntrySoftDeletedExcludedFromBalance(t *testing.T) {
 	f := newEntryFixture(t)
 	ctx := context.Background()

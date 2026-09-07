@@ -1103,9 +1103,22 @@ paths:
         - name: category_id
           in: query
           required: false
-          description: Matches this category and every descendant.
+          description: >-
+            Matches this category, plus every descendant unless
+            category_mode=exact.
           schema:
             type: string
+        - name: category_mode
+          in: query
+          required: false
+          description: >-
+            Only meaningful together with category_id. subtree (the
+            default) matches the category and every descendant; exact
+            matches only that category.
+          schema:
+            type: string
+            enum: [subtree, exact]
+            default: subtree
         - name: tag_id
           in: query
           required: false
@@ -1198,6 +1211,82 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "422":
           $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/entries/summary:
+    get:
+      operationId: getEntriesSummary
+      summary: Sum the caller's matching entries per currency, without paging
+      description: >-
+        Accepts the same account_id, category_id/category_mode, tag_id,
+        from/to, and q filters as GET /api/entries (no sort, dir, after, or
+        limit — this is an aggregate, not a page). Always additionally
+        restricted to kind=transaction, regardless of the caller's other
+        filters — a balance_adjustment is an absolute reading, not a
+        categorized delta. Computed directly rather than by paging through
+        results, so it is accurate however many entries match.
+      tags: [entries]
+      parameters:
+        - name: account_id
+          in: query
+          required: false
+          description: Repeatable. Omitted means every account the caller owns.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: category_id
+          in: query
+          required: false
+          description: >-
+            Matches this category, plus every descendant unless
+            category_mode=exact.
+          schema:
+            type: string
+        - name: category_mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [subtree, exact]
+            default: subtree
+        - name: tag_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          description: Inclusive booking_timestamp lower bound, RFC3339.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Inclusive booking_timestamp upper bound, RFC3339.
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive substring match against title or description.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The matching transaction entries' amounts, summed per currency.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntrySummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /api/entries/{id}:
     get:
@@ -1901,6 +1990,28 @@ components:
       required: [balance]
       properties:
         balance:
+          type: integer
+          format: int64
+
+    CurrencySum:
+      type: object
+      required: [currency, amount]
+      properties:
+        currency:
+          type: string
+        amount:
+          type: integer
+          format: int64
+
+    EntrySummary:
+      type: object
+      required: [sums, count]
+      properties:
+        sums:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrencySum"
+        count:
           type: integer
           format: int64
 

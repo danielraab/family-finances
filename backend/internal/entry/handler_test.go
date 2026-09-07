@@ -224,6 +224,115 @@ func TestHandlerListAndPaginate(t *testing.T) {
 	}
 }
 
+func TestHandlerSummary(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "USD")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	for _, body := range []string{
+		`{"account_id":"acc1","kind":"transaction","amount":-100,"booking_timestamp":"2024-01-01T00:00:00Z","title":"x","category_id":"cat1"}`,
+		`{"account_id":"acc2","kind":"transaction","amount":-20,"booking_timestamp":"2024-01-02T00:00:00Z","title":"y","category_id":"cat1"}`,
+		`{"account_id":"acc1","kind":"balance_adjustment","amount":99999,"booking_timestamp":"2024-01-01T00:00:00Z","title":"adj"}`,
+	} {
+		h.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/summary?category_id=cat1", nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("summary status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "GET", "/api/entries/summary?category_id=cat1", rec)
+	var got entry.Summary
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Count != 2 {
+		t.Fatalf("Count = %d, want 2 (balance adjustment excluded)", got.Count)
+	}
+	byCurrency := map[string]int64{}
+	for _, s := range got.Sums {
+		byCurrency[s.Currency] = s.Amount
+	}
+	if len(byCurrency) != 2 || byCurrency["EUR"] != -100 || byCurrency["USD"] != -20 {
+		t.Fatalf("Sums = %+v, want EUR -100 and USD -20", got.Sums)
+	}
+}
+
+func TestHandlerSummaryRequiresAuth(t *testing.T) {
+	h, _, _ := newHandlerFixture()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/entries/summary", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestHandlerSummaryWithNoMatches(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/summary?category_id=cat1", nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "GET", "/api/entries/summary?category_id=cat1", rec)
+	var got entry.Summary
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Count != 0 || len(got.Sums) != 0 {
+		t.Fatalf("got = %+v, want empty", got)
+	}
+}
+
+func TestHandlerListRejectsInvalidCategoryMode(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries?category_id=cat1&category_mode=bogus", nil), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestHandlerListCategoryExactExcludesDescendants(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("parent")
+	categories.add("child")
+	categories.children["parent"] = []string{"child"}
+	user := auth.User{ID: "u1"}
+
+	h.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest("POST", "/api/entries",
+		strings.NewReader(`{"account_id":"acc1","kind":"transaction","amount":1,"booking_timestamp":"2024-01-01T00:00:00Z","title":"parent","category_id":"parent"}`)), user))
+	h.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest("POST", "/api/entries",
+		strings.NewReader(`{"account_id":"acc1","kind":"transaction","amount":2,"booking_timestamp":"2024-01-02T00:00:00Z","title":"child","category_id":"child"}`)), user))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries?category_id=parent&category_mode=exact", nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "GET", "/api/entries?category_id=parent&category_mode=exact", rec)
+	var page struct {
+		Items []entry.Entry `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Title != "parent" {
+		t.Fatalf("items = %+v, want just the parent-category entry", page.Items)
+	}
+}
+
 func TestHandlerBalance(t *testing.T) {
 	h, accounts, _ := newHandlerFixture()
 	accounts.add("acc1", "u1", "EUR")
