@@ -44,6 +44,10 @@
     "emptyTitle": "Hier ist noch nichts",
     "emptyBody": "Dies ist ein Platzhalter. Echte Inhalte folgen hier bald."
   },
+  "dashboard": {
+    "emptyTitle": "Noch keine Konten",
+    "emptyBody": "Lege dein erstes Konto an, um es hier zu sehen."
+  },
   "settings": {
     "title": "Einstellungen",
     "tabs": {
