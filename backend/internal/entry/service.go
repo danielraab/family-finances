@@ -20,6 +20,20 @@ func NewService(store Store, accounts AccountLookup, categories CategoryLookup, 
 	return &Service{store: store, accounts: accounts, categories: categories, tags: tags}
 }
 
+// checkAccount confirms ownerID owns accountID and that it is not disabled —
+// the rule Create applies to the account an entry is created against, and
+// Update applies identically to a new account_id an entry is being moved to.
+func (s *Service) checkAccount(ctx context.Context, ownerID, accountID string) error {
+	accOwner, _, disabled, err := s.accounts.Owner(ctx, accountID)
+	if err != nil || accOwner != ownerID {
+		return ErrInvalidValue
+	}
+	if disabled {
+		return ErrAccountDisabled
+	}
+	return nil
+}
+
 // Create validates in, confirms ownerID owns the target account and that it
 // is not disabled, confirms any category/tags are usable, and creates the
 // entry.
@@ -28,12 +42,8 @@ func (s *Service) Create(ctx context.Context, ownerID string, in New) (Entry, er
 		return Entry{}, err
 	}
 
-	accOwner, _, disabled, err := s.accounts.Owner(ctx, in.AccountID)
-	if err != nil || accOwner != ownerID {
-		return Entry{}, ErrInvalidValue
-	}
-	if disabled {
-		return Entry{}, ErrAccountDisabled
+	if err := s.checkAccount(ctx, ownerID, in.AccountID); err != nil {
+		return Entry{}, err
 	}
 
 	if in.CategoryID != nil {
@@ -72,6 +82,11 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (E
 		return Entry{}, err
 	}
 
+	if upd.AccountID != nil {
+		if err := s.checkAccount(ctx, ownerID, *upd.AccountID); err != nil {
+			return Entry{}, err
+		}
+	}
 	if upd.Title != nil && strings.TrimSpace(*upd.Title) == "" {
 		return Entry{}, ErrInvalidValue
 	}

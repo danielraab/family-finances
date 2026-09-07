@@ -118,13 +118,15 @@ type New struct {
 	TagIDs           []string
 }
 
-// Update is a partial change to an entry. AccountID and Kind are
-// deliberately absent — they are immutable after creation (see design.md);
-// the handler's request body has no fields for them either, so
-// DisallowUnknownFields rejects an attempt to set them. A nil field here
-// leaves it untouched; TagIDs replaces the full set when non-nil (including
-// an empty, non-nil slice, which clears every tag).
+// Update is a partial change to an entry. Kind is deliberately absent — it
+// is immutable after creation (see design.md); the handler's request body
+// has no field for it either, so DisallowUnknownFields rejects an attempt
+// to set it. A nil field here leaves it untouched; TagIDs replaces the full
+// set when non-nil (including an empty, non-nil slice, which clears every
+// tag). A non-nil AccountID moves the entry to a different account, subject
+// to the same ownership/disabled-account checks Create applies.
 type Update struct {
+	AccountID        *string
 	Amount           *int64
 	BookingTimestamp *time.Time
 	Title            *string

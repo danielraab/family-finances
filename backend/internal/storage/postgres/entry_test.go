@@ -103,6 +103,52 @@ func TestPGEntryCreateGetUpdateDelete(t *testing.T) {
 	}
 }
 
+func TestPGEntryUpdateMovesAccount(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	opening, _ := account.ParseDate("2024-01-01")
+	acc2, err := f.accounts.Create(ctx, f.owner, account.New{
+		Title: "Savings", TypeID: mustType(t, f.accounts, f.owner), Currency: "EUR", OpeningDate: opening,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: 1234,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Coffee", CategoryID: &f.catID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := f.entries.Update(ctx, f.owner, e.ID, entry.Update{AccountID: &acc2.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.AccountID != acc2.ID {
+		t.Fatalf("AccountID = %q, want %q", updated.AccountID, acc2.ID)
+	}
+
+	got, err := f.entries.Get(ctx, f.owner, e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AccountID != acc2.ID {
+		t.Fatalf("persisted AccountID = %q, want %q", got.AccountID, acc2.ID)
+	}
+}
+
+func mustType(t *testing.T, accStore *AccountStore, owner string) string {
+	t.Helper()
+	typ, err := accStore.CreateType(context.Background(), owner, "Savings-entry-move", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return typ.ID
+}
+
 func TestPGEntryTransactionWithoutCategoryViolatesCheck(t *testing.T) {
 	f := newEntryFixture(t)
 	ctx := context.Background()

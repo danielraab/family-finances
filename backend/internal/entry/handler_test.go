@@ -81,7 +81,7 @@ func TestHandlerCreateGetUpdateDelete(t *testing.T) {
 	conforms(t, "DELETE", "/api/entries/"+created.ID, rec)
 }
 
-func TestHandlerUpdateRejectsAccountIDAndKind(t *testing.T) {
+func TestHandlerUpdateRejectsKind(t *testing.T) {
 	h, accounts, categories := newHandlerFixture()
 	accounts.add("acc1", "u1", "EUR")
 	categories.add("cat1")
@@ -96,16 +96,87 @@ func TestHandlerUpdateRejectsAccountIDAndKind(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/entries/"+created.ID, strings.NewReader(`{"account_id":"acc2"}`)), user))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 (unknown field account_id rejected)", rec.Code)
-	}
-
-	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/entries/"+created.ID, strings.NewReader(`{"kind":"balance_adjustment"}`)), user))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 (unknown field kind rejected)", rec.Code)
 	}
+}
+
+func TestHandlerUpdateMovesEntryToAnotherAccount(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	body := `{"account_id":"acc1","kind":"transaction","amount":1,"booking_timestamp":"2024-01-01T00:00:00Z","title":"X","category_id":"cat1"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	var created entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/entries/"+created.ID, strings.NewReader(`{"account_id":"acc2"}`)), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s, want 200", rec.Code, rec.Body)
+	}
+	conforms(t, "PATCH", "/api/entries/"+created.ID, rec)
+	var updated entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.AccountID != "acc2" {
+		t.Fatalf("AccountID = %q, want acc2", updated.AccountID)
+	}
+}
+
+func TestHandlerUpdateMoveToOtherOwnersAccountRejected(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u2", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	body := `{"account_id":"acc1","kind":"transaction","amount":1,"booking_timestamp":"2024-01-01T00:00:00Z","title":"X","category_id":"cat1"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	var created entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/entries/"+created.ID, strings.NewReader(`{"account_id":"acc2"}`)), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	conforms(t, "PATCH", "/api/entries/"+created.ID, rec)
+}
+
+func TestHandlerUpdateMoveToDisabledAccountRejected(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	accounts.disabled["acc2"] = true
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	body := `{"account_id":"acc1","kind":"transaction","amount":1,"booking_timestamp":"2024-01-01T00:00:00Z","title":"X","category_id":"cat1"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	var created entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/entries/"+created.ID, strings.NewReader(`{"account_id":"acc2"}`)), user))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", rec.Code)
+	}
+	conforms(t, "PATCH", "/api/entries/"+created.ID, rec)
 }
 
 func TestHandlerListAndPaginate(t *testing.T) {

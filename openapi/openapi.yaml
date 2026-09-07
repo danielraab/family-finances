@@ -1221,8 +1221,10 @@ paths:
       operationId: patchEntry
       summary: Update an entry
       description: >-
-        account_id and kind are immutable — there is no field for them on
-        this request body at all.
+        kind is immutable — there is no field for it on this request body.
+        account_id may be changed to move the entry to a different account
+        the caller owns; a disabled target account is rejected (422), the
+        same as entry creation.
       tags: [entries]
       parameters:
         - $ref: "#/components/parameters/EntryId"
@@ -1245,6 +1247,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
     delete:
       operationId: deleteEntry
       summary: Soft-delete an entry
@@ -1851,8 +1855,13 @@ components:
     EntryUpdate:
       type: object
       description: >-
-        No account_id or kind field — both are immutable after creation.
+        No kind field — it is immutable after creation. account_id may be
+        set to move the entry to a different account the caller owns (see
+        account-entries); it must not be disabled, the same rule creation
+        applies. No currency conversion or validation is performed.
       properties:
+        account_id:
+          type: string
         amount:
           type: integer
           format: int64

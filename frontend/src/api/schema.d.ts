@@ -579,7 +579,7 @@ export interface paths {
         head?: never;
         /**
          * Update an entry
-         * @description account_id and kind are immutable — there is no field for them on this request body at all.
+         * @description kind is immutable — there is no field for it on this request body. account_id may be changed to move the entry to a different account the caller owns; a disabled target account is rejected (422), the same as entry creation.
          */
         patch: operations["patchEntry"];
         trace?: never;
@@ -819,8 +819,9 @@ export interface components {
             items: components["schemas"]["Entry"][];
             next_cursor: string | null;
         };
-        /** @description No account_id or kind field — both are immutable after creation. */
+        /** @description No kind field — it is immutable after creation. account_id may be set to move the entry to a different account the caller owns (see account-entries); it must not be disabled, the same rule creation applies. No currency conversion or validation is performed. */
         EntryUpdate: {
+            account_id?: string;
             /** Format: int64 */
             amount?: number;
             /** Format: date-time */
@@ -2027,6 +2028,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
     getHealthz: {

@@ -40,6 +40,7 @@ function EditEntry() {
 
   const [entry, setEntry] = useState<Entry | null | undefined>(undefined);
   const [account, setAccount] = useState<Account | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
 
@@ -51,11 +52,15 @@ function EditEntry() {
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [tagNames, setTagNames] = useState<string[]>([]);
+  const [accountUnlocked, setAccountUnlocked] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [pendingAmount, setPendingAmount] = useState<number | null>(null);
 
   const [invalidField, setInvalidField] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingAccountChange, setConfirmingAccountChange] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,11 +68,13 @@ function EditEntry() {
       api.GET("/api/entries/{id}", { params: { path: { id: entryId } } }),
       api.GET("/api/categories"),
       api.GET("/api/tags"),
-    ]).then(([entryRes, categoriesRes, tagsRes]) => {
+      api.GET("/api/accounts"),
+    ]).then(([entryRes, categoriesRes, tagsRes, accountsRes]) => {
       if (cancelled) return;
       setCategories(categoriesRes.data ?? []);
       const allTags = tagsRes.data ?? [];
       setTags(allTags);
+      setAccounts(accountsRes.data ?? []);
       const e = entryRes.data ?? null;
       setEntry(e);
       if (e) {
@@ -81,6 +88,7 @@ function EditEntry() {
         setTitle(e.title);
         setDescription(e.description ?? "");
         setCategoryId(e.category_id ?? "");
+        setSelectedAccountId(e.account_id);
         setTagNames(
           e.tag_ids
             .map((id) => allTags.find((tag) => tag.id === id)?.name)
@@ -112,6 +120,36 @@ function EditEntry() {
     return ids;
   }
 
+  async function performSubmit(parsedAmount: number) {
+    if (!entry) return;
+    setConfirmingAccountChange(false);
+    setSubmitting(true);
+    setError(null);
+
+    const tagIds = await resolveTagIds();
+    const { data, response } = await api.PATCH("/api/entries/{id}", {
+      params: { path: { id: entryId } },
+      body: {
+        account_id: selectedAccountId,
+        amount: parsedAmount,
+        booking_timestamp: new Date(bookingTimestamp).toISOString(),
+        title: title.trim(),
+        category_id: categoryId || null,
+        tag_ids: tagIds,
+        ...compact({ description: description.trim() || undefined }),
+      },
+    });
+    setSubmitting(false);
+    if (!response.ok || !data) {
+      setError(t("entries.form.saveError"));
+      return;
+    }
+    navigate({
+      to: "/entries",
+      search: { account_id: selectedAccountId },
+    });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!entry) return;
@@ -139,30 +177,13 @@ function EditEntry() {
       return;
     }
     setInvalidField(null);
-    setSubmitting(true);
-    setError(null);
 
-    const tagIds = await resolveTagIds();
-    const { data, response } = await api.PATCH("/api/entries/{id}", {
-      params: { path: { id: entryId } },
-      body: {
-        amount: parsedAmount,
-        booking_timestamp: new Date(bookingTimestamp).toISOString(),
-        title: title.trim(),
-        category_id: categoryId || null,
-        tag_ids: tagIds,
-        ...compact({ description: description.trim() || undefined }),
-      },
-    });
-    setSubmitting(false);
-    if (!response.ok || !data) {
-      setError(t("entries.form.saveError"));
+    if (selectedAccountId !== entry.account_id) {
+      setPendingAmount(parsedAmount);
+      setConfirmingAccountChange(true);
       return;
     }
-    navigate({
-      to: "/entries",
-      search: { account_id: entry.account_id },
-    });
+    await performSubmit(parsedAmount);
   }
 
   async function handleDelete() {
@@ -198,6 +219,25 @@ function EditEntry() {
     categories.filter((c) => !c.disabled || c.id === categoryId),
   );
 
+  // The entry's current account still renders as a selectable option while
+  // unlocked even if it has since been disabled, but isn't offered once a
+  // different account has been chosen — mirroring the category picker's
+  // disabled-current-value handling above.
+  const accountOptions = accounts.filter(
+    (a) => !a.disabled || a.id === selectedAccountId,
+  );
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  const currencyMismatch =
+    account !== null &&
+    selectedAccount !== undefined &&
+    selectedAccount.currency !== account.currency;
+
+  const originalAccountId = entry.account_id;
+  function cancelAccountChange() {
+    setSelectedAccountId(originalAccountId);
+    setAccountUnlocked(false);
+  }
+
   return (
     <section className="mx-auto flex w-full max-w-xl flex-col gap-8 px-6 py-12 sm:px-10">
       <h1 className="text-2xl font-semibold tracking-tight">
@@ -207,11 +247,60 @@ function EditEntry() {
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5 text-sm font-medium">
           {t("entries.form.account")}
-          <input
-            value={account?.title ?? entry.account_id}
-            disabled
-            className={`${inputClass} opacity-60`}
-          />
+          {accountUnlocked ? (
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedAccountId}
+                onChange={(e) => setSelectedAccountId(e.target.value)}
+                className={`${inputClass} flex-1`}
+              >
+                {accountOptions.map((a) => (
+                  <option
+                    key={a.id}
+                    value={a.id}
+                    disabled={a.disabled && a.id === selectedAccountId}
+                  >
+                    {a.title}
+                    {a.disabled && a.id === selectedAccountId
+                      ? ` (${t("entries.form.accountDisabledOption")})`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={cancelAccountChange}
+                aria-label={t("entries.form.cancelAccountChange")}
+                className="rounded-md px-2 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                value={account?.title ?? entry.account_id}
+                disabled
+                className={`${inputClass} flex-1 opacity-60`}
+              />
+              <button
+                type="button"
+                onClick={() => setAccountUnlocked(true)}
+                aria-label={t("entries.form.changeAccount")}
+                className="rounded-md px-2 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                ✎
+              </button>
+            </div>
+          )}
+          {currencyMismatch && selectedAccount && account && (
+            <span className="text-xs font-normal text-amber-600 dark:text-amber-400">
+              {t("entries.form.accountCurrencyWarning", {
+                currency: selectedAccount.currency,
+                originalCurrency: account.currency,
+              })}
+            </span>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5 text-sm font-medium">
@@ -390,6 +479,52 @@ function EditEntry() {
                 className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
               >
                 {t("entries.edit.delete")}
+              </button>
+            </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={confirmingAccountChange}
+        onClose={() => setConfirmingAccountChange(false)}
+        className="relative z-50"
+      >
+        <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
+            <DialogTitle className="text-base font-semibold">
+              {t("entries.edit.confirmAccountChangeTitle")}
+            </DialogTitle>
+            <Description className="text-sm text-zinc-600 dark:text-zinc-400">
+              {t("entries.edit.confirmAccountChangeBody", {
+                account: selectedAccount?.title ?? selectedAccountId,
+              })}
+            </Description>
+            {currencyMismatch && selectedAccount && account && (
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                {t("entries.form.accountCurrencyWarning", {
+                  currency: selectedAccount.currency,
+                  originalCurrency: account.currency,
+                })}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingAccountChange(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                {t("accounts.edit.confirm.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (pendingAmount !== null) void performSubmit(pendingAmount);
+                }}
+                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {t("entries.edit.confirmAccountChangeConfirm")}
               </button>
             </div>
           </DialogPanel>
