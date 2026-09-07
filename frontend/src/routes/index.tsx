@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Placeholder } from "../components/Placeholder";
+import { FeatureOverview } from "../components/FeatureOverview";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -8,7 +8,7 @@ export const Route = createFileRoute("/")({
 function Home() {
   return (
     <>
-      <Placeholder />
+      <FeatureOverview />
     </>
   );
 }

@@ -41,8 +41,24 @@
   },
   "home": {
     "tagline": "Behalte die Finanzen der Familie an einem Ort im Blick.",
-    "emptyTitle": "Hier ist noch nichts",
-    "emptyBody": "Dies ist ein Platzhalter. Echte Inhalte folgen hier bald."
+    "features": {
+      "accounts": {
+        "title": "Konten anlegen und verwalten",
+        "description": "Lege für jede Bank, Kasse oder Karte ein Konto an und behalte den Überblick."
+      },
+      "entries": {
+        "title": "Buchungen als Transaktion oder Kontostandanpassung erfassen",
+        "description": "Erfasse ein- und ausgehendes Geld, oder setze den Kontostand direkt."
+      },
+      "categorization": {
+        "title": "Buchungen mit Kategorien und Tags verwalten",
+        "description": "Ordne Buchungen Kategorien zu und versieh sie mit Tags, um zu sehen, wohin das Geld fließt."
+      },
+      "categoryTree": {
+        "title": "Den Kategoriebaum verwalten",
+        "description": "Organisiere Kategorien in einem verschachtelten Baum, der zu den Ausgaben deiner Familie passt."
+      }
+    }
   },
   "dashboard": {
     "emptyTitle": "Noch keine Konten",
