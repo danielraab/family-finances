@@ -16,6 +16,11 @@ import (
 	"at.draab/familyfinances/internal/tag"
 )
 
+// testEmails stands in for what parseSeedEmails would produce from a
+// CLI-supplied comma-separated list, for tests that don't exercise parsing
+// itself.
+var testEmails = []string{"tester1@draab.at", "tester2@draab.at", "tester3@draab.at"}
+
 // newFixtureDeps builds the same shape of services Seed builds over
 // Postgres, but over storage/memory, so seedTesters/generateFixtures are
 // testable without a database. auth.Params carries real SessionTTL/
@@ -41,12 +46,12 @@ func TestSeedTestersCreatesAllThreeWithTester1Admin(t *testing.T) {
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	code := seedTesters(context.Background(), authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, &stdout, &stderr)
+	code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
-	for i, email := range seedEmails {
+	for i, email := range testEmails {
 		u, err := authStore.UserByEmail(context.Background(), email)
 		if err != nil {
 			t.Fatalf("UserByEmail(%q): %v", email, err)
@@ -63,11 +68,11 @@ func TestSeedTestersSeedsStarterAccountTypesAndCategories(t *testing.T) {
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	if code := seedTesters(context.Background(), authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, &stdout, &stderr); code != 0 {
+	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, &stdout, &stderr); code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
-	u, err := authStore.UserByEmail(context.Background(), seedEmails[0])
+	u, err := authStore.UserByEmail(context.Background(), testEmails[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,12 +97,12 @@ func TestSeedTestersPrintsSessionTokens(t *testing.T) {
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	if code := seedTesters(context.Background(), authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, &stdout, &stderr); code != 0 {
+	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, &stdout, &stderr); code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
 	out := stdout.String()
-	for _, email := range seedEmails {
+	for _, email := range testEmails {
 		if !bytes.Contains([]byte(out), []byte(email)) {
 			t.Fatalf("stdout missing %q: %s", email, out)
 		}
@@ -119,7 +124,7 @@ func TestSeedTestersTokensAreImmediatelyUsable(t *testing.T) {
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	if code := seedTesters(context.Background(), authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, &stdout, &stderr); code != 0 {
+	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, &stdout, &stderr); code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
@@ -215,6 +220,43 @@ func TestGenerateFixturesIsDeterministic(t *testing.T) {
 		if first[i] != second[i] {
 			t.Fatalf("account %d title differs across runs: %q vs %q", i, first[i], second[i])
 		}
+	}
+}
+
+func TestParseSeedEmailsSplitsTrimsAndNormalizes(t *testing.T) {
+	got, err := parseSeedEmails(" Tester1@Draab.at ,tester2@draab.at,  tester3@draab.at")
+	if err != nil {
+		t.Fatalf("parseSeedEmails: %v", err)
+	}
+	want := []string{"tester1@draab.at", "tester2@draab.at", "tester3@draab.at"}
+	if len(got) != len(want) {
+		t.Fatalf("parseSeedEmails = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("parseSeedEmails[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestParseSeedEmailsRejectsEmpty(t *testing.T) {
+	if _, err := parseSeedEmails(""); err == nil {
+		t.Fatal("parseSeedEmails(\"\") = nil error, want an error")
+	}
+	if _, err := parseSeedEmails(" , , "); err == nil {
+		t.Fatal("parseSeedEmails(\" , , \") = nil error, want an error")
+	}
+}
+
+func TestParseSeedEmailsRejectsInvalidAddress(t *testing.T) {
+	if _, err := parseSeedEmails("tester1@draab.at,not-an-email"); err == nil {
+		t.Fatal("parseSeedEmails with an invalid address = nil error, want an error")
+	}
+}
+
+func TestParseSeedEmailsRejectsDuplicates(t *testing.T) {
+	if _, err := parseSeedEmails("tester1@draab.at,Tester1@Draab.at"); err == nil {
+		t.Fatal("parseSeedEmails with a case-insensitive duplicate = nil error, want an error")
 	}
 }
 

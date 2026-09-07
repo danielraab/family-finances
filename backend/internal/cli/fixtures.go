@@ -34,21 +34,24 @@ var categoryTitlePools = map[string][]string{
 	"Other":          {"Misc purchase", "Cash withdrawal"},
 }
 
-// seedTesters creates the fixed set of testers (seedEmails) directly via
-// authStore.CreateUserWithIdentity — a pre-verified email identity each,
-// the same mechanism this package's own tests already use, bypassing the
-// magic-link/OIDC flows entirely. Because that goes straight to the store,
-// internal/auth's NewUserHooks (wired only inside auth.Service) never fire
-// here; internal/cli already imports account/category directly (the same
-// way main.go's builders do), so it calls each user's SeedDefaults itself
-// instead of routing through that indirection — NewUserHook exists to let
-// internal/auth notify account/category without importing them, a problem
-// internal/cli doesn't have. authSvc is used only to mint each tester's
-// session token via IssueSession. Prints (email, admin?, session token) per
-// tester to stdout as it goes; returns 0 on success, or 1 with a stderr
-// message on the first failure.
+// seedTesters creates one user per email (in the given order — the first
+// lands as the bootstrap admin, since the reset just emptied users)
+// directly via authStore.CreateUserWithIdentity — a pre-verified email
+// identity each, the same mechanism this package's own tests already use,
+// bypassing the magic-link/OIDC flows entirely. Because that goes straight
+// to the store, internal/auth's NewUserHooks (wired only inside
+// auth.Service) never fire here; internal/cli already imports
+// account/category directly (the same way main.go's builders do), so it
+// calls each user's SeedDefaults itself instead of routing through that
+// indirection — NewUserHook exists to let internal/auth notify
+// account/category without importing them, a problem internal/cli doesn't
+// have. authSvc is used only to mint each tester's session token via
+// IssueSession. Prints (email, admin?, session token) per tester to stdout
+// as it goes; returns 0 on success, or 1 with a stderr message on the
+// first failure.
 func seedTesters(
 	ctx context.Context,
+	emails []string,
 	authStore auth.Store,
 	authSvc *auth.Service,
 	accountSvc *account.Service,
@@ -57,7 +60,7 @@ func seedTesters(
 	rng *rand.Rand,
 	stdout, stderr io.Writer,
 ) int {
-	for _, email := range seedEmails {
+	for _, email := range emails {
 		user, _, err := authStore.CreateUserWithIdentity(ctx, auth.NewUser{Email: email}, auth.Identity{
 			Kind:          auth.IdentityEmail,
 			Email:         email,

@@ -78,18 +78,31 @@ tablename <> 'schema_migrations'` rather than hardcoded — a future
 migration that adds a table is picked up automatically instead of silently
 left out of the reset.
 
-### Decision: bare `server seed` is inert; `--yes` is required to actually run
+### Decision: bare `server seed` is inert; `--yes <emails>` is required to actually run
 
-`server seed` with no flags queries and prints the table list (and current
-row counts, so it's obvious how much would be lost) and exits `2` without
-opening a transaction. `server seed --yes` performs the reset and seeding.
+`server seed` with no args, or anything other than exactly `--yes`
+followed by a comma-separated email list, queries and prints the table
+list (and current row counts, so it's obvious how much would be lost) and
+exits `2` without opening a transaction — this includes `--yes` with no
+email argument, or one that fails `parseSeedEmails` (empty, malformed, a
+duplicate). `server seed --yes <emails>` performs the reset and seeding.
 This is a heavier confirmation than `admin grant/revoke/list` requires,
 deliberately: those are narrow, reversible, single-row edits; this is a
 total, irreversible wipe of every table in whatever database
 `DATABASE_URL` points at, shipped in the same binary that runs in
 production. No env-based or hostname-based guard is added on top (see
-Non-Goals) — `--yes` is the one deliberate step between "ran the binary"
-and "the database is empty."
+Non-Goals) — `--yes` plus a valid email list is the one deliberate step
+between "ran the binary" and "the database is empty."
+
+**Revised after the first implementation**: emails were originally
+hardcoded to `tester1/2/3@draab.at`. They're now a required, CLI-supplied,
+comma-separated argument — `parseSeedEmails` (`internal/cli/seed.go`)
+splits on `,`, applies `auth.NormalizeEmail` and `auth.ValidateEmail` to
+each, and rejects the whole invocation (before any write) on an empty
+list, an invalid address, or a case-insensitive duplicate. The rest of
+this document's examples still say `tester1@draab.at` etc. where they're
+illustrative — nothing about the mechanism cares what the emails are, only
+that `parseSeedEmails` accepted them.
 
 ### Decision: `internal/cli` composes domain services directly, same as `main.go`
 

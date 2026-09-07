@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"os"
+	"strings"
 
 	"at.draab/familyfinances/internal/account"
 	"at.draab/familyfinances/internal/auth"
@@ -16,21 +17,18 @@ import (
 	"at.draab/familyfinances/internal/tag"
 )
 
-// seedEmails is the fixed set of testers `seed` creates, in this order —
-// the first lands as the bootstrap admin (see fixtures.go).
-var seedEmails = []string{"tester1@draab.at", "tester2@draab.at", "tester3@draab.at"}
-
 // Fixed RNG seed: `seed --yes` is meant to be reproducible across runs, not
 // a fresh random fixture every time.
 const seedRNGSeed1, seedRNGSeed2 = 0x5EED5EED, 0xFACADE42
 
-const seedUsage = "usage: server seed [--yes]"
+const seedUsage = "usage: server seed --yes <email1,email2,...>"
 
-// Seed runs the `seed` subcommand. Bare (`server seed`) prints what a reset
-// would wipe and exits without touching the database; `server seed --yes`
-// truncates every data table and (re)creates the three testers with
-// randomly generated fixtures. It builds its own config, pool, and stores,
-// the same self-contained shape Admin uses.
+// Seed runs the `seed` subcommand. Bare (`server seed`), or anything other
+// than exactly "--yes" followed by a comma-separated email list, prints
+// what a reset would wipe and exits without touching the database;
+// `server seed --yes <emails>` truncates every data table and creates one
+// user per email with randomly generated fixtures. It builds its own
+// config, pool, and stores, the same self-contained shape Admin uses.
 func Seed(ctx context.Context, args []string) int {
 	cfg, err := config.Load()
 	if err != nil {
@@ -54,8 +52,15 @@ func Seed(ctx context.Context, args []string) int {
 		return 1
 	}
 
-	if len(args) != 1 || args[0] != "--yes" {
+	if len(args) != 2 || args[0] != "--yes" {
 		return printResetPlan(ctx, pool, os.Stdout, os.Stderr)
+	}
+
+	emails, err := parseSeedEmails(args[1])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		fmt.Fprintln(os.Stderr, seedUsage)
+		return 2
 	}
 
 	if err := postgres.ResetAll(ctx, pool); err != nil {
@@ -79,13 +84,44 @@ func Seed(ctx context.Context, args []string) int {
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 
-	return seedTesters(ctx, authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, os.Stdout, os.Stderr)
+	return seedTesters(ctx, emails, authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, os.Stdout, os.Stderr)
 }
 
-// printResetPlan shows what `--yes` would wipe, without touching anything.
-// Any invocation other than exactly "--yes" (no args, a typo, "-y", …)
-// lands here rather than being treated as a usage error — safer to default
-// to inert than to guess at what the caller meant.
+// parseSeedEmails splits raw on commas, trims and normalizes each address
+// (auth.NormalizeEmail — lower-cased, whitespace-trimmed, matching how
+// `admin grant/revoke` already treat an email argument), validates each
+// with auth.ValidateEmail, and rejects an empty list or a duplicate
+// address (a duplicate would otherwise surface later as a confusing
+// identity-conflict error from CreateUserWithIdentity instead of a clear
+// one here).
+func parseSeedEmails(raw string) ([]string, error) {
+	var emails []string
+	seen := map[string]bool{}
+	for _, part := range strings.Split(raw, ",") {
+		email := auth.NormalizeEmail(part)
+		if email == "" {
+			continue
+		}
+		if err := auth.ValidateEmail(email); err != nil {
+			return nil, fmt.Errorf("invalid email %q: %w", part, err)
+		}
+		if seen[email] {
+			return nil, fmt.Errorf("duplicate email %q", email)
+		}
+		seen[email] = true
+		emails = append(emails, email)
+	}
+	if len(emails) == 0 {
+		return nil, fmt.Errorf("no emails given")
+	}
+	return emails, nil
+}
+
+// printResetPlan shows what `--yes <emails>` would wipe, without touching
+// anything. Any invocation other than exactly "--yes" followed by a
+// comma-separated email list (no args, a typo, an empty/invalid email
+// list, …) lands here rather than being treated as a usage error — safer
+// to default to inert than to guess at what the caller meant.
 func printResetPlan(ctx context.Context, pool *postgres.Pool, stdout, stderr io.Writer) int {
 	counts, err := postgres.TableCounts(ctx, pool)
 	if err != nil {
@@ -93,8 +129,8 @@ func printResetPlan(ctx context.Context, pool *postgres.Pool, stdout, stderr io.
 		return 1
 	}
 	fmt.Fprintln(stdout, seedUsage)
-	fmt.Fprintln(stdout, "server seed --yes would TRUNCATE every table below (schema_migrations excluded),")
-	fmt.Fprintln(stdout, "then create tester1/2/3@draab.at with random fixtures:")
+	fmt.Fprintln(stdout, "would TRUNCATE every table below (schema_migrations excluded),")
+	fmt.Fprintln(stdout, "then create one user per given email with random fixtures:")
 	for _, c := range counts {
 		fmt.Fprintf(stdout, "  %-20s %d rows\n", c.Table, c.Rows)
 	}

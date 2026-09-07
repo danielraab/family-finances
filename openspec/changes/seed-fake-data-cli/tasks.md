@@ -97,3 +97,30 @@
   does, the direct-`SeedDefaults`-call decision (and why `NewUserHook`
   doesn't apply here), the `IssueSession`/`SessionTTL` gotcha, and the
   fixture shape.
+
+## 7. Follow-up: emails come from the CLI, not hardcoded
+
+- [x] 7.1 `internal/cli/seed.go`: replaced the hardcoded
+  `seedEmails = []string{"tester1@draab.at", ...}` with a required
+  comma-separated argument after `--yes` (`server seed --yes
+  <email1,email2,...>`); added `parseSeedEmails` — splits on `,`,
+  `auth.NormalizeEmail`s and `auth.ValidateEmail`s each, rejects an empty
+  list or a duplicate — called before `postgres.ResetAll`, so an invalid
+  invocation never touches the database. Updated `seedUsage` and
+  `printResetPlan`'s copy to match; any invocation other than exactly
+  `--yes` plus a valid email list still falls through to the inert,
+  table-listing path.
+- [x] 7.2 `internal/cli/fixtures.go`: `seedTesters` takes `emails []string`
+  as a parameter instead of reading the package-level var.
+- [x] 7.3 Tests: `parseSeedEmails` — trims/normalizes/validates, rejects
+  empty/invalid/duplicate; existing `seedTesters`/`generateFixtures` tests
+  updated to pass an explicit email slice.
+- [x] 7.4 `backend/AGENTS.md` and this change's `proposal.md`/`design.md`
+  updated to describe CLI-supplied emails instead of the hardcoded three.
+- [x] 7.5 `cd backend && gofmt -l . && go vet ./... && go test ./...`;
+  manual pass against a real Postgres — bare `--yes` with no emails stays
+  inert; an invalid email in the list is rejected before the reset runs
+  (confirmed via direct DB query that nothing was touched); a valid
+  two-email list (`alice@example.com, Bob@Example.com`) resets, creates
+  both users (first as admin, email case-normalized), and each printed
+  token authenticates against a running server.

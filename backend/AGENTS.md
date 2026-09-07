@@ -358,25 +358,29 @@ supplies `category_id`) — and `Subtree(ctx, ownerID, categoryID)
 
 ## Seeding fake data
 
-`server seed --yes` (`internal/cli.Seed`, dispatched from `main.go`
-alongside `healthcheck`/`admin`) resets the database and creates
-`tester1@draab.at`, `tester2@draab.at`, `tester3@draab.at` with randomly
-generated accounts and entries — for local/demo use, not anything a
-product feature depends on.
+`server seed --yes <email1,email2,...>` (`internal/cli.Seed`, dispatched
+from `main.go` alongside `healthcheck`/`admin`) resets the database and
+creates one user per given email with randomly generated accounts and
+entries — for local/demo use, not anything a product feature depends on.
+The emails are entirely CLI-supplied — nothing is hardcoded — via
+`parseSeedEmails` (splits on `,`, `auth.NormalizeEmail`s and
+`auth.ValidateEmail`s each, rejects an empty list, an invalid address, or
+a duplicate before touching the database).
 
-- **It is a full, irreversible reset**, not scoped to the three testers:
+- **It is a full, irreversible reset**, not scoped to the given users:
   every table except `schema_migrations` is `TRUNCATE`d
   (`postgres.ResetAll`/`postgres.TableCounts`, `internal/storage/postgres`)
-  before anything is recreated. Bare `server seed` (no `--yes`) only prints
+  before anything is recreated. Bare `server seed`, or anything other than
+  exactly `--yes` followed by a comma-separated email list, only prints
   the table/row-count list via `TableCounts` and exits `2` — it never opens
   a write transaction. `--yes` is required precisely because this ships in
   the same binary as production and `admin`'s no-confirmation style isn't
   strict enough for a whole-database wipe.
-- The three users are created directly via
+- Users are created, in the given order, directly via
   `AuthStore.CreateUserWithIdentity` (pre-verified email, no magic-link
   round-trip) — the same mechanism `internal/cli`'s own tests already used.
-  Because the reset just emptied `users`, `tester1@draab.at` lands as the
-  bootstrap admin through the ordinary zero-users-means-admin path.
+  Because the reset just emptied `users`, the first given email lands as
+  the bootstrap admin through the ordinary zero-users-means-admin path.
 - Creating each user this way bypasses `auth.Service.resolveIdentity`
   entirely, so `internal/auth`'s `NewUserHook`s (see "Account types" above)
   never fire — `internal/cli` already imports `internal/account` and
@@ -390,7 +394,7 @@ product feature depends on.
   it needs `auth.Params.SessionTTL`/`SessionMaxTTL` populated from real
   config, not a zero-value `Params{}` (a zero `SessionTTL` mints a session
   whose `ExpiresAt` is already in the past).
-- Fixture shape (`internal/cli/fixtures.go`): 2-4 accounts per tester
+- Fixture shape (`internal/cli/fixtures.go`): 2-4 accounts per user
   (random seeded type + currency), 15-60 transaction entries per account
   (random seeded category, amount sign/magnitude keyed to category —
   `Salary` positive, everything else negative). A single fixed-seed
