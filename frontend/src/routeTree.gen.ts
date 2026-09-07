@@ -15,6 +15,7 @@ import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as EntriesRouteImport } from './routes/entries'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AccountsIndexRouteImport } from './routes/accounts.index'
 import { Route as AccountsAccountIdRouteImport } from './routes/accounts.$accountId'
@@ -57,6 +58,11 @@ const HomeRoute = HomeRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -132,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/entries': typeof EntriesRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/categories': typeof CategoriesRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/reports': typeof ReportsRoute
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
   '/settings/account-types': typeof SettingsAccountTypesRoute
@@ -171,6 +179,7 @@ export interface FileRoutesById {
   '/entries': typeof EntriesRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
@@ -194,6 +203,7 @@ export interface FileRouteTypes {
     | '/entries'
     | '/home'
     | '/login'
+    | '/reports'
     | '/settings'
     | '/accounts/$accountId'
     | '/accounts/new'
@@ -213,6 +223,7 @@ export interface FileRouteTypes {
     | '/categories'
     | '/home'
     | '/login'
+    | '/reports'
     | '/accounts/new'
     | '/entries/new'
     | '/settings/account-types'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/entries'
     | '/home'
     | '/login'
+    | '/reports'
     | '/settings'
     | '/accounts/$accountId'
     | '/accounts/new'
@@ -254,6 +266,7 @@ export interface RootRouteChildren {
   EntriesRoute: typeof EntriesRouteWithChildren
   HomeRoute: typeof HomeRoute
   LoginRoute: typeof LoginRoute
+  ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRouteWithChildren
 }
 
@@ -299,6 +312,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -464,6 +484,7 @@ const rootRouteChildren: RootRouteChildren = {
   EntriesRoute: EntriesRouteWithChildren,
   HomeRoute: HomeRoute,
   LoginRoute: LoginRoute,
+  ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRouteWithChildren,
 }
 export const routeTree = rootRouteImport

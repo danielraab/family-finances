@@ -3,7 +3,8 @@
     "home": "Start",
     "accounts": "Konten",
     "entries": "Buchungen",
-    "categories": "Kategorien"
+    "categories": "Kategorien",
+    "reports": "Auswertungen"
   },
   "sidebar": {
     "closeSidebar": "Seitenleiste schließen"
@@ -349,6 +350,32 @@
       "deleteBody": "Dies ist nur möglich, solange sie keine Unterkategorien hat und keine Buchung sie verwendet. Dies kann hier nicht rückgängig gemacht werden.",
       "cancel": "Abbrechen",
       "confirmAction": "Bestätigen"
+    }
+  },
+  "reports": {
+    "title": "Auswertungen",
+    "filters": {
+      "category": "Kategorie",
+      "selectCategory": "Kategorie auswählen…",
+      "includeSubcategories": "Unterkategorien einbeziehen",
+      "tag": "Tag",
+      "selectTag": "Tag auswählen…",
+      "account": "Konto",
+      "allAccounts": "Alle Konten",
+      "from": "Von",
+      "to": "Bis"
+    },
+    "generate": "Auswertung erstellen",
+    "selectOneHint": "Wähle eine Kategorie oder einen Tag aus und erstelle dann die Auswertung.",
+    "beforeGenerate": "Wähle oben eine Kategorie oder einen Tag aus und klicke dann auf \"Auswertung erstellen\", um die passenden Buchungen und ihre Summe zu sehen.",
+    "loading": "Lädt…",
+    "emptyFiltered": "Keine Buchungen entsprechen den Filtern dieser Auswertung.",
+    "sumsTitle": "Summe",
+    "columns": {
+      "date": "Datum",
+      "title": "Titel",
+      "account": "Konto",
+      "amount": "Betrag"
     }
   }
 }

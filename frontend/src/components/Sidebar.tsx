@@ -11,6 +11,7 @@ const NAV = [
   { to: "/accounts", labelKey: "nav.accounts", glyph: "accounts" },
   { to: "/entries", labelKey: "nav.entries", glyph: "entries" },
   { to: "/categories", labelKey: "nav.categories", glyph: "categories" },
+  { to: "/reports", labelKey: "nav.reports", glyph: "reports" },
 ] as const;
 
 function HomeGlyph() {
@@ -100,11 +101,35 @@ function CategoriesGlyph() {
   );
 }
 
+function ReportsGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={20}
+      height={20}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 19V5" />
+      <path d="M8 19v-7" />
+      <path d="M12 19v-4" />
+      <path d="M16 19V9" />
+      <path d="M20 19V6" />
+    </svg>
+  );
+}
+
 const GLYPHS = {
   home: HomeGlyph,
   accounts: AccountsGlyph,
   entries: EntriesGlyph,
   categories: CategoriesGlyph,
+  reports: ReportsGlyph,
 } as const;
 
 /**

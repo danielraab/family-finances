@@ -189,6 +189,45 @@ func (s *EntryStore) SoftDelete(ctx context.Context, ownerID, id string) error {
 	return nil
 }
 
+// buildWhere returns the WHERE clauses and positional args shared by List
+// and Sum, scoping to ownerID's non-deleted entries matching f's
+// account/category/tag/kind/date-range/query filters — every column is
+// qualified with "entries." so the same clauses work whether or not a
+// caller's query joins another table. Callers append their own additional
+// clauses (and, via the same numbering, args) as needed.
+func buildWhere(ownerID string, f entry.Filter) (where []string, args []any) {
+	arg := func(v any) string {
+		args = append(args, v)
+		return "$" + strconv.Itoa(len(args))
+	}
+
+	where = []string{
+		"entries.owner_id = " + arg(ownerID),
+		"entries.deleted_at IS NULL",
+		"entries.account_id = ANY(" + arg(f.AccountIDs) + "::uuid[])",
+	}
+	if f.CategoryID != nil {
+		where = append(where, "entries.category_id = ANY("+arg(f.CategoryIDs)+"::uuid[])")
+	}
+	if f.TagID != nil {
+		where = append(where, "EXISTS (SELECT 1 FROM entry_tags et WHERE et.entry_id = entries.id AND et.tag_id = "+arg(*f.TagID)+"::uuid)")
+	}
+	if f.Kind != nil {
+		where = append(where, "entries.kind = "+arg(string(*f.Kind)))
+	}
+	if f.From != nil {
+		where = append(where, "entries.booking_timestamp >= "+arg(*f.From))
+	}
+	if f.To != nil {
+		where = append(where, "entries.booking_timestamp <= "+arg(*f.To))
+	}
+	if f.Query != "" {
+		p := arg("%" + f.Query + "%")
+		where = append(where, "(entries.title ILIKE "+p+" OR entries.description ILIKE "+p+")")
+	}
+	return where, args
+}
+
 // List builds a dynamic keyset query: every optional filter appends a WHERE
 // clause and a positional argument; sort/dir pick the ORDER BY column and
 // direction; the keyset comparison on (sortColumn, id) implements the
@@ -198,35 +237,10 @@ func (s *EntryStore) List(ctx context.Context, ownerID string, f entry.Filter) (
 		return nil, nil, nil
 	}
 
-	var args []any
+	where, args := buildWhere(ownerID, f)
 	arg := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
-	}
-
-	where := []string{
-		"owner_id = " + arg(ownerID),
-		"deleted_at IS NULL",
-		"account_id = ANY(" + arg(f.AccountIDs) + "::uuid[])",
-	}
-	if f.CategoryID != nil {
-		where = append(where, "category_id = ANY("+arg(f.CategoryIDs)+"::uuid[])")
-	}
-	if f.TagID != nil {
-		where = append(where, "EXISTS (SELECT 1 FROM entry_tags et WHERE et.entry_id = entries.id AND et.tag_id = "+arg(*f.TagID)+"::uuid)")
-	}
-	if f.Kind != nil {
-		where = append(where, "kind = "+arg(string(*f.Kind)))
-	}
-	if f.From != nil {
-		where = append(where, "booking_timestamp >= "+arg(*f.From))
-	}
-	if f.To != nil {
-		where = append(where, "booking_timestamp <= "+arg(*f.To))
-	}
-	if f.Query != "" {
-		p := arg("%" + f.Query + "%")
-		where = append(where, "(title ILIKE "+p+" OR description ILIKE "+p+")")
 	}
 
 	sortCol := "booking_timestamp"
@@ -312,6 +326,52 @@ func (s *EntryStore) Balance(ctx context.Context, accountID string, asOf time.Ti
 		accountID, asOf,
 	).Scan(&balance)
 	return balance, err
+}
+
+// Sum implements entry.Store's Sum: the same WHERE clauses List uses, forced
+// to kind = 'transaction' regardless of f.Kind, aggregated per account id in
+// SQL. It returns no currency — Service.Sum resolves each account's currency
+// via AccountLookup and groups by it there, since this package has no
+// business joining into a currency concept that belongs to internal/account.
+func (s *EntryStore) Sum(ctx context.Context, ownerID string, f entry.Filter) (map[string]int64, int, error) {
+	if len(f.AccountIDs) == 0 {
+		return map[string]int64{}, 0, nil
+	}
+
+	// Clear f.Kind before buildWhere so it never contributes its own kind
+	// clause — this forces kind = 'transaction' below regardless of what
+	// the caller's filter asked for, rather than ANDing the two together
+	// (which would wrongly return zero rows whenever f.Kind was set to
+	// anything but transaction).
+	f.Kind = nil
+	where, args := buildWhere(ownerID, f)
+	where = append(where, "entries.kind = 'transaction'")
+
+	query := `SELECT entries.account_id::text, SUM(entries.amount), COUNT(*)
+		FROM entries WHERE ` + strings.Join(where, " AND ") + ` GROUP BY entries.account_id`
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	perAccount := make(map[string]int64)
+	var total int
+	for rows.Next() {
+		var accountID string
+		var sum int64
+		var count int
+		if err := rows.Scan(&accountID, &sum, &count); err != nil {
+			return nil, 0, err
+		}
+		perAccount[accountID] = sum
+		total += count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return perAccount, total, nil
 }
 
 func isCheckViolation(err error) bool {

@@ -83,4 +83,13 @@ type Store interface {
 	// asOf (or 0 if none), plus every non-deleted transaction after it, up
 	// to asOf.
 	Balance(ctx context.Context, accountID string, asOf time.Time) (int64, error)
+
+	// Sum computes, for ownerID's entries matching filter (already resolved
+	// by Service exactly as List's is — AccountIDs and CategoryIDs are the
+	// effective sets to filter by) and restricted to Kind ==
+	// KindTransaction regardless of filter.Kind, the total amount per
+	// account id, plus the total number of matching entries across every
+	// account. Service.Sum groups the per-account totals by currency —
+	// Store has no notion of an account's currency.
+	Sum(ctx context.Context, ownerID string, filter Filter) (perAccount map[string]int64, count int, err error)
 }

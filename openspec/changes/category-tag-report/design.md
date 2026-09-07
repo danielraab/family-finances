@@ -52,18 +52,29 @@ on it: `exact` sets `CategoryIDs = [id]` directly; `subtree` (or unset)
 keeps calling `categories.Subtree` as today. Both entry points share one
 private resolution helper so the two never diverge.
 
-**New `Store.Sum(ctx, ownerID, Filter) (map[string]int64, int, error)`
-method, implemented in both `storage/memory` and `storage/postgres`.**
-Alternative considered: compute the sum in Go by calling `Store.List`
-without a limit and adding in the service layer. Rejected — that's exactly
-the "page through everything" approach the proposal exists to avoid, and
-duplicates the correctness (not just performance) concern for any owner
-with more entries than fit in memory. The postgres implementation is
-`SELECT accounts.currency, SUM(entries.amount), COUNT(*) ... GROUP BY
-accounts.currency`, reusing the same joins/filters `List` already builds.
-`kind = 'transaction'` is forced into the query itself, not left to the
-caller, so the endpoint can never be called in a way that includes balance
-adjustments.
+**New `Store.Sum(ctx, ownerID, Filter) (perAccount map[string]int64, count int, error)`
+method, implemented in both `storage/memory` and `storage/postgres`,
+returning totals per *account id*, not per currency.** Alternative
+considered: compute the sum in Go by calling `Store.List` without a limit
+and adding in the service layer. Rejected — that's exactly the "page
+through everything" approach the proposal exists to avoid, and duplicates
+the correctness (not just performance) concern for any owner with more
+entries than fit in memory. A second alternative — having `Store.Sum` join
+`accounts` and `GROUP BY accounts.currency` directly in SQL — was also
+rejected once it became clear `internal/entry`'s `Store` implementations
+have no reason to know about an account's currency at all: `entry.Service`
+already holds an `AccountLookup` (used by `checkAccount`/`Balance`) with an
+`Owner` method that returns it. So `Store.Sum` stays a same-table
+aggregate — `SELECT account_id, SUM(amount), COUNT(*) ... GROUP BY
+account_id`, reusing `List`'s same WHERE-building — and `Service.Sum` maps
+each resulting account id to its currency via `AccountLookup.Owner` and
+sums those into the final per-currency totals. This keeps `storage/memory`
+and `storage/postgres` symmetric (neither needs a second store's data to
+answer `Sum`) and matches the existing layering: currency is
+`internal/account`'s concept, resolved through the interface `entry`
+already declares for it. `kind = 'transaction'` is forced into `Store.Sum`
+itself, not left to the caller, so the endpoint can never be called in a
+way that includes balance adjustments.
 
 **`GET /api/entries/summary` as a new endpoint on the existing `entry`
 package/handler**, not a new domain package. It's the same filter
@@ -95,9 +106,14 @@ component is a reasonable follow-up once both pages exist side by side.
   independent requests with independent loading/error states; a failed
   summary fetch doesn't block showing the list, and vice versa.
 - [`Store.Sum`'s postgres query duplicates `List`'s filter-building SQL
-  fragments] → Factor the shared `WHERE`/join construction into a helper
-  both `List` and `Sum` call, so a future filter addition can't update one
-  and forget the other.
+  fragments] → Factor the shared `WHERE` construction into a helper both
+  `List` and `Sum` call, so a future filter addition can't update one and
+  forget the other.
+- [`Service.Sum` resolves one currency lookup per distinct account among
+  the results, rather than a single joined query] → Acceptable: the number
+  of distinct accounts a sum can touch is bounded by how many accounts a
+  user has (per `account-entries`, a handful in practice, seeded fixtures
+  cap at 2-4), not by how many entries match.
 - [Per-currency sums could surprise a user with many small-balance foreign
   transactions into thinking totals are missing] → Each sum is labeled
   with its currency; no further mitigation needed given the explicit

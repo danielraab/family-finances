@@ -118,12 +118,13 @@ func (s *EntryStore) SoftDelete(_ context.Context, ownerID, id string) error {
 	return nil
 }
 
-func (s *EntryStore) List(_ context.Context, ownerID string, f entry.Filter) ([]entry.Entry, *entry.Cursor, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+// matchingRows returns every non-deleted entry owned by ownerID that
+// matches f's account/category/tag/kind/date-range/query filters, in no
+// particular order. List and Sum both build on this so their filtering
+// logic can never diverge. Callers hold s.mu.
+func (s *EntryStore) matchingRows(ownerID string, f entry.Filter) []entryRow {
 	if len(f.AccountIDs) == 0 {
-		return nil, nil, nil
+		return nil
 	}
 	accountSet := toSet(f.AccountIDs)
 	var categorySet map[string]bool
@@ -163,6 +164,14 @@ func (s *EntryStore) List(_ context.Context, ownerID string, f entry.Filter) ([]
 		}
 		rows = append(rows, row)
 	}
+	return rows
+}
+
+func (s *EntryStore) List(_ context.Context, ownerID string, f entry.Filter) ([]entry.Entry, *entry.Cursor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rows := s.matchingRows(ownerID, f)
 
 	asc := f.Dir == entry.DirAsc
 	sort.Slice(rows, func(i, j int) bool {
@@ -291,6 +300,23 @@ func (s *EntryStore) Balance(_ context.Context, accountID string, asOf time.Time
 		sum += e.Amount
 	}
 	return base + sum, nil
+}
+
+// Sum implements entry.Store's Sum: f's matching entries, restricted to
+// kind: transaction regardless of f.Kind, summed per account id.
+func (s *EntryStore) Sum(_ context.Context, ownerID string, f entry.Filter) (map[string]int64, int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	txKind := entry.KindTransaction
+	f.Kind = &txKind
+	rows := s.matchingRows(ownerID, f)
+
+	perAccount := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		perAccount[row.e.AccountID] += row.e.Amount
+	}
+	return perAccount, len(rows), nil
 }
 
 func toSet(ids []string) map[string]bool {
