@@ -42,7 +42,11 @@ Architecture below).
   runs nothing, avoiding a duplicate run alongside the pull_request event —
   runs a **contract** job (see API contract below), and publishes the image to
   GitHub Container Registry (tagged with the pushed git tag, plus `latest`)
-  when a git tag is pushed.
+  when a git tag is pushed. A `changes` job (`dorny/paths-filter`) skips the
+  `backend`, `frontend`, `contract`, and `i18n-coverage` jobs (and
+  `backend-integration`, gated the same as `backend`) when the paths they
+  care about didn't change; a tag push always runs `backend`, `frontend`, and
+  `contract` in full since `publish` needs them.
 
 ## API contract
 
