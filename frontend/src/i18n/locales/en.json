@@ -44,6 +44,10 @@
     "emptyTitle": "Nothing here yet",
     "emptyBody": "This is a placeholder. Real content will land here soon."
   },
+  "dashboard": {
+    "emptyTitle": "No accounts yet",
+    "emptyBody": "Create your first account to see it here."
+  },
   "settings": {
     "title": "Settings",
     "tabs": {

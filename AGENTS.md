@@ -36,11 +36,13 @@ Architecture below).
   `compose.yaml` (app + `postgres:17` + a named volume) is the reference
   topology for local development, CI, and production. The frontend still never
   touches the database — the Go backend remains its only backend.
-- CI (`.github/workflows/ci.yml`) lints and tests both packages on every push
-  and pull request (the backend job runs against a `postgres` service
-  container), runs a **contract** job (see API contract below), and publishes
-  the image to GitHub Container Registry (tagged with the pushed git tag, plus
-  `latest`) when a git tag is pushed.
+- CI (`.github/workflows/ci.yml`) lints and tests both packages on every pull
+  request and on every push to `master` (the backend job runs against a
+  `postgres` service container) — a push to a feature branch with no open PR
+  runs nothing, avoiding a duplicate run alongside the pull_request event —
+  runs a **contract** job (see API contract below), and publishes the image to
+  GitHub Container Registry (tagged with the pushed git tag, plus `latest`)
+  when a git tag is pushed.
 
 ## API contract
 

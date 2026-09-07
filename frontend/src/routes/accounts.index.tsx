@@ -1,17 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api/client";
-import type { components } from "../api/schema";
 import { amountColorClass, formatAmount } from "../lib/amount";
+import type { Account } from "../lib/useAccountsWithBalances";
+import { useAccountsWithBalances } from "../lib/useAccountsWithBalances";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
 
 export const Route = createFileRoute("/accounts/")({
   component: AccountsOverview,
 });
-
-type Account = components["schemas"]["Account"];
-type AccountType = components["schemas"]["AccountType"];
 
 function AccountStatus({
   account,
@@ -67,43 +63,7 @@ function PlusGlyph() {
 function AccountsOverview() {
   const { t, i18n } = useTranslation();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
-  const [accounts, setAccounts] = useState<Account[] | null>(null);
-  const [types, setTypes] = useState<AccountType[]>([]);
-  const [balances, setBalances] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([api.GET("/api/accounts"), api.GET("/api/account-types")]).then(
-      ([accountsRes, typesRes]) => {
-        if (cancelled) return;
-        setAccounts(accountsRes.data ?? []);
-        setTypes(typesRes.data ?? []);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!accounts) return;
-    let cancelled = false;
-    Promise.all(
-      accounts.map((account) =>
-        api
-          .GET("/api/accounts/{id}/balance", {
-            params: { path: { id: account.id } },
-          })
-          .then(({ data }) => [account.id, data?.balance ?? 0] as const),
-      ),
-    ).then((results) => {
-      if (cancelled) return;
-      setBalances(Object.fromEntries(results));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [accounts]);
+  const { accounts, types, balances } = useAccountsWithBalances();
 
   const typeName = (typeId: string) =>
     types.find((type) => type.id === typeId)?.title ?? typeId;
