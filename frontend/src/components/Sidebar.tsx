@@ -7,7 +7,7 @@ import { SidebarUser } from "./SidebarUser";
 import { ThemeSwitch } from "./ThemeSwitch";
 
 const NAV = [
-  { to: "/", labelKey: "nav.home", glyph: "home" },
+  { to: "/home", labelKey: "nav.home", glyph: "home" },
   { to: "/accounts", labelKey: "nav.accounts", glyph: "accounts" },
   { to: "/entries", labelKey: "nav.entries", glyph: "entries" },
   { to: "/categories", labelKey: "nav.categories", glyph: "categories" },
@@ -178,9 +178,7 @@ export function Sidebar({
         <nav className="flex flex-1 flex-col gap-1 px-2 py-2">
           {NAV.map((item) => {
             const active =
-              item.to === "/"
-                ? pathname === "/"
-                : pathname === item.to || pathname.startsWith(`${item.to}/`);
+              pathname === item.to || pathname.startsWith(`${item.to}/`);
             const label = t(item.labelKey);
             const Glyph = GLYPHS[item.glyph];
             return (

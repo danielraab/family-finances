@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountsRouteImport } from './routes/accounts'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as EntriesRouteImport } from './routes/entries'
+import { Route as HomeRouteImport } from './routes/home'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as AccountsIndexRouteImport } from './routes/accounts.index'
@@ -46,6 +47,11 @@ const CategoriesRoute = CategoriesRouteImport.update({
 const EntriesRoute = EntriesRouteImport.update({
   id: '/entries',
   path: '/entries',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HomeRoute = HomeRouteImport.update({
+  id: '/home',
+  path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/accounts': typeof AccountsRouteWithChildren
   '/categories': typeof CategoriesRoute
   '/entries': typeof EntriesRouteWithChildren
+  '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
@@ -142,6 +149,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/categories': typeof CategoriesRoute
+  '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/accounts': typeof AccountsRouteWithChildren
   '/categories': typeof CategoriesRoute
   '/entries': typeof EntriesRouteWithChildren
+  '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/settings': typeof SettingsRouteWithChildren
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
@@ -183,6 +192,7 @@ export interface FileRouteTypes {
     | '/accounts'
     | '/categories'
     | '/entries'
+    | '/home'
     | '/login'
     | '/settings'
     | '/accounts/$accountId'
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/categories'
+    | '/home'
     | '/login'
     | '/accounts/new'
     | '/entries/new'
@@ -219,6 +230,7 @@ export interface FileRouteTypes {
     | '/accounts'
     | '/categories'
     | '/entries'
+    | '/home'
     | '/login'
     | '/settings'
     | '/accounts/$accountId'
@@ -240,6 +252,7 @@ export interface RootRouteChildren {
   AccountsRoute: typeof AccountsRouteWithChildren
   CategoriesRoute: typeof CategoriesRoute
   EntriesRoute: typeof EntriesRouteWithChildren
+  HomeRoute: typeof HomeRoute
   LoginRoute: typeof LoginRoute
   SettingsRoute: typeof SettingsRouteWithChildren
 }
@@ -272,6 +285,13 @@ declare module '@tanstack/react-router' {
       path: '/entries'
       fullPath: '/entries'
       preLoaderRoute: typeof EntriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -442,6 +462,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountsRoute: AccountsRouteWithChildren,
   CategoriesRoute: CategoriesRoute,
   EntriesRoute: EntriesRouteWithChildren,
+  HomeRoute: HomeRoute,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRouteWithChildren,
 }
