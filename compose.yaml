@@ -34,11 +34,54 @@ services:
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://familyfinances:familyfinances@db:5432/familyfinances?sslmode=disable
+      SMTP_FROM: "admin@example.com"
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_TLS: none
+      AUTH_BASE_URL: http://localhost:8080
     ports:
       - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
 
+
+
+
+  adminer:
+    image: adminer:latest
+    profiles:
+      - "dev"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "8081:8080" # web UI (8080 on the host is the app's port)
+    depends_on:
+      db:
+        condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles:
+      - "dev"
+    environment:
+      # Accept mail with or without auth and over plain connections — this is a
+      # throwaway local catcher, never a real relay.
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "500"
+      MP_DATABASE: /data/mailpit.db
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI + API
+    volumes:
+      - mailpit-dev:/data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   pgdata:
+  mailpit-dev:
