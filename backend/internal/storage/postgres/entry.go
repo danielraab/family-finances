@@ -127,14 +127,15 @@ func (s *EntryStore) Update(ctx context.Context, ownerID, id string, upd entry.U
 	}
 	tag, err := tx.Exec(ctx, `
 		UPDATE entries SET
-			amount            = COALESCE($3, amount),
-			booking_timestamp = COALESCE($4, booking_timestamp),
-			title             = COALESCE($5, title),
-			description       = COALESCE($6, description),
-			category_id       = CASE WHEN $7 THEN $8 ELSE category_id END,
+			account_id        = COALESCE($3, account_id),
+			amount            = COALESCE($4, amount),
+			booking_timestamp = COALESCE($5, booking_timestamp),
+			title             = COALESCE($6, title),
+			description       = COALESCE($7, description),
+			category_id       = CASE WHEN $8 THEN $9 ELSE category_id END,
 			updated_at        = now()
 		WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
-		eid, ownerID, upd.Amount, upd.BookingTimestamp, upd.Title, upd.Description, categorySet, categoryID,
+		eid, ownerID, upd.AccountID, upd.Amount, upd.BookingTimestamp, upd.Title, upd.Description, categorySet, categoryID,
 	)
 	if isForeignKeyViolation(err) || isCheckViolation(err) {
 		return entry.Entry{}, entry.ErrInvalidValue

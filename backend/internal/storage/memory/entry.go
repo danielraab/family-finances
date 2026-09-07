@@ -76,6 +76,9 @@ func (s *EntryStore) Update(_ context.Context, ownerID, id string, upd entry.Upd
 		return entry.Entry{}, entry.ErrNotFound
 	}
 	e := row.e
+	if upd.AccountID != nil {
+		e.AccountID = *upd.AccountID
+	}
 	if upd.Amount != nil {
 		e.Amount = *upd.Amount
 	}

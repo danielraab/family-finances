@@ -194,6 +194,99 @@ func TestUpdateClearingCategoryOnTransactionRejected(t *testing.T) {
 	}
 }
 
+// --- moving an entry between accounts ---------------------------------
+
+func TestUpdateMovesEntryToAnotherOwnedAccount(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	categories.add("cat1")
+	e := mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2024-01-01T00:00:00Z", ptr("cat1"))
+
+	got, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{AccountID: ptr("acc2")})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got.AccountID != "acc2" {
+		t.Fatalf("AccountID = %q, want acc2", got.AccountID)
+	}
+}
+
+func TestUpdateMoveToOtherOwnersAccountRejected(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u2", "EUR")
+	categories.add("cat1")
+	e := mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2024-01-01T00:00:00Z", ptr("cat1"))
+
+	_, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{AccountID: ptr("acc2")})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+	got, err := svc.Get(context.Background(), "u1", e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AccountID != "acc1" {
+		t.Fatalf("AccountID = %q, want unchanged acc1", got.AccountID)
+	}
+}
+
+func TestUpdateMoveToDisabledAccountRejected(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	accounts.disabled["acc2"] = true
+	categories.add("cat1")
+	e := mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2024-01-01T00:00:00Z", ptr("cat1"))
+
+	_, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{AccountID: ptr("acc2")})
+	if !errors.Is(err, entry.ErrAccountDisabled) {
+		t.Fatalf("err = %v, want ErrAccountDisabled", err)
+	}
+	got, err := svc.Get(context.Background(), "u1", e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AccountID != "acc1" {
+		t.Fatalf("AccountID = %q, want unchanged acc1", got.AccountID)
+	}
+}
+
+func TestUpdateMovesBalanceAdjustmentLikeTransaction(t *testing.T) {
+	svc, accounts, _, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	e := mustCreate(t, svc, "u1", "acc1", entry.KindBalanceAdjustment, 10000, "2024-01-01T00:00:00Z", nil)
+
+	got, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{AccountID: ptr("acc2")})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got.AccountID != "acc2" {
+		t.Fatalf("AccountID = %q, want acc2", got.AccountID)
+	}
+}
+
+func TestUpdateMoveBetweenDifferentCurrenciesLeavesAmountUnchanged(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "USD")
+	categories.add("cat1")
+	e := mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2024-01-01T00:00:00Z", ptr("cat1"))
+
+	got, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{AccountID: ptr("acc2")})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got.AccountID != "acc2" {
+		t.Fatalf("AccountID = %q, want acc2", got.AccountID)
+	}
+	if got.Amount != 100 {
+		t.Fatalf("Amount = %d, want unchanged 100", got.Amount)
+	}
+}
+
 func TestSoftDeleteExcludesFromGetAndListing(t *testing.T) {
 	svc, accounts, categories, _ := newFixture()
 	accounts.add("acc1", "u1", "EUR")

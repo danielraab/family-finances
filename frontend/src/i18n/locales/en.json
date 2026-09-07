@@ -256,6 +256,10 @@
       "tags": "Tags",
       "tagsPlaceholder": "Add tag…",
       "removeTag": "Remove {{name}}",
+      "changeAccount": "Change account",
+      "cancelAccountChange": "Cancel account change",
+      "accountDisabledOption": "disabled",
+      "accountCurrencyWarning": "This account's currency ({{currency}}) differs from the entry's original account ({{originalCurrency}}). No conversion is applied.",
       "create": "Create entry",
       "save": "Save changes",
       "saveError": "Couldn't save — please check the form and try again."
@@ -267,7 +271,10 @@
       "title": "Edit entry",
       "delete": "Delete entry",
       "confirmDeleteTitle": "Delete this entry?",
-      "confirmDeleteBody": "This cannot be undone here."
+      "confirmDeleteBody": "This cannot be undone here.",
+      "confirmAccountChangeTitle": "Move this entry?",
+      "confirmAccountChangeBody": "This entry will move to \"{{account}}\".",
+      "confirmAccountChangeConfirm": "Move entry"
     }
   },
   "categories": {

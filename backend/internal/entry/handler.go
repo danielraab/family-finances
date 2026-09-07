@@ -61,6 +61,7 @@ type entryCreateBody struct {
 }
 
 type entryUpdateBody struct {
+	AccountID        *string    `json:"account_id"`
 	Amount           *int64     `json:"amount"`
 	BookingTimestamp *time.Time `json:"booking_timestamp"`
 	Title            *string    `json:"title"`
@@ -139,6 +140,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upd := Update{
+		AccountID:        body.AccountID,
 		Amount:           body.Amount,
 		BookingTimestamp: body.BookingTimestamp,
 		Title:            body.Title,
