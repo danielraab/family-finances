@@ -23,8 +23,12 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /out/server .
 # ---- final: minimal non-root runtime ----
 FROM gcr.io/distroless/static-debian12:nonroot AS final
 COPY --from=backend /out/server /app/server
+# distroless ships no shell; borrow the static busybox binary as /bin/sh so
+# tools that shell out (e.g. `docker exec ... sh -c`) still work. The server
+# itself never needs it: healthchecks call the binary directly, below.
+COPY --from=busybox:1.36-musl /bin/busybox /bin/sh
 EXPOSE 8080
-# distroless has no shell/curl, so the server binary probes its own
+# distroless still has no curl, so the server binary probes its own
 # /api/healthz endpoint via `server healthcheck`.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD ["/app/server", "healthcheck"]
