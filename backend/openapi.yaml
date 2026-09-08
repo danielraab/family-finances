@@ -1084,6 +1084,55 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/tags/{id}/disable:
+    post:
+      operationId: postTagDisable
+      summary: Disable a tag
+      description: >-
+        Reversible via enable. Blocks the tag from being newly attached to
+        an entry; does not affect any entry already carrying it.
+      tags: [tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The tag, now disabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/tags/{id}/enable:
+    post:
+      operationId: postTagEnable
+      summary: Re-enable a disabled tag
+      tags: [tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The tag, now enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/entries:
     get:
       operationId: getEntries
@@ -1847,15 +1896,22 @@ components:
 
     Tag:
       type: object
-      required: [id, name, created_at]
+      required: [id, name, disabled, created_at, entry_count]
       properties:
         id:
           type: string
         name:
           type: string
+        disabled:
+          type: boolean
         created_at:
           type: string
           format: date-time
+        entry_count:
+          type: integer
+          description: >-
+            The number of the caller's own non-deleted entries currently
+            carrying this tag.
 
     TagWrite:
       type: object

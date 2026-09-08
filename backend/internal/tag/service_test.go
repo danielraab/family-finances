@@ -119,3 +119,76 @@ func TestDeleteRemovesTag(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestDisableAndEnable(t *testing.T) {
+	svc := newService()
+	created, err := svc.Create(context.Background(), "u1", "groceries")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Disabled {
+		t.Fatalf("newly created tag Disabled = true, want false")
+	}
+
+	disabled, err := svc.Disable(context.Background(), "u1", created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !disabled.Disabled {
+		t.Fatalf("Disable did not set Disabled")
+	}
+
+	enabled, err := svc.Enable(context.Background(), "u1", created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if enabled.Disabled {
+		t.Fatalf("Enable did not clear Disabled")
+	}
+}
+
+func TestDisableAnotherOwnersTagNotFound(t *testing.T) {
+	svc := newService()
+	theirs, err := svc.Create(context.Background(), "u2", "groceries")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Disable(context.Background(), "u1", theirs.ID); !errors.Is(err, tag.ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestUsableRejectsDisabledAndForeignTags(t *testing.T) {
+	svc := newService()
+	live, err := svc.Create(context.Background(), "u1", "live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled, err := svc.Create(context.Background(), "u1", "disabled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Disable(context.Background(), "u1", disabled.ID); err != nil {
+		t.Fatal(err)
+	}
+	theirs, err := svc.Create(context.Background(), "u2", "theirs")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ok, err := svc.Usable(context.Background(), "u1", []string{live.ID}); err != nil || !ok {
+		t.Fatalf("Usable(live) = %v, %v, want true, nil", ok, err)
+	}
+	if ok, err := svc.Usable(context.Background(), "u1", []string{disabled.ID}); err != nil || ok {
+		t.Fatalf("Usable(disabled) = %v, %v, want false, nil", ok, err)
+	}
+	if ok, err := svc.Usable(context.Background(), "u1", []string{theirs.ID}); err != nil || ok {
+		t.Fatalf("Usable(foreign) = %v, %v, want false, nil", ok, err)
+	}
+	if ok, err := svc.Usable(context.Background(), "u1", []string{live.ID, disabled.ID}); err != nil || ok {
+		t.Fatalf("Usable(mixed) = %v, %v, want false, nil", ok, err)
+	}
+	if ok, err := svc.Usable(context.Background(), "u1", nil); err != nil || !ok {
+		t.Fatalf("Usable(empty) = %v, %v, want true, nil", ok, err)
+	}
+}

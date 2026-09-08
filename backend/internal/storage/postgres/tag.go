@@ -17,11 +17,15 @@ type TagStore struct {
 // NewTagStore returns a TagStore over pool.
 func NewTagStore(pool *pgxpool.Pool) *TagStore { return &TagStore{pool: pool} }
 
-const tagCols = `id::text, name, created_at`
+const tagCols = `id::text, name, disabled, created_at, (
+	SELECT count(*) FROM entry_tags et
+		JOIN entries e ON e.id = et.entry_id AND e.deleted_at IS NULL
+	WHERE et.tag_id = tags.id
+)`
 
 func scanTag(row pgx.Row, ownerID string) (tag.Tag, error) {
 	var t tag.Tag
-	err := row.Scan(&t.ID, &t.Name, &t.CreatedAt)
+	err := row.Scan(&t.ID, &t.Name, &t.Disabled, &t.CreatedAt, &t.EntryCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tag.Tag{}, tag.ErrNotFound
 	}
@@ -92,6 +96,13 @@ func (s *TagStore) Delete(ctx context.Context, ownerID, id string) error {
 	return nil
 }
 
+func (s *TagStore) SetDisabled(ctx context.Context, ownerID, id string, disabled bool) (tag.Tag, error) {
+	return scanTag(s.pool.QueryRow(ctx,
+		`UPDATE tags SET disabled = $3 WHERE id = $1 AND owner_id = $2 RETURNING `+tagCols,
+		id, ownerID, disabled,
+	), ownerID)
+}
+
 func (s *TagStore) OwnedBy(ctx context.Context, ownerID string, tagIDs []string) (bool, error) {
 	if len(tagIDs) == 0 {
 		return true, nil
@@ -99,6 +110,21 @@ func (s *TagStore) OwnedBy(ctx context.Context, ownerID string, tagIDs []string)
 	var count int
 	err := s.pool.QueryRow(ctx,
 		`SELECT count(*) FROM tags WHERE owner_id = $1 AND id = ANY($2::uuid[])`,
+		ownerID, tagIDs,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count == len(uniqueStrings(tagIDs)), nil
+}
+
+func (s *TagStore) Usable(ctx context.Context, ownerID string, tagIDs []string) (bool, error) {
+	if len(tagIDs) == 0 {
+		return true, nil
+	}
+	var count int
+	err := s.pool.QueryRow(ctx,
+		`SELECT count(*) FROM tags WHERE owner_id = $1 AND id = ANY($2::uuid[]) AND disabled = false`,
 		ownerID, tagIDs,
 	).Scan(&count)
 	if err != nil {

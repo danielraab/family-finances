@@ -27,8 +27,14 @@ type Store interface {
 	Create(ctx context.Context, ownerID, name string) (Tag, error)
 	Update(ctx context.Context, ownerID, id, name string) (Tag, error)
 	Delete(ctx context.Context, ownerID, id string) error
+	// SetDisabled sets ownerID's tag id's disabled flag, reversibly.
+	SetDisabled(ctx context.Context, ownerID, id string, disabled bool) (Tag, error)
 
 	// OwnedBy reports whether every id in tagIDs exists and belongs to
 	// ownerID — satisfies internal/entry's TagLookup interface.
 	OwnedBy(ctx context.Context, ownerID string, tagIDs []string) (bool, error)
+	// Usable reports whether every id in tagIDs exists, belongs to ownerID,
+	// and is not disabled — satisfies internal/entry's TagLookup interface.
+	// An empty tagIDs is trivially true, matching OwnedBy.
+	Usable(ctx context.Context, ownerID string, tagIDs []string) (bool, error)
 }

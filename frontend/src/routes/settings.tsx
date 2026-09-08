@@ -20,8 +20,8 @@ export const Route = createFileRoute("/settings")({
  * Renders nothing while useAuth is loading or the redirect is pending, so
  * there's no flash of the form before the decision is made. The Users tab
  * is only ever listed for an admin — see settings.users.tsx for its
- * matching direct-link redirect. Account Types is per-user (each visitor
- * manages only their own), not admin-gated.
+ * matching direct-link redirect. Account Types and Tags are per-user (each
+ * visitor manages only their own), not admin-gated.
  */
 function SettingsLayout() {
   const { status, user } = useAuth();
@@ -49,6 +49,7 @@ function SettingsLayout() {
       to: "/settings/account-types" as const,
       label: t("settings.tabs.accountTypes"),
     },
+    { to: "/settings/tags" as const, label: t("settings.tabs.tags") },
     ...(user.is_admin
       ? [{ to: "/settings/users" as const, label: t("settings.tabs.users") }]
       : []),

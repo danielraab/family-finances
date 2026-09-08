@@ -50,8 +50,9 @@ git-ignored. Build-script allow-listing lives in `pnpm-workspace.yaml`
   Router devtools render only in dev.
 - `src/routes/index.tsx` → `/`. `src/routes/login.tsx` → `/login`.
   `src/routes/settings.tsx` (+ `settings.index.tsx`, `settings.invitations.tsx`,
-  `settings.users.tsx`, `settings.account-types.tsx`) → `/settings`,
-  `/settings/invitations`, `/settings/users`, and `/settings/account-types`
+  `settings.users.tsx`, `settings.account-types.tsx`, `settings.tags.tsx`) →
+  `/settings`, `/settings/invitations`, `/settings/users`,
+  `/settings/account-types`, and `/settings/tags`
   — see "Settings" below. `src/routes/categories.tsx` → `/categories` — a
   single self-contained route (no nested children — everything happens on
   one page via dialogs) doing its own auth gate rather than splitting into
@@ -142,7 +143,7 @@ that check is informational only and never blocks merging.
 `/settings` is the first route that requires authentication: `settings.tsx`
 (the layout route) redirects an anonymous `useAuth` to `/login`, renders
 nothing while `loading`, and otherwise renders the tab nav (Common, My
-Invitations, and Account Types for everyone; Users only when
+Invitations, Account Types, and Tags for everyone; Users only when
 `user.is_admin`) plus `<Outlet/>`.
 
 - `settings.index.tsx` (`/settings`, Common tab) — language/timezone/default
@@ -189,6 +190,25 @@ Invitations, and Account Types for everyone; Users only when
   live type is chosen. A brand-new user already has a starter set of types
   (and, on `/categories`, a starter set of categories) seeded on the
   backend at signup — see `backend/AGENTS.md`'s "Account types" section.
+- `settings.tags.tsx` (`/settings/tags`, open to every authenticated
+  visitor — not admin-gated). Lists the caller's own tags
+  (`GET /api/tags`, name/entry-count/Active-or-Disabled status), and can
+  create (`POST`), rename (`PATCH`), disable/enable
+  (`POST .../disable` / `.../enable`), and delete (`DELETE`) one. Unlike
+  the Account Types tab, disable/enable fire directly on click with no
+  confirmation dialog — cheaply reversible, mirroring `/categories`'s
+  pattern rather than the Users tab's uniform-confirmation one; only
+  delete is confirmed via the same `@headlessui/react` `Dialog` pattern,
+  since it detaches the tag from every entry that currently carries it.
+  `DELETE /api/tags/{id}` always succeeds (`204`) — unlike account types,
+  there is no in-use block to surface as an inline error. The entry
+  form's tag autocomplete (`TagInput.tsx`, called from `entries.new.tsx`
+  and `entries.$entryId.edit.tsx`) is passed `tags.filter((t) =>
+  !t.disabled)` as `existingTags`, so a disabled tag is never offered as
+  a suggestion for a new attachment — but an entry already carrying a
+  since-disabled tag still resolves and resubmits it normally, since
+  `resolveTagIds()` keeps matching names against the full, unfiltered
+  `tags` state, not the filtered suggestion list.
 
 ## Categories
 

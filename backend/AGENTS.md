@@ -356,6 +356,49 @@ category is being newly set (creation, or an update that explicitly
 supplies `category_id`) — and `Subtree(ctx, ownerID, categoryID)
 ([]string, error)`, scoped to that owner's own tree.
 
+## Tags
+
+`internal/tag`'s per-user `tags` lookup is a flat list, not admin-managed —
+every operation is scoped to `owner_id = <authenticated caller>`, and a tag
+belonging to a different owner reads as `ErrNotFound` (`404`), never `403`.
+Unlike categories/account types, `DELETE /api/tags/{id}` is **unconditional**
+— always `204`, detaching the tag from every entry it was attached to via
+`entry_tags.tag_id`'s `ON DELETE CASCADE` — there is no in-use block and
+never has been.
+
+- **`disabled`** (reversible, mirroring `categories.disabled`): toggled via
+  `POST /api/tags/{id}/disable` / `/enable`. It blocks the tag from being
+  **newly** attached to an entry without touching any entry already carrying
+  it, and — because `tag_ids` is always a full replacement array rather than
+  a delta — specifically means only ids *not already on the entry* are
+  checked; resubmitting the same `tag_ids` array on an otherwise-unrelated
+  edit never trips it. See `internal/entry`'s `TagLookup` below.
+- **`entry_count`**: every `Tag` response carries the number of the owner's
+  own non-deleted entries currently carrying it, computed by
+  `internal/storage/postgres/tag.go` as a correlated subquery against
+  `entry_tags`/`entries` (`… AND e.deleted_at IS NULL`) folded into the same
+  column list every tag query already selects — no separate endpoint, no
+  `JOIN … GROUP BY` row-duplication risk. This mirrors how
+  `internal/storage/postgres/category.go`'s `Delete` already reaches into
+  `entries` by raw SQL for its in-use check, with no Go import of
+  `internal/entry` either way — domain packages don't import each other, but
+  their Postgres stores may still name each other's tables.
+  `internal/storage/memory`'s `TagStore` has no visibility into entries (the
+  same accepted gap `memory.CategoryStore` already has for its own in-use
+  check), so `EntryCount` there always reads `0` — fine, since
+  `storage/memory` is test/local-dev infrastructure, never what ships.
+
+`internal/entry`'s `TagLookup` interface (`*tag.Service` satisfies it
+structurally) has two methods: `OwnedBy(ctx, owner, tagIDs) (bool, error)` —
+existence + ownership only, checked against the *entire* resubmitted
+`tag_ids` array on every create/update that supplies one — and
+`Usable(ctx, owner, tagIDs) (bool, error)` — existence + ownership + not
+disabled, checked only against the ids a create/update is *newly adding*
+(every id, for `Create`; the set difference against the entry's current
+`TagIDs`, for `Update`). This two-method split is what lets a since-disabled
+tag stay attached across unrelated edits while still blocking it from being
+picked for the first time.
+
 ## Seeding fake data
 
 `server seed --yes <email1,email2,...>` (`internal/cli.Seed`, dispatched
