@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
-import { amountColorClass, formatAmount } from "../lib/amount";
+import {
+  amountColorClass,
+  formatAmount,
+  formatSignedAmount,
+} from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
@@ -362,17 +366,35 @@ function EntriesListPage() {
                   {accounts.find((a) => a.id === entry.account_id)?.title ??
                     entry.account_id}
                 </td>
-                <td
-                  className={`px-3 py-2 text-right font-mono tabular-nums ${amountColorClass(
-                    entry.amount,
-                  )} ${entry.kind === "balance_adjustment" ? "underline" : ""}`}
-                >
-                  {formatAmount(
-                    entry.amount,
-                    accountCurrency(entry.account_id),
-                    displayedDecimalPlaces,
-                    i18n.resolvedLanguage ?? "en",
-                  )}
+                <td className="px-3 py-2 text-right">
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span
+                      className={`font-mono tabular-nums ${amountColorClass(
+                        entry.kind === "balance_adjustment"
+                          ? (entry.balance ?? 0)
+                          : entry.amount,
+                      )} ${entry.kind === "balance_adjustment" ? "underline" : ""}`}
+                    >
+                      {formatAmount(
+                        entry.kind === "balance_adjustment"
+                          ? (entry.balance ?? 0)
+                          : entry.amount,
+                        accountCurrency(entry.account_id),
+                        displayedDecimalPlaces,
+                        i18n.resolvedLanguage ?? "en",
+                      )}
+                    </span>
+                    {entry.kind === "balance_adjustment" && (
+                      <span className="font-mono text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
+                        {formatSignedAmount(
+                          entry.amount,
+                          accountCurrency(entry.account_id),
+                          displayedDecimalPlaces,
+                          i18n.resolvedLanguage ?? "en",
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

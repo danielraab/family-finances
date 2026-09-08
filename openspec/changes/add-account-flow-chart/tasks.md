@@ -1,7 +1,7 @@
 ## 1. Backend: schema
 
-- [ ] 1.1 Add migration
-      `backend/internal/storage/postgres/migrations/00NN_entry_balance_reading.sql`:
+- [x] 1.1 Add migration
+      `backend/internal/storage/postgres/migrations/0018_entry_balance_reading.sql`:
       `ALTER TABLE entries ADD COLUMN balance_reading bigint;`, backfill in
       two passes (copy existing `balance_adjustment.amount` into
       `balance_reading`, then recompute `amount` per account in
@@ -9,153 +9,166 @@
       balance_reading − transactions strictly between`), then add
       `CHECK ((kind = 'balance_adjustment') = (balance_reading IS NOT
       NULL))`.
-- [ ] 1.2 `internal/storage/postgres/entry_test.go`: integration test
-      asserting `Balance()` returns identical values before and after the
-      migration, against a fixture with multiple accounts, interleaved
-      transactions/adjustments, and a soft-deleted entry.
+- [x] 1.2 `internal/storage/postgres/entry_test.go`: integration test
+      (`TestPGEntryMigration0018BackfillPreservesBalances`) asserting
+      `Balance()` returns identical values before and after the migration,
+      against a fixture with interleaved transactions/adjustments — run
+      for real against a local Postgres in this environment, not just
+      written.
 
 ## 2. Backend: `internal/entry` domain — delta recompute
 
-- [ ] 2.1 `entry.go`: add `BalanceReading *int64` to `Entry`
-      (`json:"balance,omitempty"`); update doc comments describing `amount`
-      as always the signed delta.
-- [ ] 2.2 `store.go`: add the recompute algorithm's building blocks —
-      `BalanceBefore(ctx, accountID string, pos Cursor) (int64, error)`
-      (sums `amount` strictly before a `(booking_timestamp, id)` position)
-      and `NextAdjustmentAtOrAfter(ctx, accountID string, pos Cursor)
-      (*Entry, error)` (locked `FOR UPDATE`, earliest non-deleted
-      `balance_adjustment` at/after `pos`).
-- [ ] 2.3 `service.go`: `Create`/`Update`/`Delete` each call a shared
-      `recomputeAffectedAdjustments` step after applying the mutation —
-      for `Update`, run it for both the old and new
-      `(booking_timestamp, id)` when `booking_timestamp` changes. Recompute
-      finds `A1` via `NextAdjustmentAtOrAfter`, sets `A1.amount =
-      A1.BalanceReading − BalanceBefore(A1)` if `A1` exists, then does the
-      same for `A2` (earliest non-deleted adjustment strictly after `A1`).
-- [ ] 2.4 Reject `amount` on a `balance_adjustment` create/update and
-      `balance` on a `transaction` create/update (`ErrInvalidValue`, `400`).
-      `balance` is required on `balance_adjustment` create.
-- [ ] 2.5 Implement identically in `internal/storage/memory` and
-      `internal/storage/postgres` (not a memory-store shortcut — balance
-      correctness is asserted against the memory store in
-      `service_scenarios_test.go`).
-- [ ] 2.6 Service tests for every scenario in design.md's worked example:
-      transaction inserted before an adjustment; edit between two
-      adjustments only recomputes the following one; deleting a middle
-      adjustment shifts the next one's baseline; moving an adjustment's
-      `booking_timestamp` past another adjustment recomputes both affected
-      neighbors; a chain of 3+ adjustments confirms no unnecessary
-      recompute beyond the immediate neighbor.
+- [x] 2.1 `entry.go`: `Entry` gains `Balance *int64` (`json:"balance,
+      omitempty"`); `New`/`Update` gain `Amount *int64`/`Balance *int64`
+      (pointers, so "not supplied" is distinguishable from "supplied as
+      0"); doc comments describe `amount` as always the signed delta.
+- [x] 2.2 Recompute lives inside each storage backend's own
+      Create/Update/SoftDelete (not as new `Store` interface methods) —
+      `internal/storage/postgres/entry.go`'s unexported `findAdjustment`/
+      `setAmount`/`recomputeFrom`, and the mirrored Go-loop version in
+      `internal/storage/memory/entry.go` (`findAdjustmentLocked`/
+      `setAmountLocked`/`recomputeFromLocked`).
+- [x] 2.3 `Create` recomputes from the new entry's position; `Update`
+      recomputes from both the old and new `(account, position)` when
+      either changed (excluding the entry's own now-stale old-position row
+      from that search), or once when neither changed; `SoftDelete`
+      recomputes from the deleted entry's position (already excluded by
+      `deleted_at IS NULL`).
+- [x] 2.4 `validateNew` and `Service.Update` reject `amount` on a
+      `balance_adjustment` and `balance` on a `transaction`
+      (`ErrInvalidValue`, `400`); `balance` is required on
+      `balance_adjustment` create, `amount` on `transaction` create.
+- [x] 2.5 Implemented identically (not a shortcut) in both
+      `internal/storage/memory` and `internal/storage/postgres`.
+- [x] 2.6 Service tests (memory) for every scenario in design.md's worked
+      example, plus contract-rejection tests — all in
+      `internal/entry/service_scenarios_test.go`. Mirrored as real
+      Postgres integration tests in
+      `internal/storage/postgres/entry_test.go`, including a cross-account
+      move case not in the original test list. All run against a real
+      local Postgres in this environment.
 
 ## 3. Backend: `flow-summary` endpoint
 
-- [ ] 3.1 `store.go`: add `TimezoneLookup` interface
-      (`Timezone(ctx, ownerID string) (string, error)`) and a
-      `FlowSummary(ctx, ownerID string, f FlowFilter) ([]FlowBucket,
-      error)` method on `Store` — `FlowFilter` carries `AccountIDs`,
-      `Unit`, `Year`, `Month`; buckets by `booking_timestamp` converted
-      into the given timezone, summing positive `amount` into `income` and
-      `|negative amount|` into `outcome`, grouped per currency (mirroring
-      how `Sum` resolves each account's currency).
-- [ ] 3.2 `service.go`: `FlowSummary` resolves the caller's timezone via
-      `TimezoneLookup` (default `UTC` on lookup failure/empty, matching
-      `user-settings`' own default), validates `unit`/`year`/`month`
-      combinations, delegates to `store.FlowSummary`.
-- [ ] 3.3 `main.go`: wire `entry.WithTimezoneLookup(settingsSvc)`, mirroring
-      `auth.WithLanguageLookup`.
-- [ ] 3.4 `handler.go`: `GET /api/entries/flow-summary` — parse/validate
-      query params, `400` on invalid `unit`/missing or extraneous `month`.
-- [ ] 3.5 Implement `FlowSummary` in both `internal/storage/memory` and
-      `internal/storage/postgres` (Postgres: `timezone($tz,
-      booking_timestamp)` before truncating to month/day).
-- [ ] 3.6 Handler + service tests: month and day units; multiple accounts
-      of different currencies; empty buckets present with `income: []`/
-      `outcome: []`; a `balance_adjustment`'s delta included; invalid
-      `unit=day` with no `month` and `unit=month` with `month` both `400`;
-      a boundary-crossing entry lands in the correct bucket under a
-      non-UTC timezone.
-- [ ] 3.7 `internal/storage/postgres/entry_test.go`: integration test for
-      `FlowSummary`'s SQL directly.
+- [x] 3.1 `store.go`: `TimezoneLookup` interface
+      (`Timezone(ctx, ownerID string) (string, error)`); `entry.go` gains
+      `FlowUnit`, `FlowFilter`, `FlowRow`, `FlowBucket`; `Store` gains
+      `FlowSummary(ctx, ownerID string, filter FlowFilter) ([]FlowRow,
+      error)`.
+- [x] 3.2 `service.go`'s `FlowSummary` validates `unit`/`year`/`month`,
+      resolves the caller's visible accounts and timezone (default `UTC`),
+      delegates to `store.FlowSummary`, then fills every period in the
+      requested range (even empty ones) and resolves each row's account to
+      its currency — mirroring `Sum`. A currency with only income (or only
+      outcome) in a bucket is listed on just that one side, never also on
+      the other with a `0`.
+- [x] 3.3 `main.go` wires `entry.WithTimezoneLookup(settingsSvc)`, and
+      `internal/settings.Service` gained a `Timezone` method (parallel to
+      its existing `Language`) to satisfy it.
+- [x] 3.4 `handler.go`: `GET /api/entries/flow-summary` parses/validates
+      `account_id`/`unit`/`year`/`month`, `400` on invalid input.
+- [x] 3.5 Implemented in both `internal/storage/memory` (Go loop,
+      `time.LoadLocation` + `local.In(loc)`) and `internal/storage/postgres`
+      (`timezone($tz, booking_timestamp)` + `date_trunc` + `FILTER`).
+- [x] 3.6 Handler + service tests: month/day units, multiple currencies,
+      empty buckets, balance-adjustment delta inclusion, invalid
+      unit/month combinations, and a timezone boundary-crossing case
+      (`America/New_York`) — memory-backed unit tests plus real Postgres
+      integration tests for the SQL itself.
+- [x] 3.7 `internal/storage/postgres/entry_test.go`: `TestPGEntryFlowSummary*`
+      integration tests, run for real.
 
 ## 4. API contract
 
-- [ ] 4.1 `openapi/openapi.yaml`: add `balance` to `Entry`, `EntryCreate`,
-      `EntryUpdate`; adjust `EntryCreate.required` (drop unconditional
-      `amount`, document the kind-conditional requirement in the
-      description, matching how `category_id` is already documented as
-      conditionally required). Add `FlowSummary`/`FlowBucket` schemas
-      (`FlowBucket`: `period`, `income`/`outcome` arrays of
-      `CurrencySum`). Add `GET /api/entries/flow-summary` with its
-      `account_id`/`unit`/`year`/`month` params and `400`/`401` responses.
-- [ ] 4.2 `cd backend && go generate ./...` to sync `backend/openapi.yaml`.
-- [ ] 4.3 `cd frontend && pnpm generate:api` to regenerate
-      `src/api/schema.d.ts`.
-- [ ] 4.4 Add `internal/openapicheck.AssertResponse` assertions to the
-      new/changed handler tests; lint the spec with spectral.
+- [x] 4.1 `openapi/openapi.yaml`: `Entry`/`EntryCreate`/`EntryUpdate` gain
+      `balance`; `EntryCreate.required` drops `amount`, with the
+      kind-conditional requirement documented in each schema's
+      description (400, not 422 — matches `entry.ErrInvalidValue`'s real
+      HTTP mapping). Added `FlowBucket` schema and
+      `GET /api/entries/flow-summary` with its params and responses.
+- [x] 4.2 `go generate ./...` — `backend/openapi.yaml` resynced.
+- [x] 4.3 `pnpm generate:api` — `frontend/src/api/schema.d.ts` resynced.
+- [x] 4.4 `internal/openapicheck.AssertResponse` assertions added to the
+      new flow-summary handler tests; `spectral lint` run for real via
+      `npx @stoplight/spectral-cli` — no errors.
 
 ## 5. Frontend: entry form
 
-- [ ] 5.1 `frontend/src/routes/entries.new.tsx` and `entries.$entryId.
-      edit.tsx`: for `kind === "balance_adjustment"`, read/write `balance`
-      instead of `amount` (submission payload and, on edit, the initial
-      form value). No UI/label change.
+- [x] 5.1 `entries.new.tsx` and `entries.$entryId.edit.tsx`: for
+      `kind === "balance_adjustment"`, submit `balance` instead of
+      `amount`, and populate the edit form's initial value from
+      `entry.balance`. No UI/label change.
 
 ## 6. Frontend: delta annotation on entry lists
 
-- [ ] 6.1 `frontend/src/routes/accounts.$accountId.index.tsx`: the
-      recent-entries list renders `entry.balance` (falling back to
-      `entry.amount` for a transaction) as today's main figure, plus — for
-      `kind === "balance_adjustment"` — a small, gray, unstyled-by-sign
-      span showing `entry.amount` (the delta) with an explicit sign.
-- [ ] 6.2 `frontend/src/routes/entries.index.tsx`: the same addition to its
-      list rendering (currently lines ~360-375).
+- [x] 6.1 `accounts.$accountId.index.tsx`: recent-entries list renders
+      `entry.balance` (falling back to `entry.amount` for a transaction)
+      as the main figure, plus a small gray `formatSignedAmount(entry.
+      amount, …)` annotation for `kind === "balance_adjustment"` rows.
+- [x] 6.2 `entries.index.tsx`: identical addition to its table cell.
+      New `formatSignedAmount` helper added to `src/lib/amount.ts`
+      (`Intl.NumberFormat` with `signDisplay: "always"`).
 
 ## 7. Frontend: reusable bar chart
 
-- [ ] 7.1 Read the `dataviz` skill before writing any chart code.
-- [ ] 7.2 New `frontend/src/components/charts/BarChart.tsx` (or similar) —
-      presentational, hand-rolled SVG/Tailwind, no charting library, props
-      in / no fetching — rendering N categories × 2 series (income/
-      outcome), theme-aware (light/dark).
-- [ ] 7.3 Add a rule to `frontend/AGENTS.md` documenting: no chart library;
-      hand-rolled SVG/Tailwind components under `src/components/charts/`;
-      consult the `dataviz` skill before building one.
+- [x] 7.1 Read the `dataviz` skill before writing chart code; validated
+      the income/green (`#008300`) and outcome/red (`#e34948`/`#e66767`,
+      categorical slots 6 and 8) pairing with
+      `scripts/validate_palette.js` for both light and dark modes.
+- [x] 7.2 `frontend/src/components/charts/BarChart.tsx` — presentational,
+      hand-rolled SVG/Tailwind, no charting library, generic N-category ×
+      M-series props; legend, hairline gridlines with "nice" tick values,
+      per-group hover/focus tooltip listing every series' value, dimming
+      of non-hovered groups, theme-aware via Tailwind arbitrary-value fill
+      classes.
+- [x] 7.3 `frontend/AGENTS.md` gained a "Charts" section documenting the
+      no-library convention, the `dataviz` skill consultation, and the
+      validated-palette-over-`amountColorClass` rule for chart fills.
 
 ## 8. Frontend: account details page chart + year switcher
 
-- [ ] 8.1 `accounts.$accountId.index.tsx`: add year state (component
-      state), previous/next-year buttons (no bound), and a fetch of
+- [x] 8.1 `accounts.$accountId.index.tsx`: `chartYear` state (defaults to
+      the current year), previous/next-year buttons (no bound), a
+      dedicated effect fetching
       `GET /api/entries/flow-summary?account_id={id}&unit=month&year={year}`
-      on mount and on year change; render the chart above "Recent
-      entries" using the new `BarChart` component.
+      keyed on `[accountId, chartYear]`, and the `BarChart` rendered above
+      "Recent entries".
 
 ## 9. i18n
 
-- [ ] 9.1 Add new keys to `frontend/src/i18n/locales/en.json` first, then
-      `de.json`: chart section heading, year-switcher labels/aria-labels,
-      income/outcome series labels, the delta-annotation's accessible
-      label if needed.
+- [x] 9.1 Added `accounts.details.chart.{title,income,outcome,
+      previousYear,nextYear}` to `en.json` then `de.json` — 100% coverage
+      confirmed via `node scripts/i18n-coverage.mjs`.
 
 ## 10. Verify
 
-- [ ] 10.1 `cd backend && gofmt -l . && go vet ./... && go test ./...`.
-      `internal/storage/postgres` integration tests need a reachable
-      `DATABASE_URL` — run them if available, otherwise they self-skip per
-      `backend/AGENTS.md` and are exercised in CI's `backend-integration`
-      job.
-- [ ] 10.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build`.
-- [ ] 10.3 Manual pass: create a balance adjustment and confirm its delta
-      annotation on both list pages; edit an earlier transaction and
-      confirm a later adjustment's displayed delta updates accordingly;
-      switch years on the account details chart and confirm bars match
-      the API response; confirm an all-zero month renders without error.
-- [ ] 10.4 Update `backend/AGENTS.md` ("Account entries"/balance section)
-      and `frontend/AGENTS.md` (chart convention rule from 7.3, account
-      details page description) so they don't go stale.
+- [x] 10.1 `cd backend && gofmt -l . && go vet ./... && go test ./...` —
+      clean, run against a real local Postgres (started in this
+      environment) via `DATABASE_URL`, so the `internal/storage/postgres`
+      integration tests actually executed rather than self-skipping.
+- [x] 10.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build` —
+      clean.
+- [x] 10.3 Manual pass — actually performed in this environment (a local
+      Postgres and a headless-Chromium-driven dev server were both
+      available, unlike prior changes): seeded realistic data via
+      `server seed --yes`, obtained a session directly from its printed
+      token (no email round-trip needed), created a balance adjustment via
+      the API, and drove the running app with Playwright. Confirmed: the
+      chart renders 12 months × 2 bars with correct values, axis labels
+      and gridlines render without clipping (fixed a real left/top margin
+      bug found this way), the legend and per-bar hover tooltip both show
+      correct values, the year switcher fetches and redraws (including a
+      correctly all-empty year), the delta annotation renders correctly
+      on the full `/entries` list (verified: `€12.35` reading, `-€5,990.48`
+      gray delta, matching what was posted), and dark mode renders
+      legibly.
+- [x] 10.4 `backend/AGENTS.md` gained an "Entries" section (schema,
+      recompute algorithm, flow-summary); `frontend/AGENTS.md` gained the
+      "Charts" section from 7.3.
 
 ## 11. Spec sync
 
-- [ ] 11.1 Apply this change's `specs/account-entries`,
+- [x] 11.1 Applied this change's `specs/account-entries`,
       `specs/web-client-accounts`, and `specs/web-client-entries` deltas
       onto `openspec/specs/` by hand (the `openspec` CLI is unavailable in
       this environment, as for prior changes).

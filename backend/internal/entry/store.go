@@ -68,6 +68,18 @@ type TagLookup interface {
 	Usable(ctx context.Context, owner string, tagIDs []string) (bool, error)
 }
 
+// TimezoneLookup resolves an authenticated caller's resolved timezone
+// setting (default "UTC" when unset), used to bucket
+// GET /api/entries/flow-summary by the caller's own calendar rather than
+// UTC unconditionally. internal/settings' Service satisfies this
+// structurally via its own Timezone method; wiring it via
+// WithTimezoneLookup is optional (a nil lookup means every caller buckets
+// in UTC) — the same optional-dependency shape internal/auth's
+// LanguageLookup uses.
+type TimezoneLookup interface {
+	Timezone(ctx context.Context, ownerID string) (string, error)
+}
+
 // Store is the persistence contract entry declares. internal/storage/memory
 // and internal/storage/postgres implement it; package main injects one.
 type Store interface {
@@ -85,10 +97,13 @@ type Store interface {
 	// there are no more.
 	List(ctx context.Context, ownerID string, filter Filter) ([]Entry, *Cursor, error)
 
-	// Balance computes accountID's balance as of asOf per design.md's live
-	// computation: the latest non-deleted balance_adjustment at or before
-	// asOf (or 0 if none), plus every non-deleted transaction after it, up
-	// to asOf.
+	// Balance computes accountID's balance as of asOf: the sum of every
+	// non-deleted entry's Amount at or before asOf. A balance adjustment's
+	// Amount is itself always kept, by the recompute algorithm every
+	// Create/Update/SoftDelete runs (see design.md), equal to its Balance
+	// reading minus the balance strictly before it — so this plain sum
+	// reproduces exactly the same result as always resetting to the latest
+	// balance adjustment and summing only the transactions after it.
 	Balance(ctx context.Context, accountID string, asOf time.Time) (int64, error)
 
 	// Sum computes, for ownerID's entries matching filter (already resolved
@@ -99,4 +114,12 @@ type Store interface {
 	// account. Service.Sum groups the per-account totals by currency —
 	// Store has no notion of an account's currency.
 	Sum(ctx context.Context, ownerID string, filter Filter) (perAccount map[string]int64, count int, err error)
+
+	// FlowSummary buckets ownerID's entries matching filter (already
+	// resolved by Service — AccountIDs is the effective set to filter by,
+	// Timezone is already resolved) by booking_timestamp in filter.Timezone,
+	// one row per (account, period) combination that has at least one
+	// matching entry. Service.FlowSummary fills in periods with no matching
+	// entries and resolves each account id to its currency.
+	FlowSummary(ctx context.Context, ownerID string, filter FlowFilter) ([]FlowRow, error)
 }

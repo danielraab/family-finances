@@ -235,6 +235,13 @@
       "edit": "Edit",
       "balance": "Balance",
       "status": "Status",
+      "chart": {
+        "title": "Income & outcome",
+        "income": "Income",
+        "outcome": "Outcome",
+        "previousYear": "Previous year",
+        "nextYear": "Next year"
+      },
       "recentEntries": "Recent entries",
       "seeAll": "See all",
       "noEntries": "No entries yet."

@@ -1337,6 +1337,73 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/entries/flow-summary:
+    get:
+      operationId: getEntriesFlowSummary
+      summary: >-
+        Bucket the caller's matching entries into per-month or per-day
+        income/outcome totals
+      description: >-
+        Buckets the caller's own, non-deleted accounts' non-deleted entries
+        by booking_timestamp — one bucket per calendar month of year when
+        unit=month, or one bucket per calendar day of year/month when
+        unit=day — using the caller's resolved timezone setting (see
+        user-settings) to decide bucket boundaries, default UTC. Within
+        each bucket, entries whose amount is positive are summed into
+        income and the absolute value of entries whose amount is negative
+        into outcome, grouped per currency (the currency of the entry's
+        account) the same way GET /api/entries/summary groups its sum.
+        Unlike GET /api/entries/summary, a balance_adjustment's amount
+        (always a signed delta — see account-entries) is included, not
+        excluded. Every period in the requested range is present, even one
+        with no matching entries at all (empty income/outcome).
+      tags: [entries]
+      parameters:
+        - name: account_id
+          in: query
+          required: false
+          description: Repeatable. Omitted means every account the caller owns.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: unit
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [month, day]
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          required: false
+          description: 1-12. Required when unit=day, rejected when unit=month.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: One bucket per period in the requested range.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [buckets]
+                properties:
+                  buckets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FlowBucket"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/entries/{id}:
     get:
       operationId: getEntry
@@ -1949,7 +2016,21 @@ components:
           description: >-
             Integer minor units at a fixed 4 decimal places (e.g. 105000
             represents 10.5000 in the account's currency). Not
-            configurable — see account-entries.
+            configurable — see account-entries. Always a signed delta
+            applied to the account's running balance: for a transaction,
+            exactly what was submitted; for a balance_adjustment, computed
+            automatically as the change from the balance immediately
+            before it — never client-supplied for that kind.
+        balance:
+          type: integer
+          format: int64
+          nullable: true
+          description: >-
+            The absolute reading a balance_adjustment's amount is computed
+            against — present only when kind is balance_adjustment, null
+            for a transaction. This is what the client supplies when
+            creating or editing a balance_adjustment (see EntryCreate/
+            EntryUpdate), at the same 4-decimal-place scale as amount.
         booking_timestamp:
           type: string
           format: date-time
@@ -1974,7 +2055,12 @@ components:
 
     EntryCreate:
       type: object
-      required: [account_id, kind, amount, booking_timestamp, title]
+      required: [account_id, kind, booking_timestamp, title]
+      description: >-
+        amount is required when kind is transaction and rejected when kind
+        is balance_adjustment; balance is required when kind is
+        balance_adjustment and rejected when kind is transaction — exactly
+        one of the two, per kind (400).
       properties:
         account_id:
           type: string
@@ -1983,6 +2069,11 @@ components:
         amount:
           type: integer
           format: int64
+          description: Required for kind=transaction; must be omitted otherwise.
+        balance:
+          type: integer
+          format: int64
+          description: Required for kind=balance_adjustment; must be omitted otherwise.
         booking_timestamp:
           type: string
           format: date-time
@@ -2003,11 +2094,17 @@ components:
         No kind field — it is immutable after creation. account_id may be
         set to move the entry to a different account the caller owns (see
         account-entries); it must not be disabled, the same rule creation
-        applies. No currency conversion or validation is performed.
+        applies. No currency conversion or validation is performed. amount
+        is only settable when the entry's kind is transaction, balance only
+        when it is balance_adjustment — supplying the other one is
+        rejected (400).
       properties:
         account_id:
           type: string
         amount:
+          type: integer
+          format: int64
+        balance:
           type: integer
           format: int64
         booking_timestamp:
@@ -2070,6 +2167,30 @@ components:
         count:
           type: integer
           format: int64
+
+    FlowBucket:
+      type: object
+      required: [period, income, outcome]
+      description: >-
+        One period's income/outcome totals — see
+        GET /api/entries/flow-summary. A currency with only income (or only
+        outcome) entries in this period appears in just that one array,
+        never also in the other with an amount of 0.
+      properties:
+        period:
+          type: string
+          format: date
+          description: >-
+            The bucket's first calendar day (YYYY-MM-DD), regardless of
+            unit — a day-unit bucket is just a single day.
+        income:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrencySum"
+        outcome:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrencySum"
 
 security:
   - sessionCookie: []

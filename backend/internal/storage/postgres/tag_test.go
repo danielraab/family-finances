@@ -219,7 +219,7 @@ func TestPGTagEntryCountReflectsAttachedAndDeletedEntries(t *testing.T) {
 
 	bookedAt := at("2024-01-01T00:00:00Z")
 	e1, err := entryStore.Create(ctx, owner.ID, entry.New{
-		AccountID: acc.ID, Kind: entry.KindTransaction, Amount: 100,
+		AccountID: acc.ID, Kind: entry.KindTransaction, Amount: ptrInt64(100),
 		BookingTimestamp: bookedAt, Title: "First", CategoryID: &cat.ID,
 		TagIDs: []string{tg.ID},
 	})
@@ -227,7 +227,7 @@ func TestPGTagEntryCountReflectsAttachedAndDeletedEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := entryStore.Create(ctx, owner.ID, entry.New{
-		AccountID: acc.ID, Kind: entry.KindTransaction, Amount: 200,
+		AccountID: acc.ID, Kind: entry.KindTransaction, Amount: ptrInt64(200),
 		BookingTimestamp: bookedAt, Title: "Second", CategoryID: &cat.ID,
 		TagIDs: []string{tg.ID},
 	}); err != nil {

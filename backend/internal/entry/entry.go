@@ -82,11 +82,20 @@ func (m CategoryMode) valid() bool {
 // Entry is a transaction or balance adjustment recorded against exactly one
 // account. It has exactly one owner (the account's owner at creation time,
 // its own column — see design.md) and is visible only to them.
+//
+// Amount is always a signed delta applied to the account's running balance —
+// for a transaction, exactly what the caller supplied; for a balance
+// adjustment, computed automatically (see design.md's recompute algorithm)
+// as the change from the balance immediately before it. Balance is the
+// absolute reading the caller supplied for a balance adjustment (nil for a
+// transaction) — it is what a balance adjustment's amount is defined
+// against, never computed itself.
 type Entry struct {
 	ID               string     `json:"id"`
 	AccountID        string     `json:"account_id"`
 	Kind             Kind       `json:"kind"`
 	Amount           int64      `json:"amount"`
+	Balance          *int64     `json:"balance,omitempty"`
 	BookingTimestamp time.Time  `json:"booking_timestamp"`
 	Title            string     `json:"title"`
 	Description      string     `json:"description,omitempty"`
@@ -122,11 +131,15 @@ func (o *OptionalID) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// New is the input to creating an entry.
+// New is the input to creating an entry. Exactly one of Amount (for
+// KindTransaction) or Balance (for KindBalanceAdjustment) SHALL be set — see
+// validateNew. For a balance adjustment, Amount is never client-supplied:
+// the store computes and stores it as part of Create (see design.md).
 type New struct {
 	AccountID        string
 	Kind             Kind
-	Amount           int64
+	Amount           *int64
+	Balance          *int64
 	BookingTimestamp time.Time
 	Title            string
 	Description      string
@@ -140,10 +153,14 @@ type New struct {
 // to set it. A nil field here leaves it untouched; TagIDs replaces the full
 // set when non-nil (including an empty, non-nil slice, which clears every
 // tag). A non-nil AccountID moves the entry to a different account, subject
-// to the same ownership/disabled-account checks Create applies.
+// to the same ownership/disabled-account checks Create applies. Amount is
+// only settable on a transaction, Balance only on a balance adjustment (see
+// design.md) — Service.Update rejects the other one being non-nil for the
+// entry's (immutable) kind.
 type Update struct {
 	AccountID        *string
 	Amount           *int64
+	Balance          *int64
 	BookingTimestamp *time.Time
 	Title            *string
 	Description      *string
@@ -194,6 +211,54 @@ type Summary struct {
 	Count int           `json:"count"`
 }
 
+// FlowUnit is the bucket granularity FlowSummary groups entries by.
+type FlowUnit string
+
+const (
+	FlowUnitMonth FlowUnit = "month"
+	FlowUnitDay   FlowUnit = "day"
+)
+
+func (u FlowUnit) valid() bool { return u == FlowUnitMonth || u == FlowUnitDay }
+
+// FlowFilter narrows and buckets a FlowSummary call. AccountIDs is resolved
+// by Service.FlowSummary to the caller's own visible accounts the same way
+// List/Sum resolve theirs, before Store sees it. Timezone is never
+// caller-supplied — Service.FlowSummary fills it in from the caller's
+// resolved settings (default UTC) before calling Store, so bucket
+// boundaries always reflect the viewer's own calendar, not UTC
+// unconditionally.
+type FlowFilter struct {
+	AccountIDs []string
+	Unit       FlowUnit
+	Year       int
+	Month      int // 1-12; required when Unit == FlowUnitDay, must be 0 otherwise
+	Timezone   string
+}
+
+// FlowRow is one (account, period)'s income/outcome totals, as Store
+// computes them — Service.FlowSummary resolves each account's currency and
+// merges same-currency, same-period rows into a FlowBucket, since Store has
+// no notion of an account's currency (mirrors Sum/Service.Sum). Period is
+// the bucket's first calendar day, "YYYY-MM-DD", regardless of Unit. Income
+// is the sum of positive amounts, Outcome the sum of |negative amounts| —
+// both non-negative.
+type FlowRow struct {
+	AccountID string
+	Period    string
+	Income    int64
+	Outcome   int64
+}
+
+// FlowBucket is one period's income/outcome totals, grouped per currency —
+// see Service.FlowSummary. A period with no matching entries at all still
+// appears, with empty Income/Outcome.
+type FlowBucket struct {
+	Period  string        `json:"period"`
+	Income  []CurrencySum `json:"income"`
+	Outcome []CurrencySum `json:"outcome"`
+}
+
 const (
 	defaultPageSize = 50
 	maxPageSize     = 200
@@ -214,6 +279,15 @@ func validateNew(in New) error {
 	}
 	if in.Kind == KindTransaction && in.CategoryID == nil {
 		return ErrInvalidValue
+	}
+	if in.Kind == KindTransaction {
+		if in.Amount == nil || in.Balance != nil {
+			return ErrInvalidValue
+		}
+	} else {
+		if in.Balance == nil || in.Amount != nil {
+			return ErrInvalidValue
+		}
 	}
 	return nil
 }

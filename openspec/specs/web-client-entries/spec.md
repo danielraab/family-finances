@@ -120,7 +120,9 @@ The entries list SHALL render each entry's amount in a color reflecting its
 sign: red when negative, the default/neutral text color when exactly zero,
 and green when positive. An entry whose `kind` is `balance_adjustment`
 SHALL additionally have its amount rendered underlined, distinguishing it
-from a `transaction`'s amount at a glance.
+from a `transaction`'s amount at a glance, and SHALL additionally show its
+computed delta (`amount`) as a small, gray annotation next to its reading,
+rendered without sign-based coloring.
 
 #### Scenario: Negative amount is red
 
@@ -148,6 +150,13 @@ from a `transaction`'s amount at a glance.
 
 - **WHEN** the entries list renders an entry whose `kind` is `transaction`
 - **THEN** its amount is rendered without an underline
+
+#### Scenario: A balance adjustment shows its delta alongside its reading
+
+- **WHEN** the entries list renders an entry whose `kind` is
+  `balance_adjustment`
+- **THEN** its computed delta is shown next to its reading, in a smaller,
+  gray typeface, not colored by sign
 
 ### Requirement: Creating and editing an entry
 
@@ -339,7 +348,11 @@ This requirement does not apply when the entry's `kind` is
 On `/entries/new` and `/entries/{id}/edit`, when the entry's `kind` is
 `balance_adjustment`, the amount field SHALL remain a single free-typed
 input with no sign toggle control and no sign-based coloring, and SHALL
-continue to accept a magnitude that resolves to exactly zero.
+continue to accept a magnitude that resolves to exactly zero. This field
+edits the entry's `balance` reading, not its `amount` — submitting the form
+for a `balance_adjustment` SHALL send the entered value as `balance`, and
+the computed `amount` (delta) returned by the backend is never edited
+directly.
 
 #### Scenario: Balance adjustment amount field has no toggle
 
@@ -353,6 +366,13 @@ continue to accept a magnitude that resolves to exactly zero.
 - **WHEN** an authenticated visitor submits a `balance_adjustment` entry
   with an amount of zero
 - **THEN** the entry is saved successfully
+
+#### Scenario: Submitting a balance adjustment sends balance, not amount
+
+- **WHEN** an authenticated visitor submits the create or edit form for a
+  `kind: balance_adjustment` entry
+- **THEN** the request body carries the entered value as `balance`, and the
+  form does not submit an `amount` field for that entry
 
 ### Requirement: The entry form's category picker excludes disabled categories from new selections
 

@@ -131,10 +131,12 @@ function NewEntry() {
       body: {
         account_id: accountId,
         kind,
-        amount: parsedAmount,
         booking_timestamp: new Date(bookingTimestamp).toISOString(),
         title: title.trim(),
         tag_ids: tagIds,
+        ...(kind === "transaction"
+          ? { amount: parsedAmount }
+          : { balance: parsedAmount }),
         ...compact({
           description: description.trim() || undefined,
           category_id: categoryId || undefined,

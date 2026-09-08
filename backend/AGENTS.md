@@ -399,6 +399,57 @@ disabled, checked only against the ids a create/update is *newly adding*
 tag stay attached across unrelated edits while still blocking it from being
 picked for the first time.
 
+## Entries
+
+`internal/entry` owns `entries` — transactions and balance adjustments
+recorded against an account — plus their live balance computation and a
+filterable/searchable/sortable, cursor-paginated listing (`GET`/
+`POST /api/entries`, `GET`/`PATCH`/`DELETE /api/entries/{id}`,
+`GET /api/accounts/{id}/balance`).
+
+- **`amount` is always a signed delta applied to the running balance,
+  for both kinds.** For a `transaction` it's exactly what the caller
+  submits. For a `balance_adjustment` it is never client-supplied — the
+  caller instead submits the absolute reading as `balance`
+  (`entries.balance_reading` in Postgres, `CHECK`-constrained to be
+  non-null exactly when `kind = 'balance_adjustment'`), and `amount` is
+  computed as that reading minus the account's balance strictly before
+  the entry's own `(booking_timestamp, id)` position. `POST`/`PATCH`
+  reject `amount` on a `balance_adjustment` and `balance` on a
+  `transaction` (`ErrInvalidValue`, `400`).
+- **`Balance(asOf)` is a single `SUM(amount) WHERE … <= asOf`** — no
+  kind-branching. This reproduces exactly the same values as "reset to
+  the latest balance adjustment, then sum only the transactions after
+  it," because a balance adjustment's `amount` is *defined* to make that
+  running sum land on its reading, by construction.
+- **Recompute is synchronous, inside the same Create/Update/SoftDelete
+  operation, never async** — this backend has no job queue, and the
+  numbers must be right immediately, not eventually. Only the earliest
+  non-deleted balance adjustment at or after the mutated position (`A1`),
+  and the one immediately after it (`A2`), can ever need a new `amount`;
+  recomputing exactly those two is always sufficient — see
+  `internal/storage/postgres/entry.go`'s `recomputeFrom`/`findAdjustment`/
+  `setAmount` (and the mirrored Go-loop version in
+  `internal/storage/memory`) for the algorithm and its worked example.
+  An `Update` that moves an entry's `account_id` and/or
+  `booking_timestamp` recomputes at both the vacated position (excluding
+  the entry's own, already-updated row from that search) and the new one.
+- **`GET /api/entries/flow-summary`** buckets the caller's matching
+  entries into per-month or per-day income/outcome totals (`unit=month|
+  day`, repeatable `account_id`, `year`, `month` — required for `day`,
+  rejected for `month`), using the caller's resolved timezone
+  (`internal/settings`, default UTC) to decide bucket boundaries. Unlike
+  `GET /api/entries/summary` (which always excludes `balance_adjustment`
+  — an absolute reading has no place in a spend-by-category report),
+  flow-summary *includes* a balance adjustment's computed delta, since it
+  answers a different question: how the balance actually moved. Every
+  period in the requested range is present even when empty (`income: []`,
+  `outcome: []`) — no special-casing. `internal/settings.Service.
+  Timezone` (parallel to its existing `Language`) is wired in via
+  `entry.WithTimezoneLookup`, the same optional-dependency pattern
+  `auth.WithLanguageLookup` uses, so `internal/entry` still doesn't
+  import `internal/settings`.
+
 ## Seeding fake data
 
 `server seed --yes <email1,email2,...>` (`internal/cli.Seed`, dispatched

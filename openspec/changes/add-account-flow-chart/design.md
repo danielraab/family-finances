@@ -224,7 +224,11 @@ grouped per currency the same way `Sum` already resolves each account's
 currency (needed only because `account_id` is repeatable — the account
 details page always passes exactly one, so it will only ever see one
 currency in practice). `outcome` amounts are non-negative magnitudes, so a
-client can plot both as upward bars. A bucket with no matching entries is
+client can plot both as upward bars. A currency with only income (or only
+outcome) entries in a bucket is listed in just that one array — it is never
+also listed on the other side with an amount of `0`, mirroring
+`GET /api/entries/summary`'s "one entry per currency actually present," now
+split per direction. A bucket with no matching entries at all is
 `{"income": [], "outcome": []}` — no special-casing.
 
 Per-entry contribution to a bucket: `amount` (already always the delta, per

@@ -41,6 +41,7 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("GET /api/entries", h.list)
 	h.mux.HandleFunc("POST /api/entries", h.create)
 	h.mux.HandleFunc("GET /api/entries/summary", h.summary)
+	h.mux.HandleFunc("GET /api/entries/flow-summary", h.flowSummary)
 	h.mux.HandleFunc("GET /api/entries/{id}", h.get)
 	h.mux.HandleFunc("PATCH /api/entries/{id}", h.update)
 	h.mux.HandleFunc("DELETE /api/entries/{id}", h.delete)
@@ -55,6 +56,7 @@ type entryCreateBody struct {
 	AccountID        *string    `json:"account_id"`
 	Kind             *string    `json:"kind"`
 	Amount           *int64     `json:"amount"`
+	Balance          *int64     `json:"balance"`
 	BookingTimestamp *time.Time `json:"booking_timestamp"`
 	Title            *string    `json:"title"`
 	Description      *string    `json:"description"`
@@ -65,6 +67,7 @@ type entryCreateBody struct {
 type entryUpdateBody struct {
 	AccountID        *string    `json:"account_id"`
 	Amount           *int64     `json:"amount"`
+	Balance          *int64     `json:"balance"`
 	BookingTimestamp *time.Time `json:"booking_timestamp"`
 	Title            *string    `json:"title"`
 	Description      *string    `json:"description"`
@@ -88,15 +91,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	in := New{CategoryID: body.CategoryID, TagIDs: body.TagIDs}
+	in := New{CategoryID: body.CategoryID, TagIDs: body.TagIDs, Amount: body.Amount, Balance: body.Balance}
 	if body.AccountID != nil {
 		in.AccountID = *body.AccountID
 	}
 	if body.Kind != nil {
 		in.Kind = Kind(*body.Kind)
-	}
-	if body.Amount != nil {
-		in.Amount = *body.Amount
 	}
 	if body.BookingTimestamp != nil {
 		in.BookingTimestamp = *body.BookingTimestamp
@@ -144,6 +144,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	upd := Update{
 		AccountID:        body.AccountID,
 		Amount:           body.Amount,
+		Balance:          body.Balance,
 		BookingTimestamp: body.BookingTimestamp,
 		Title:            body.Title,
 		Description:      body.Description,
@@ -277,6 +278,45 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, sum)
+}
+
+type flowSummaryResponse struct {
+	Buckets []FlowBucket `json:"buckets"`
+}
+
+func (h *Handler) flowSummary(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	q := r.URL.Query()
+
+	f := FlowFilter{
+		AccountIDs: q["account_id"],
+		Unit:       FlowUnit(q.Get("unit")),
+	}
+	year, err := strconv.Atoi(q.Get("year"))
+	if err != nil {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+	f.Year = year
+	if v := q.Get("month"); v != "" {
+		month, err := strconv.Atoi(v)
+		if err != nil {
+			h.renderError(w, r, ErrInvalidValue)
+			return
+		}
+		f.Month = month
+	}
+
+	buckets, err := h.svc.FlowSummary(r.Context(), user.ID, f)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, flowSummaryResponse{Buckets: buckets})
 }
 
 func (h *Handler) balance(w http.ResponseWriter, r *http.Request) {
