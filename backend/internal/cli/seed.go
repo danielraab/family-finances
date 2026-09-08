@@ -84,7 +84,7 @@ func Seed(ctx context.Context, args []string) int {
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 
-	return seedTesters(ctx, emails, authStore, authSvc, accountSvc, categorySvc, entrySvc, rng, os.Stdout, os.Stderr)
+	return seedTesters(ctx, emails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, os.Stdout, os.Stderr)
 }
 
 // parseSeedEmails splits raw on commas, trims and normalizes each address

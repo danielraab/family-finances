@@ -12,11 +12,22 @@ import (
 	"at.draab/familyfinances/internal/auth"
 	"at.draab/familyfinances/internal/category"
 	"at.draab/familyfinances/internal/entry"
+	"at.draab/familyfinances/internal/tag"
 )
 
 // accountCurrencies is the small pool of currencies a generated account
 // randomly draws from.
 var accountCurrencies = []string{"EUR", "USD", "GBP"}
+
+// financialInstitutePool is the small pool of bank names a generated
+// account's optional financial_institute randomly draws from.
+var financialInstitutePool = []string{
+	"N26", "Sparkasse", "Deutsche Bank", "Revolut", "ING", "Erste Bank", "Raiffeisen",
+}
+
+// tagNamePool is the fixed set of tags created for each seeded user, then
+// randomly attached to a subset of their generated entries.
+var tagNamePool = []string{"recurring", "shared", "reimbursable", "business", "vacation", "gift"}
 
 // categoryTitlePools gives each seeded default category (category.DefaultNames)
 // a few plausible entry titles, so a generated listing doesn't read as
@@ -56,6 +67,7 @@ func seedTesters(
 	authSvc *auth.Service,
 	accountSvc *account.Service,
 	categorySvc *category.Service,
+	tagSvc *tag.Service,
 	entrySvc *entry.Service,
 	rng *rand.Rand,
 	stdout, stderr io.Writer,
@@ -79,7 +91,7 @@ func seedTesters(
 			fmt.Fprintf(stderr, "seed: seed categories for %s: %v\n", email, err)
 			return 1
 		}
-		if err := generateFixtures(ctx, user.ID, accountSvc, categorySvc, entrySvc, rng); err != nil {
+		if err := generateFixtures(ctx, user.ID, accountSvc, categorySvc, tagSvc, entrySvc, rng); err != nil {
 			fmt.Fprintf(stderr, "seed: generate fixtures for %s: %v\n", email, err)
 			return 1
 		}
@@ -99,16 +111,19 @@ func seedTesters(
 	return 0
 }
 
-// generateFixtures creates 2-4 random accounts for ownerID (each a random
-// seeded type + a random currency + a random opening date within the past
-// two years), then 15-60 random transaction entries per account (random
-// seeded category, booking date within the past year, and an
-// amount/title shaped by that category — see randomAmount/randomTitle).
+// generateFixtures creates a fixed pool of tags for ownerID (tagNamePool),
+// then 2-4 random accounts (each a random seeded type + a random currency +
+// a random financial institute + a random opening date within the past two
+// years), then 15-60 random transaction entries per account (random seeded
+// category, booking date within the past year, an amount/title shaped by
+// that category — see randomAmount/randomTitle — and 0-2 random tags drawn
+// from that user's tag pool).
 func generateFixtures(
 	ctx context.Context,
 	ownerID string,
 	accountSvc *account.Service,
 	categorySvc *category.Service,
+	tagSvc *tag.Service,
 	entrySvc *entry.Service,
 	rng *rand.Rand,
 ) error {
@@ -131,16 +146,30 @@ func generateFixtures(
 	sort.Slice(types, func(i, j int) bool { return types[i].Title < types[j].Title })
 	sort.Slice(cats, func(i, j int) bool { return cats[i].Name < cats[j].Name })
 
+	// Created directly from tagNamePool's fixed order, not read back via
+	// List — so, unlike types/cats above, there's no store-ordering
+	// nondeterminism to sort away.
+	tags := make([]tag.Tag, 0, len(tagNamePool))
+	for _, name := range tagNamePool {
+		t, err := tagSvc.Create(ctx, ownerID, name)
+		if err != nil {
+			return err
+		}
+		tags = append(tags, t)
+	}
+
 	numAccounts := 2 + rng.IntN(3) // 2..4
 	for i := 0; i < numAccounts; i++ {
 		typ := types[rng.IntN(len(types))]
 		currency := accountCurrencies[rng.IntN(len(accountCurrencies))]
+		institute := financialInstitutePool[rng.IntN(len(financialInstitutePool))]
 
 		acc, err := accountSvc.Create(ctx, ownerID, account.New{
-			Title:       fmt.Sprintf("%s %s", currency, typ.Title),
-			TypeID:      typ.ID,
-			Currency:    currency,
-			OpeningDate: account.NewDate(randomPastDate(rng, 2*365)),
+			Title:              fmt.Sprintf("%s %s", currency, typ.Title),
+			TypeID:             typ.ID,
+			Currency:           currency,
+			FinancialInstitute: institute,
+			OpeningDate:        account.NewDate(randomPastDate(rng, 2*365)),
 		})
 		if err != nil {
 			return err
@@ -158,6 +187,7 @@ func generateFixtures(
 				BookingTimestamp: randomPastDate(rng, 365),
 				Title:            randomTitle(rng, cat.Name),
 				CategoryID:       &catID,
+				TagIDs:           randomTagIDs(rng, tags, rng.IntN(3)), // 0..2
 			})
 			if err != nil {
 				return err
@@ -165,6 +195,23 @@ func generateFixtures(
 		}
 	}
 	return nil
+}
+
+// randomTagIDs returns up to n distinct ids drawn from tags, in random
+// order. n is clamped to len(tags); n <= 0 or an empty tags returns nil.
+func randomTagIDs(rng *rand.Rand, tags []tag.Tag, n int) []string {
+	if n <= 0 || len(tags) == 0 {
+		return nil
+	}
+	if n > len(tags) {
+		n = len(tags)
+	}
+	idx := rng.Perm(len(tags))
+	out := make([]string, n)
+	for i := 0; i < n; i++ {
+		out[i] = tags[idx[i]].ID
+	}
+	return out
 }
 
 // randomPastDate returns a random time between now and maxDaysAgo days ago.

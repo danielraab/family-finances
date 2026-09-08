@@ -437,14 +437,19 @@ a duplicate before touching the database).
   it needs `auth.Params.SessionTTL`/`SessionMaxTTL` populated from real
   config, not a zero-value `Params{}` (a zero `SessionTTL` mints a session
   whose `ExpiresAt` is already in the past).
-- Fixture shape (`internal/cli/fixtures.go`): 2-4 accounts per user
-  (random seeded type + currency), 15-60 transaction entries per account
-  (random seeded category, amount sign/magnitude keyed to category —
-  `Salary` positive, everything else negative). A single fixed-seed
-  `math/rand/v2` generator drives the whole run, so `--yes` produces the
-  same fixture every time; types/categories are sorted locally before
-  being indexed by the RNG, since a `Store` is only contracted to return
-  "every type/category," not in a particular order.
+- Fixture shape (`internal/cli/fixtures.go`): a fixed pool of tags
+  (`tagNamePool`) created once per user; 2-4 accounts per user (random
+  seeded type + currency + a random `financial_institute` from
+  `financialInstitutePool`), 15-60 transaction entries per account (random
+  seeded category, amount sign/magnitude keyed to category — `Salary`
+  positive, everything else negative — and 0-2 random tags from that
+  user's pool). A single fixed-seed `math/rand/v2` generator drives the
+  whole run, so `--yes` produces the same fixture every time;
+  types/categories are sorted locally before being indexed by the RNG,
+  since a `Store` is only contracted to return "every type/category," not
+  in a particular order — tags don't need this, since they're created
+  directly from `tagNamePool`'s own fixed order rather than read back via
+  `List`.
 
 ## Serving the frontend
 
