@@ -1,5 +1,11 @@
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeftRight, ListTree, Tags, Wallet } from "lucide-react";
+import {
+  ArrowLeftRight,
+  BarChart3,
+  ListTree,
+  Tags,
+  Wallet,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 const FEATURES: {
@@ -26,6 +32,11 @@ const FEATURES: {
     icon: ListTree,
     titleKey: "home.features.categoryTree.title",
     descriptionKey: "home.features.categoryTree.description",
+  },
+  {
+    icon: BarChart3,
+    titleKey: "home.features.reports.title",
+    descriptionKey: "home.features.reports.description",
   },
 ];
 

@@ -20,7 +20,12 @@ silently under-count for anyone with more than a page of matching entries.
 - Nothing on `/reports` auto-fetches: changing any control only updates
   its draft/URL state. The list and sums only (re)populate when "Generate
   report" is explicitly clicked, including on first load with filters
-  already present in the URL.
+  already present in the URL. Changing a filter after a report is shown
+  leaves it on screen but flags it as out of date until "Generate report"
+  is clicked again.
+- Add a fifth card to the root `/` feature overview (see
+  `root-feature-overview-cards`) introducing the reports feature,
+  consistent with the existing four.
 - Backend: add an explicit exact-category-vs-subtree mode to `GET
   /api/entries`'s `category_id` filter, additive and defaulting to today's
   subtree-always behavior so existing callers (including today's
@@ -57,4 +62,7 @@ silently under-count for anyone with more than a page of matching entries.
   change.
 - Frontend: new `src/routes/reports.tsx` (+ nested route(s) as needed),
   a `Sidebar` entry, reuse of `flattenCategoryTree`, the entries table
-  styling, and the filter-bar patterns from `entries.index.tsx`.
+  styling, and the filter-bar patterns from `entries.index.tsx`. Also
+  touches `src/components/FeatureOverview.tsx` (one more card) and its
+  i18n keys — a small addition to the home page introduced by
+  `root-feature-overview-cards`, not a new capability of its own.

@@ -58,6 +58,10 @@
       "categoryTree": {
         "title": "Den Kategoriebaum verwalten",
         "description": "Organisiere Kategorien in einem verschachtelten Baum, der zu den Ausgaben deiner Familie passt."
+      },
+      "reports": {
+        "title": "Summen nach Kategorie oder Tag ansehen",
+        "description": "Wähle eine Kategorie oder einen Tag und erhalte eine Auswertung der passenden Buchungen und ihrer Summe, je Währung."
       }
     }
   },
@@ -367,6 +371,7 @@
     },
     "generate": "Auswertung erstellen",
     "selectOneHint": "Wähle eine Kategorie oder einen Tag aus und erstelle dann die Auswertung.",
+    "staleHint": "Die Filter haben sich geändert — klicke erneut auf \"Auswertung erstellen\", um die Ergebnisse unten zu aktualisieren.",
     "beforeGenerate": "Wähle oben eine Kategorie oder einen Tag aus und klicke dann auf \"Auswertung erstellen\", um die passenden Buchungen und ihre Summe zu sehen.",
     "loading": "Lädt…",
     "emptyFiltered": "Keine Buchungen entsprechen den Filtern dieser Auswertung.",

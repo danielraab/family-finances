@@ -58,6 +58,10 @@
       "categoryTree": {
         "title": "Manage the category tree",
         "description": "Organize categories into a nested tree that matches how your family thinks about spending."
+      },
+      "reports": {
+        "title": "See totals by category or tag",
+        "description": "Pick a category or a tag and get a report of the matching entries and their sum, per currency."
       }
     }
   },
@@ -367,6 +371,7 @@
     },
     "generate": "Generate report",
     "selectOneHint": "Select a category or a tag, then generate the report.",
+    "staleHint": "Filters have changed — click \"Generate report\" again to update the results below.",
     "beforeGenerate": "Select a category or a tag above, then click \"Generate report\" to see the matching entries and their total.",
     "loading": "Loading…",
     "emptyFiltered": "No entries match this report's filters.",
