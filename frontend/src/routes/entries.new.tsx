@@ -306,7 +306,7 @@ function NewEntry() {
           <TagInput
             value={tagNames}
             onChange={setTagNames}
-            existingTags={tags}
+            existingTags={tags.filter((tg) => !tg.disabled)}
           />
         </div>
 

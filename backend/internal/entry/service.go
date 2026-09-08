@@ -57,7 +57,9 @@ func (s *Service) Create(ctx context.Context, ownerID string, in New) (Entry, er
 		}
 	}
 	if len(in.TagIDs) > 0 {
-		ok, err := s.tags.OwnedBy(ctx, ownerID, in.TagIDs)
+		// Every tag id is new at creation, so Usable (owned + not disabled)
+		// applies to the whole set.
+		ok, err := s.tags.Usable(ctx, ownerID, in.TagIDs)
 		if err != nil {
 			return Entry{}, err
 		}
@@ -123,9 +125,37 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (E
 		if !ok {
 			return Entry{}, ErrInvalidValue
 		}
+		// tag_ids is always a full replacement array, so a resubmitted id
+		// the entry already carried is not "newly assigned" — only ids the
+		// caller is actually adding need to pass the not-disabled check.
+		newTagIDs := diffStrings(*upd.TagIDs, current.TagIDs)
+		if len(newTagIDs) > 0 {
+			ok, err := s.tags.Usable(ctx, ownerID, newTagIDs)
+			if err != nil {
+				return Entry{}, err
+			}
+			if !ok {
+				return Entry{}, ErrInvalidValue
+			}
+		}
 	}
 
 	return s.store.Update(ctx, ownerID, id, upd)
+}
+
+// diffStrings returns the elements of next not present in current.
+func diffStrings(next, current []string) []string {
+	existing := make(map[string]bool, len(current))
+	for _, id := range current {
+		existing[id] = true
+	}
+	var out []string
+	for _, id := range next {
+		if !existing[id] {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // Delete soft-deletes ownerID's entry.

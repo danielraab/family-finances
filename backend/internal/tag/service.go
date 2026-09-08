@@ -72,7 +72,23 @@ func (s *Service) Delete(ctx context.Context, ownerID, id string) error {
 	return s.store.Delete(ctx, ownerID, id)
 }
 
+// Disable blocks ownerID's tag from being newly attached to an entry,
+// without affecting any entry that already carries it.
+func (s *Service) Disable(ctx context.Context, ownerID, id string) (Tag, error) {
+	return s.store.SetDisabled(ctx, ownerID, id, true)
+}
+
+// Enable reverses Disable.
+func (s *Service) Enable(ctx context.Context, ownerID, id string) (Tag, error) {
+	return s.store.SetDisabled(ctx, ownerID, id, false)
+}
+
 // OwnedBy satisfies internal/entry's TagLookup interface.
 func (s *Service) OwnedBy(ctx context.Context, ownerID string, tagIDs []string) (bool, error) {
 	return s.store.OwnedBy(ctx, ownerID, tagIDs)
+}
+
+// Usable satisfies internal/entry's TagLookup interface.
+func (s *Service) Usable(ctx context.Context, ownerID string, tagIDs []string) (bool, error) {
+	return s.store.Usable(ctx, ownerID, tagIDs)
 }

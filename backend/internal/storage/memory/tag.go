@@ -12,7 +12,9 @@ import (
 
 // TagStore is the in-memory implementation of tag.Store — the default for
 // domain and handler tests and for local runs without a database. Safe for
-// concurrent use.
+// concurrent use. It has no visibility into entries, so unlike the real
+// backend it always reports EntryCount as 0 — mirroring
+// memory.CategoryStore's equivalent gap for its in-use check.
 type TagStore struct {
 	mu   sync.Mutex
 	tags map[string]tag.Tag
@@ -104,12 +106,36 @@ func (s *TagStore) Delete(_ context.Context, ownerID, id string) error {
 	return nil
 }
 
+func (s *TagStore) SetDisabled(_ context.Context, ownerID, id string, disabled bool) (tag.Tag, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.tags[id]
+	if !ok || t.OwnerID != ownerID {
+		return tag.Tag{}, tag.ErrNotFound
+	}
+	t.Disabled = disabled
+	s.tags[id] = t
+	return t, nil
+}
+
 func (s *TagStore) OwnedBy(_ context.Context, ownerID string, tagIDs []string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, id := range tagIDs {
 		t, ok := s.tags[id]
 		if !ok || t.OwnerID != ownerID {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (s *TagStore) Usable(_ context.Context, ownerID string, tagIDs []string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range tagIDs {
+		t, ok := s.tags[id]
+		if !ok || t.OwnerID != ownerID || t.Disabled {
 			return false, nil
 		}
 	}

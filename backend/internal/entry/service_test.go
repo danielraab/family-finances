@@ -84,16 +84,30 @@ func (c *stubCategories) Subtree(_ context.Context, _, id string) ([]string, err
 }
 
 type stubTags struct {
-	owned map[string]string // tagID -> ownerID
+	owned    map[string]string // tagID -> ownerID
+	disabled map[string]bool
 }
 
-func newStubTags() *stubTags { return &stubTags{owned: map[string]string{}} }
+func newStubTags() *stubTags {
+	return &stubTags{owned: map[string]string{}, disabled: map[string]bool{}}
+}
 
 func (t *stubTags) add(id, ownerID string) { t.owned[id] = ownerID }
+
+func (t *stubTags) disable(id string) { t.disabled[id] = true }
 
 func (t *stubTags) OwnedBy(_ context.Context, owner string, tagIDs []string) (bool, error) {
 	for _, id := range tagIDs {
 		if t.owned[id] != owner {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (t *stubTags) Usable(_ context.Context, owner string, tagIDs []string) (bool, error) {
+	for _, id := range tagIDs {
+		if t.owned[id] != owner || t.disabled[id] {
 			return false, nil
 		}
 	}

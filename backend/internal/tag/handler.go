@@ -37,6 +37,8 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("POST /api/tags", h.create)
 	h.mux.HandleFunc("PATCH /api/tags/{id}", h.update)
 	h.mux.HandleFunc("DELETE /api/tags/{id}", h.delete)
+	h.mux.HandleFunc("POST /api/tags/{id}/disable", h.disable)
+	h.mux.HandleFunc("POST /api/tags/{id}/enable", h.enable)
 
 	return h
 }
@@ -113,6 +115,34 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) disable(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	t, err := h.svc.Disable(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (h *Handler) enable(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	t, err := h.svc.Enable(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
 }
 
 func decodeJSON(r *http.Request, v any) error {

@@ -174,6 +174,109 @@ func TestCreateWithForeignTagRejected(t *testing.T) {
 	}
 }
 
+func TestCreateWithDisabledTagRejected(t *testing.T) {
+	svc, accounts, categories, tags := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	tags.add("tag1", "u1")
+	tags.disable("tag1")
+
+	_, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: 100,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "X", CategoryID: ptr("cat1"),
+		TagIDs: []string{"tag1"},
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateUnrelatedFieldKeepsSinceDisabledTag(t *testing.T) {
+	svc, accounts, categories, tags := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	tags.add("tag1", "u1")
+	e, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: 100,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "X", CategoryID: ptr("cat1"),
+		TagIDs: []string{"tag1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tags.disable("tag1")
+
+	got, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{Title: ptr("Y")})
+	if err != nil {
+		t.Fatalf("Update with an unrelated field on a since-disabled tag: %v", err)
+	}
+	if got.Title != "Y" || len(got.TagIDs) != 1 || got.TagIDs[0] != "tag1" {
+		t.Fatalf("got = %+v", got)
+	}
+}
+
+func TestUpdateResubmittingUnchangedSinceDisabledTagSucceeds(t *testing.T) {
+	svc, accounts, categories, tags := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	tags.add("tag1", "u1")
+	e, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: 100,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "X", CategoryID: ptr("cat1"),
+		TagIDs: []string{"tag1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tags.disable("tag1")
+
+	got, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{
+		TagIDs: ptr([]string{"tag1"}),
+	})
+	if err != nil {
+		t.Fatalf("Update resubmitting the entry's own since-disabled tag: %v", err)
+	}
+	if len(got.TagIDs) != 1 || got.TagIDs[0] != "tag1" {
+		t.Fatalf("got.TagIDs = %v", got.TagIDs)
+	}
+}
+
+func TestUpdateAddingDisabledTagAlongsideUntouchedExistingOneRejected(t *testing.T) {
+	svc, accounts, categories, tags := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	tags.add("tag1", "u1")
+	tags.add("tag2", "u1")
+	e, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: 100,
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "X", CategoryID: ptr("cat1"),
+		TagIDs: []string{"tag1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tags.disable("tag1")
+	tags.disable("tag2")
+
+	_, err = svc.Update(context.Background(), "u1", e.ID, entry.Update{
+		TagIDs: ptr([]string{"tag1", "tag2"}),
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+
+	got, err := svc.Get(context.Background(), "u1", e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.TagIDs) != 1 || got.TagIDs[0] != "tag1" {
+		t.Fatalf("rejected update must not change tags: got.TagIDs = %v", got.TagIDs)
+	}
+}
+
 func TestUpdateClearingCategoryOnTransactionRejected(t *testing.T) {
 	svc, accounts, categories, _ := newFixture()
 	accounts.add("acc1", "u1", "EUR")

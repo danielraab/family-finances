@@ -75,7 +75,8 @@
       "common": "Allgemein",
       "myInvitations": "Meine Einladungen",
       "users": "Benutzer",
-      "accountTypes": "Kontoarten"
+      "accountTypes": "Kontoarten",
+      "tags": "Tags"
     },
     "common": {
       "language": "Anzeigesprache",
@@ -166,6 +167,33 @@
         "enableBody": "Sie kann wieder Konten zugewiesen werden.",
         "deleteTitle": "\"{{title}}\" löschen?",
         "deleteBody": "Dies ist nur möglich, solange kein Konto diese Art verwendet. Dies kann hier nicht rückgängig gemacht werden.",
+        "confirmAction": "Bestätigen"
+      }
+    },
+    "tags": {
+      "heading": "Tags",
+      "empty": "Noch keine Tags. Erstelle einen, um loszulegen.",
+      "nameLabel": "Name",
+      "create": "Tag hinzufügen",
+      "creating": "Wird hinzugefügt…",
+      "createError": "Tag konnte nicht erstellt werden — bitte versuche es erneut.",
+      "columnName": "Name",
+      "columnEntries": "Einträge",
+      "columnStatus": "Status",
+      "statusActive": "Aktiv",
+      "statusDisabled": "Deaktiviert",
+      "edit": "Umbenennen",
+      "editTitle": "Tag umbenennen",
+      "editError": "Speichern fehlgeschlagen — bitte versuche es erneut.",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "cancel": "Abbrechen",
+      "disable": "Deaktivieren",
+      "enable": "Aktivieren",
+      "delete": "Löschen",
+      "confirm": {
+        "deleteTitle": "\"{{name}}\" löschen?",
+        "deleteBody": "Dies entfernt den Tag von jedem Eintrag, der ihn derzeit trägt. Dies kann hier nicht rückgängig gemacht werden.",
         "confirmAction": "Bestätigen"
       }
     }

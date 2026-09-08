@@ -14,8 +14,14 @@ import (
 type Tag struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
+	Disabled  bool      `json:"disabled"`
 	CreatedAt time.Time `json:"created_at"`
-	OwnerID   string    `json:"-"`
+	// EntryCount is the number of the owner's non-deleted entries currently
+	// carrying this tag. Computed by the store, never persisted directly;
+	// storage/memory has no visibility into entries and always reports 0
+	// (see its doc comment).
+	EntryCount int    `json:"entry_count"`
+	OwnerID    string `json:"-"`
 }
 
 func validateName(name string) error {

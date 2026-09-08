@@ -59,6 +59,13 @@ type TagLookup interface {
 	// OwnedBy reports whether every id in tagIDs exists and belongs to
 	// owner.
 	OwnedBy(ctx context.Context, owner string, tagIDs []string) (bool, error)
+	// Usable reports whether every id in tagIDs exists, belongs to owner,
+	// and is not disabled. Consulted only for tag ids newly appearing on an
+	// entry (creation, or the ids an update's tag_ids adds beyond what the
+	// entry already carried) — never for a tag merely carried over
+	// unchanged, so disabling a tag never disturbs entries already
+	// referencing it.
+	Usable(ctx context.Context, owner string, tagIDs []string) (bool, error)
 }
 
 // Store is the persistence contract entry declares. internal/storage/memory
