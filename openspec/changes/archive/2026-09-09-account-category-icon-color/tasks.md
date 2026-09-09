@@ -120,7 +120,7 @@
 - [x] 8.1 `cd backend && go test ./...` passes.
 - [x] 8.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build` all
   pass; `out/index.html` is written.
-- [ ] 8.3 Manual pass: create an account and a category with icon+colour,
+- [x] 8.3 Manual pass: create an account and a category with icon+colour,
   with colour only, with neither; verify badges on the overview, detail,
   home cards, category tree, ledger, and reports; verify dropdowns are
   unchanged; toggle the theme and confirm palette colours adapt; confirm a

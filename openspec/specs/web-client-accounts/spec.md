@@ -151,7 +151,19 @@ two bars per month of a selected year — income and outcome — for that
 account, fetched from `GET /api/entries/flow-summary?account_id={id}&unit=month&year={year}`.
 The page SHALL offer previous-year and next-year controls that refetch and
 redraw the chart for the newly selected year, with no upper or lower bound
-on how far the visitor may navigate.
+on how far the visitor may navigate. Only the buckets' totals in the
+account's own currency are shown.
+
+This chart SHALL be rendered by a reusable `FlowChart` component that owns
+the flow-summary fetch, the year pager, and the `FlowBucket`→bar-data
+mapping (with localized month labels), and composes the presentational
+`BarChart`. The component takes an optional list of account ids (omitted
+means every account the caller owns) and an optional currency (given means
+render a single chart filtered to it; omitted means one chart per currency
+in the response). The account details page passes this account's id and
+its currency. The same component renders the all-accounts year overview on
+`/home` (see `web-client-home`). Its user-facing strings live under a
+shared `flowChart.*` i18n namespace.
 
 #### Scenario: Chart shows twelve months of the current year by default
 
@@ -175,6 +187,12 @@ on how far the visitor may navigate.
 - **WHEN** the selected year includes a month with no matching entries
 - **THEN** that month's bars render at zero rather than being omitted or
   erroring
+
+#### Scenario: Only the account's currency is charted
+
+- **WHEN** an account's details page renders its flow chart
+- **THEN** the bars reflect only the flow-summary totals in that account's
+  currency
 
 ### Requirement: Account details page shows a running-balance line chart with a month switcher
 
@@ -329,3 +347,61 @@ copy SHALL state that the action cannot be undone.
 
 - **WHEN** an authenticated visitor confirms deleting an account
 - **THEN** it no longer appears in `/accounts`
+
+### Requirement: The account form offers an icon and colour picker
+
+The account create form and the account edit form SHALL include the shared
+`IconColorPicker`, letting the user set, change, or clear the account's
+`icon` and `color` independently. On submit, the chosen values SHALL be sent
+on the `POST /api/accounts` / `PATCH /api/accounts/{id}` body; an unset icon
+or colour SHALL be sent such that the field is created without it, and
+clearing a previously set field on edit SHALL send the empty string so the
+backend clears it. The picker's presence SHALL NOT make either field
+required — an account can still be created and saved with neither set.
+
+#### Scenario: Setting an icon and colour while creating an account
+
+- **WHEN** a visitor fills the create form, picks an icon and a colour, and
+  submits
+- **THEN** `POST /api/accounts` is called with that `icon` and `color`, and
+  the new account carries them
+
+#### Scenario: Clearing an account's colour from the edit form
+
+- **WHEN** a visitor opens the edit form for an account that has a `color`,
+  clears the colour in the picker, and submits
+- **THEN** `PATCH /api/accounts/{id}` is called with `color` as `""` and the
+  account's colour becomes unset
+
+#### Scenario: Creating an account without touching the picker
+
+- **WHEN** a visitor completes the create form leaving the icon/colour
+  picker untouched and submits
+- **THEN** the account is created with no `icon` and no `color`
+
+### Requirement: Account surfaces render the account's icon and colour before its title
+
+The accounts overview, the account detail page, and the home account cards
+SHALL render each account's `EntityIcon` badge immediately before its title,
+via the shared `AccountLabel` component, when the account has an `icon`
+and/or `color` set. An account with neither set SHALL render exactly as
+before.
+
+#### Scenario: The account detail header shows the badge
+
+- **WHEN** an authenticated visitor opens the detail page of an account that
+  has an `icon` and a `color`
+- **THEN** the header shows the icon/colour badge immediately before the
+  account title
+
+#### Scenario: A home account card shows the badge
+
+- **WHEN** the home page renders an account card for an account that has an
+  `icon`
+- **THEN** the card shows that icon immediately before the account title
+
+#### Scenario: An account with no icon or colour is unchanged
+
+- **WHEN** the accounts overview lists an account with neither `icon` nor
+  `color`
+- **THEN** that row shows just the title, with no badge and no layout shift

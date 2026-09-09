@@ -67,7 +67,15 @@
   },
   "dashboard": {
     "emptyTitle": "Noch keine Konten",
-    "emptyBody": "Lege dein erstes Konto an, um es hier zu sehen."
+    "emptyBody": "Lege dein erstes Konto an, um es hier zu sehen.",
+    "yearOverview": "Jahresübersicht"
+  },
+  "flowChart": {
+    "title": "Einnahmen & Ausgaben",
+    "income": "Einnahmen",
+    "outcome": "Ausgaben",
+    "previousYear": "Vorheriges Jahr",
+    "nextYear": "Nächstes Jahr"
   },
   "settings": {
     "title": "Einstellungen",
@@ -235,13 +243,6 @@
       "edit": "Bearbeiten",
       "balance": "Kontostand",
       "status": "Status",
-      "chart": {
-        "title": "Einnahmen & Ausgaben",
-        "income": "Einnahmen",
-        "outcome": "Ausgaben",
-        "previousYear": "Vorheriges Jahr",
-        "nextYear": "Nächstes Jahr"
-      },
       "balanceChart": {
         "title": "Kontostand im Monatsverlauf",
         "series": "Kontostand",

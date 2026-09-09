@@ -4,11 +4,11 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
-import { BarChart, type BarChartSeries } from "../components/charts/BarChart";
 import {
   LineChart,
   type LineChartSeries,
 } from "../components/charts/LineChart";
+import { FlowChart } from "../components/FlowChart";
 import {
   amountColorClass,
   formatAmount,
@@ -22,20 +22,12 @@ export const Route = createFileRoute("/accounts/$accountId/")({
 
 type Account = components["schemas"]["Account"];
 type Entry = components["schemas"]["Entry"];
-type FlowBucket = components["schemas"]["FlowBucket"];
 type BalancePoint = components["schemas"]["BalancePoint"];
 
 // Only one chart is on screen at a time; the switcher below picks which.
 type ChartView = "flow" | "balance";
 
 const RECENT_LIMIT = 5;
-
-// dataviz-skill categorical slots 6 (green) / 8 (red) — validated together
-// for CVD/normal-vision separation; see frontend/AGENTS.md's chart
-// convention. Same semantics as the app's existing positive/negative
-// amount coloring, applied to chart fills instead of text.
-const INCOME_FILL = "fill-[#008300] dark:fill-[#008300]";
-const OUTCOME_FILL = "fill-[#e34948] dark:fill-[#e66767]";
 
 // dataviz-skill categorical slot 1 (blue) — validated for the lightness
 // band, chroma floor, and >=3:1 contrast against both surfaces. A single
@@ -51,8 +43,6 @@ function AccountDetails() {
   const [balance, setBalance] = useState<number | null>(null);
   const [recent, setRecent] = useState<Entry[] | null>(null);
   const [chartView, setChartView] = useState<ChartView>("flow");
-  const [chartYear, setChartYear] = useState(() => new Date().getFullYear());
-  const [flowBuckets, setFlowBuckets] = useState<FlowBucket[] | null>(null);
   // First of the month the balance line is showing — a single Date so
   // previous/next roll the year over for free.
   const [balanceMonth, setBalanceMonth] = useState(() => {
@@ -96,25 +86,8 @@ function AccountDetails() {
     };
   }, [accountId]);
 
-  // Each chart fetches only while it's the one on screen (and re-fetches when
-  // shown again), so opening the page loads a single series, not both.
-  useEffect(() => {
-    if (chartView !== "flow") return;
-    let cancelled = false;
-    api
-      .GET("/api/entries/flow-summary", {
-        params: {
-          query: { account_id: [accountId], unit: "month", year: chartYear },
-        },
-      })
-      .then(({ data }) => {
-        if (!cancelled) setFlowBuckets(data?.buckets ?? null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountId, chartYear, chartView]);
-
+  // Each chart fetches only while it's the one on screen (mounted by the
+  // switcher below), so opening the page loads a single series, not both.
   useEffect(() => {
     if (chartView !== "balance") return;
     let cancelled = false;
@@ -150,24 +123,6 @@ function AccountDetails() {
       </section>
     );
   }
-
-  const chartSeries: BarChartSeries[] = [
-    { label: t("accounts.details.chart.income"), fillClassName: INCOME_FILL },
-    { label: t("accounts.details.chart.outcome"), fillClassName: OUTCOME_FILL },
-  ];
-  const chartData = (flowBuckets ?? []).map((bucket) => {
-    const income =
-      bucket.income.find((s) => s.currency === account.currency)?.amount ?? 0;
-    const outcome =
-      bucket.outcome.find((s) => s.currency === account.currency)?.amount ?? 0;
-    return {
-      category: new Date(bucket.period).toLocaleDateString(
-        i18n.resolvedLanguage,
-        { month: "short" },
-      ),
-      values: [income, outcome],
-    };
-  });
 
   const balanceSeries: LineChartSeries[] = [
     {
@@ -295,35 +250,13 @@ function AccountDetails() {
                 }`}
               >
                 {view === "flow"
-                  ? t("accounts.details.chart.title")
+                  ? t("flowChart.title")
                   : t("accounts.details.balanceChart.title")}
               </button>
             ))}
           </div>
 
-          {chartView === "flow" ? (
-            <div className="flex items-center gap-2 text-sm">
-              <button
-                type="button"
-                onClick={() => setChartYear((y) => y - 1)}
-                aria-label={t("accounts.details.chart.previousYear")}
-                className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-              >
-                ◀
-              </button>
-              <span className="min-w-10 text-center font-medium tabular-nums">
-                {chartYear}
-              </span>
-              <button
-                type="button"
-                onClick={() => setChartYear((y) => y + 1)}
-                aria-label={t("accounts.details.chart.nextYear")}
-                className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-              >
-                ▶
-              </button>
-            </div>
-          ) : (
+          {chartView === "balance" && (
             <div className="flex items-center gap-2 text-sm">
               <button
                 type="button"
@@ -359,35 +292,28 @@ function AccountDetails() {
           )}
         </div>
 
-        {chartView === "flow"
-          ? flowBuckets !== null && (
-              <BarChart
-                series={chartSeries}
-                data={chartData}
-                formatValue={(v) =>
-                  formatAmount(
-                    v,
-                    account.currency,
-                    displayedDecimalPlaces,
-                    i18n.resolvedLanguage ?? "en",
-                  )
-                }
-              />
-            )
-          : balancePoints !== null && (
-              <LineChart
-                series={balanceSeries}
-                data={balanceData}
-                formatValue={(v) =>
-                  formatAmount(
-                    v,
-                    account.currency,
-                    displayedDecimalPlaces,
-                    i18n.resolvedLanguage ?? "en",
-                  )
-                }
-              />
-            )}
+        {chartView === "flow" ? (
+          <FlowChart
+            accountIds={[accountId]}
+            currency={account.currency}
+            displayedDecimalPlaces={displayedDecimalPlaces}
+          />
+        ) : (
+          balancePoints !== null && (
+            <LineChart
+              series={balanceSeries}
+              data={balanceData}
+              formatValue={(v) =>
+                formatAmount(
+                  v,
+                  account.currency,
+                  displayedDecimalPlaces,
+                  i18n.resolvedLanguage ?? "en",
+                )
+              }
+            />
+          )
+        )}
       </section>
 
       <section className="flex flex-col gap-3">

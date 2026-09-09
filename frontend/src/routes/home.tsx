@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountCard } from "../components/AccountCard";
 import { useAuth } from "../components/AuthProvider";
+import { FlowChart } from "../components/FlowChart";
 import { useAccountsWithBalances } from "../lib/useAccountsWithBalances";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
 
@@ -56,17 +57,26 @@ function HomeDashboard() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {accounts.map((account) => (
-            <AccountCard
-              key={account.id}
-              account={account}
-              balance={balances[account.id]}
-              displayedDecimalPlaces={displayedDecimalPlaces}
-              locale={i18n.resolvedLanguage ?? "en"}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {accounts.map((account) => (
+              <AccountCard
+                key={account.id}
+                account={account}
+                balance={balances[account.id]}
+                displayedDecimalPlaces={displayedDecimalPlaces}
+                locale={i18n.resolvedLanguage ?? "en"}
+              />
+            ))}
+          </div>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+              {t("dashboard.yearOverview")}
+            </h2>
+            <FlowChart displayedDecimalPlaces={displayedDecimalPlaces} />
+          </section>
+        </>
       )}
     </section>
   );

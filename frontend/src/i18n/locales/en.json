@@ -67,7 +67,15 @@
   },
   "dashboard": {
     "emptyTitle": "No accounts yet",
-    "emptyBody": "Create your first account to see it here."
+    "emptyBody": "Create your first account to see it here.",
+    "yearOverview": "Year overview"
+  },
+  "flowChart": {
+    "title": "Income & outcome",
+    "income": "Income",
+    "outcome": "Outcome",
+    "previousYear": "Previous year",
+    "nextYear": "Next year"
   },
   "settings": {
     "title": "Settings",
@@ -235,13 +243,6 @@
       "edit": "Edit",
       "balance": "Balance",
       "status": "Status",
-      "chart": {
-        "title": "Income & outcome",
-        "income": "Income",
-        "outcome": "Outcome",
-        "previousYear": "Previous year",
-        "nextYear": "Next year"
-      },
       "balanceChart": {
         "title": "Balance over the month",
         "series": "Balance",
