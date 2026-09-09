@@ -3,7 +3,12 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
-import { amountColorClass, formatAmount } from "../lib/amount";
+import { BarChart, type BarChartSeries } from "../components/charts/BarChart";
+import {
+  amountColorClass,
+  formatAmount,
+  formatSignedAmount,
+} from "../lib/amount";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
 
 export const Route = createFileRoute("/accounts/$accountId/")({
@@ -12,8 +17,16 @@ export const Route = createFileRoute("/accounts/$accountId/")({
 
 type Account = components["schemas"]["Account"];
 type Entry = components["schemas"]["Entry"];
+type FlowBucket = components["schemas"]["FlowBucket"];
 
 const RECENT_LIMIT = 5;
+
+// dataviz-skill categorical slots 6 (green) / 8 (red) — validated together
+// for CVD/normal-vision separation; see frontend/AGENTS.md's chart
+// convention. Same semantics as the app's existing positive/negative
+// amount coloring, applied to chart fills instead of text.
+const INCOME_FILL = "fill-[#008300] dark:fill-[#008300]";
+const OUTCOME_FILL = "fill-[#e34948] dark:fill-[#e66767]";
 
 function AccountDetails() {
   const { accountId } = Route.useParams();
@@ -22,6 +35,8 @@ function AccountDetails() {
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
   const [balance, setBalance] = useState<number | null>(null);
   const [recent, setRecent] = useState<Entry[] | null>(null);
+  const [chartYear, setChartYear] = useState(() => new Date().getFullYear());
+  const [flowBuckets, setFlowBuckets] = useState<FlowBucket[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +71,22 @@ function AccountDetails() {
     };
   }, [accountId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .GET("/api/entries/flow-summary", {
+        params: {
+          query: { account_id: [accountId], unit: "month", year: chartYear },
+        },
+      })
+      .then(({ data }) => {
+        if (!cancelled) setFlowBuckets(data?.buckets ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, chartYear]);
+
   if (account === undefined) {
     return null;
   }
@@ -68,6 +99,24 @@ function AccountDetails() {
       </section>
     );
   }
+
+  const chartSeries: BarChartSeries[] = [
+    { label: t("accounts.details.chart.income"), fillClassName: INCOME_FILL },
+    { label: t("accounts.details.chart.outcome"), fillClassName: OUTCOME_FILL },
+  ];
+  const chartData = (flowBuckets ?? []).map((bucket) => {
+    const income =
+      bucket.income.find((s) => s.currency === account.currency)?.amount ?? 0;
+    const outcome =
+      bucket.outcome.find((s) => s.currency === account.currency)?.amount ?? 0;
+    return {
+      category: new Date(bucket.period).toLocaleDateString(
+        i18n.resolvedLanguage,
+        { month: "short" },
+      ),
+      values: [income, outcome],
+    };
+  });
 
   return (
     <section className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-12 sm:px-10">
@@ -152,6 +201,49 @@ function AccountDetails() {
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+            {t("accounts.details.chart.title")}
+          </h2>
+          <div className="flex items-center gap-2 text-sm">
+            <button
+              type="button"
+              onClick={() => setChartYear((y) => y - 1)}
+              aria-label={t("accounts.details.chart.previousYear")}
+              className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+            >
+              ◀
+            </button>
+            <span className="min-w-10 text-center font-medium tabular-nums">
+              {chartYear}
+            </span>
+            <button
+              type="button"
+              onClick={() => setChartYear((y) => y + 1)}
+              aria-label={t("accounts.details.chart.nextYear")}
+              className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+        {flowBuckets === null ? null : (
+          <BarChart
+            series={chartSeries}
+            data={chartData}
+            formatValue={(v) =>
+              formatAmount(
+                v,
+                account.currency,
+                displayedDecimalPlaces,
+                i18n.resolvedLanguage ?? "en",
+              )
+            }
+          />
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
             {t("accounts.details.recentEntries")}
           </h2>
           <div className="flex items-center gap-4">
@@ -193,16 +285,32 @@ function AccountDetails() {
                       )}
                     </span>
                   </div>
-                  <span
-                    className={`font-mono text-sm tabular-nums ${amountColorClass(
-                      entry.amount,
-                    )} ${entry.kind === "balance_adjustment" ? "underline" : ""}`}
-                  >
-                    {formatAmount(
-                      entry.amount,
-                      account.currency,
-                      displayedDecimalPlaces,
-                      i18n.resolvedLanguage ?? "en",
+                  <span className="flex flex-col items-end gap-0.5">
+                    <span
+                      className={`font-mono text-sm tabular-nums ${amountColorClass(
+                        entry.kind === "balance_adjustment"
+                          ? (entry.balance ?? 0)
+                          : entry.amount,
+                      )} ${entry.kind === "balance_adjustment" ? "underline" : ""}`}
+                    >
+                      {formatAmount(
+                        entry.kind === "balance_adjustment"
+                          ? (entry.balance ?? 0)
+                          : entry.amount,
+                        account.currency,
+                        displayedDecimalPlaces,
+                        i18n.resolvedLanguage ?? "en",
+                      )}
+                    </span>
+                    {entry.kind === "balance_adjustment" && (
+                      <span className="font-mono text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
+                        {formatSignedAmount(
+                          entry.amount,
+                          account.currency,
+                          displayedDecimalPlaces,
+                          i18n.resolvedLanguage ?? "en",
+                        )}
+                      </span>
                     )}
                   </span>
                 </Link>

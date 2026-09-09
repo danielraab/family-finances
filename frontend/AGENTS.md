@@ -254,6 +254,22 @@ it works the same on a phone as on a desktop:
   otherwise-untouched category, matching the backend's "only a category
   explicitly supplied is validated" rule.
 
+## Charts
+
+No charting library is a dependency, deliberately — charts are hand-rolled
+SVG/Tailwind components under `src/components/charts/` (e.g. `BarChart.tsx`),
+presentational only: data and series definitions come in as props, nothing
+is fetched inside them, so a chart is reusable across pages instead of
+being a one-off tied to whichever page first needed it. Before building a
+new one, consult the `dataviz` skill for form/color/mark/interaction
+guidance rather than improvising — series colors in particular should come
+from the skill's validated categorical palette (`references/palette.md`),
+applied as Tailwind arbitrary-value fill classes (e.g.
+`fill-[#008300] dark:fill-[#008300]`) rather than the app's own
+`amountColorClass` red/green tokens, which are sized for text, not chart
+fills. Run `scripts/validate_palette.js` on any new color pairing before
+shipping it.
+
 ## Build output
 
 `pnpm build` → `frontend/out/` (`index.html` + hashed `assets/`), a fully

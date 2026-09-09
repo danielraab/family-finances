@@ -82,7 +82,7 @@ function EditEntry() {
           setTransactionNegative(e.amount < 0);
           setTransactionAmount(amountToInput(Math.abs(e.amount)));
         } else {
-          setAmount(amountToInput(e.amount));
+          setAmount(amountToInput(e.balance ?? 0));
         }
         setBookingTimestamp(toLocalInput(e.booking_timestamp));
         setTitle(e.title);
@@ -131,11 +131,13 @@ function EditEntry() {
       params: { path: { id: entryId } },
       body: {
         account_id: selectedAccountId,
-        amount: parsedAmount,
         booking_timestamp: new Date(bookingTimestamp).toISOString(),
         title: title.trim(),
         category_id: categoryId || null,
         tag_ids: tagIds,
+        ...(entry.kind === "transaction"
+          ? { amount: parsedAmount }
+          : { balance: parsedAmount }),
         ...compact({ description: description.trim() || undefined }),
       },
     });

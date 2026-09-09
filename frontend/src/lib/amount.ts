@@ -36,6 +36,34 @@ export function formatAmount(
   }
 }
 
+/**
+ * Formats a stored integer amount the same way formatAmount does, but
+ * always prefixed with an explicit sign (`+`/`−`), even at zero — used for
+ * a balance_adjustment's delta annotation, shown gray and unstyled by sign
+ * (see web-client-accounts/web-client-entries), where the sign itself is
+ * the only cue since color is deliberately not used there.
+ */
+export function formatSignedAmount(
+  amount: number,
+  currency: string,
+  displayedDecimalPlaces: number,
+  locale: string,
+): string {
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: displayedDecimalPlaces,
+      maximumFractionDigits: displayedDecimalPlaces,
+      signDisplay: "always",
+    }).format(amountToNumber(amount));
+  } catch {
+    const n = amountToNumber(amount);
+    const sign = n >= 0 ? "+" : "";
+    return `${sign}${n.toFixed(displayedDecimalPlaces)}`;
+  }
+}
+
 /** Renders a stored integer amount at full precision for an edit input. */
 export function amountToInput(amount: number): string {
   return amountToNumber(amount).toFixed(STORED_DECIMAL_PLACES);

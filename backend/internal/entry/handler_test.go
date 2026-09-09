@@ -234,7 +234,7 @@ func TestHandlerSummary(t *testing.T) {
 	for _, body := range []string{
 		`{"account_id":"acc1","kind":"transaction","amount":-100,"booking_timestamp":"2024-01-01T00:00:00Z","title":"x","category_id":"cat1"}`,
 		`{"account_id":"acc2","kind":"transaction","amount":-20,"booking_timestamp":"2024-01-02T00:00:00Z","title":"y","category_id":"cat1"}`,
-		`{"account_id":"acc1","kind":"balance_adjustment","amount":99999,"booking_timestamp":"2024-01-01T00:00:00Z","title":"adj"}`,
+		`{"account_id":"acc1","kind":"balance_adjustment","balance":99999,"booking_timestamp":"2024-01-01T00:00:00Z","title":"adj"}`,
 	} {
 		h.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
 	}
@@ -338,7 +338,7 @@ func TestHandlerBalance(t *testing.T) {
 	accounts.add("acc1", "u1", "EUR")
 	user := auth.User{ID: "u1"}
 
-	body := `{"account_id":"acc1","kind":"balance_adjustment","amount":5000,"booking_timestamp":"2024-01-01T00:00:00Z","title":"Opening"}`
+	body := `{"account_id":"acc1","kind":"balance_adjustment","balance":5000,"booking_timestamp":"2024-01-01T00:00:00Z","title":"Opening"}`
 	h.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
 
 	rec := httptest.NewRecorder()
@@ -355,5 +355,78 @@ func TestHandlerBalance(t *testing.T) {
 	}
 	if got.Balance != 5000 {
 		t.Fatalf("balance = %d, want 5000", got.Balance)
+	}
+}
+
+func TestHandlerFlowSummaryRequiresAuth(t *testing.T) {
+	h, _, _ := newHandlerFixture()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/entries/flow-summary?unit=month&year=2024", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestHandlerFlowSummaryMonthly(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	for _, body := range []string{
+		`{"account_id":"acc1","kind":"transaction","amount":1000,"booking_timestamp":"2024-01-15T00:00:00Z","title":"x","category_id":"cat1"}`,
+		`{"account_id":"acc1","kind":"transaction","amount":-200,"booking_timestamp":"2024-01-16T00:00:00Z","title":"y","category_id":"cat1"}`,
+	} {
+		h.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/flow-summary?account_id=acc1&unit=month&year=2024", nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "GET", "/api/entries/flow-summary?account_id=acc1&unit=month&year=2024", rec)
+	var got struct {
+		Buckets []entry.FlowBucket `json:"buckets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Buckets) != 12 {
+		t.Fatalf("len(Buckets) = %d, want 12", len(got.Buckets))
+	}
+	jan := got.Buckets[0]
+	if jan.Period != "2024-01-01" || len(jan.Income) != 1 || jan.Income[0].Amount != 1000 ||
+		len(jan.Outcome) != 1 || jan.Outcome[0].Amount != 200 {
+		t.Fatalf("January bucket = %+v", jan)
+	}
+	for _, b := range got.Buckets[1:] {
+		if len(b.Income) != 0 || len(b.Outcome) != 0 {
+			t.Fatalf("bucket %+v, want empty (no entries)", b)
+		}
+	}
+}
+
+func TestHandlerFlowSummaryDayUnitRequiresMonth(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/flow-summary?unit=day&year=2024", nil), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestHandlerFlowSummaryInvalidYearRejected(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/flow-summary?unit=month&year=notanumber", nil), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
 	}
 }

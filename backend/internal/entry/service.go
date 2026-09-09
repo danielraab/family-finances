@@ -14,11 +14,24 @@ type Service struct {
 	accounts   AccountLookup
 	categories CategoryLookup
 	tags       TagLookup
+	timezones  TimezoneLookup // nil when not wired — FlowSummary then buckets in UTC
 }
 
+// Option customizes a Service (used by main.go and tests).
+type Option func(*Service)
+
+// WithTimezoneLookup wires the caller-timezone source FlowSummary uses to
+// bucket entries. package main passes internal/settings' Service. Optional —
+// without it, FlowSummary buckets every caller in UTC.
+func WithTimezoneLookup(l TimezoneLookup) Option { return func(s *Service) { s.timezones = l } }
+
 // NewService builds the entry service.
-func NewService(store Store, accounts AccountLookup, categories CategoryLookup, tags TagLookup) *Service {
-	return &Service{store: store, accounts: accounts, categories: categories, tags: tags}
+func NewService(store Store, accounts AccountLookup, categories CategoryLookup, tags TagLookup, opts ...Option) *Service {
+	s := &Service{store: store, accounts: accounts, categories: categories, tags: tags}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // checkAccount confirms ownerID owns accountID and that it is not disabled —
@@ -94,6 +107,15 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (E
 		return Entry{}, ErrInvalidValue
 	}
 	if upd.BookingTimestamp != nil && upd.BookingTimestamp.IsZero() {
+		return Entry{}, ErrInvalidValue
+	}
+	// Amount is only settable on a transaction, Balance only on a balance
+	// adjustment — kind is immutable, so this checks against the entry's
+	// existing kind rather than anything in the request body.
+	if current.Kind == KindTransaction && upd.Balance != nil {
+		return Entry{}, ErrInvalidValue
+	}
+	if current.Kind == KindBalanceAdjustment && upd.Amount != nil {
 		return Entry{}, ErrInvalidValue
 	}
 
@@ -266,6 +288,125 @@ func (s *Service) Sum(ctx context.Context, ownerID string, f Filter) (Summary, e
 	}
 
 	return Summary{Sums: sums, Count: count}, nil
+}
+
+// FlowSummary resolves f's caller-supplied AccountIDs the same way List/Sum
+// do, resolves the caller's timezone (default UTC when no TimezoneLookup is
+// wired, the lookup fails, or it reports empty), buckets ownerID's matching
+// entries via Store.FlowSummary, and fills in every period in the
+// requested year (or month, for FlowUnitDay) that had no matching entries
+// at all — a bucket is never omitted for being empty. Each row's account is
+// resolved to its currency the same way Sum resolves its per-account totals.
+func (s *Service) FlowSummary(ctx context.Context, ownerID string, f FlowFilter) ([]FlowBucket, error) {
+	if !f.Unit.valid() {
+		return nil, ErrInvalidValue
+	}
+	if f.Unit == FlowUnitDay {
+		if f.Month < 1 || f.Month > 12 {
+			return nil, ErrInvalidValue
+		}
+	} else if f.Month != 0 {
+		return nil, ErrInvalidValue
+	}
+	if f.Year < 1 {
+		return nil, ErrInvalidValue
+	}
+
+	visible, err := s.accounts.VisibleIDs(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	if len(f.AccountIDs) > 0 {
+		f.AccountIDs = intersect(f.AccountIDs, visible)
+	} else {
+		f.AccountIDs = visible
+	}
+
+	f.Timezone = "UTC"
+	if s.timezones != nil {
+		if tz, err := s.timezones.Timezone(ctx, ownerID); err == nil && tz != "" {
+			f.Timezone = tz
+		}
+	}
+
+	rows, err := s.store.FlowSummary(ctx, ownerID, f)
+	if err != nil {
+		return nil, err
+	}
+
+	type totals struct{ income, outcome int64 }
+	byPeriod := map[string]map[string]*totals{} // period -> currency -> totals
+	currencyByAccount := map[string]string{}
+	for _, row := range rows {
+		currency, ok := currencyByAccount[row.AccountID]
+		if !ok {
+			_, cur, _, err := s.accounts.Owner(ctx, row.AccountID)
+			if err != nil {
+				return nil, err
+			}
+			currency = cur
+			currencyByAccount[row.AccountID] = currency
+		}
+		byCurrency, ok := byPeriod[row.Period]
+		if !ok {
+			byCurrency = map[string]*totals{}
+			byPeriod[row.Period] = byCurrency
+		}
+		t, ok := byCurrency[currency]
+		if !ok {
+			t = &totals{}
+			byCurrency[currency] = t
+		}
+		t.income += row.Income
+		t.outcome += row.Outcome
+	}
+
+	buckets := make([]FlowBucket, 0, len(flowPeriods(f)))
+	for _, period := range flowPeriods(f) {
+		b := FlowBucket{Period: period, Income: []CurrencySum{}, Outcome: []CurrencySum{}}
+		if byCurrency, ok := byPeriod[period]; ok {
+			currencies := make([]string, 0, len(byCurrency))
+			for c := range byCurrency {
+				currencies = append(currencies, c)
+			}
+			sort.Strings(currencies)
+			for _, c := range currencies {
+				t := byCurrency[c]
+				// A currency present only as income (or only as outcome)
+				// in this period is not also listed with a 0 on the other
+				// side — matches Sum's "one entry per currency actually
+				// present," now split per direction.
+				if t.income != 0 {
+					b.Income = append(b.Income, CurrencySum{Currency: c, Amount: t.income})
+				}
+				if t.outcome != 0 {
+					b.Outcome = append(b.Outcome, CurrencySum{Currency: c, Amount: t.outcome})
+				}
+			}
+		}
+		buckets = append(buckets, b)
+	}
+	return buckets, nil
+}
+
+// flowPeriods returns every period label (the bucket's first calendar day,
+// "YYYY-MM-DD") a FlowFilter's year (and, for FlowUnitDay, month) spans, in
+// order — the skeleton FlowSummary fills gaps into so no period is ever
+// omitted for being empty.
+func flowPeriods(f FlowFilter) []string {
+	if f.Unit == FlowUnitDay {
+		days := time.Date(f.Year, time.Month(f.Month)+1, 0, 0, 0, 0, 0, time.UTC).Day()
+		periods := make([]string, days)
+		for d := 1; d <= days; d++ {
+			periods[d-1] = time.Date(f.Year, time.Month(f.Month), d, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+		}
+		return periods
+	}
+	periods := make([]string, 12)
+	for m := 1; m <= 12; m++ {
+		periods[m-1] = time.Date(f.Year, time.Month(m), 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	}
+	return periods
 }
 
 // Balance confirms ownerID owns accountID, then returns its live balance as

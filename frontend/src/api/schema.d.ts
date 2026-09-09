@@ -584,6 +584,26 @@ export interface paths {
         patch: operations["patchEntry"];
         trace?: never;
     };
+    "/api/entries/flow-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bucket the caller's matching entries into per-month or per-day income/outcome totals
+         * @description Buckets the caller's own, non-deleted accounts' non-deleted entries by booking_timestamp — one bucket per calendar month of year when unit=month, or one bucket per calendar day of year/month when unit=day — using the caller's resolved timezone setting (see user-settings) to decide bucket boundaries, default UTC. Within each bucket, entries whose amount is positive are summed into income and the absolute value of entries whose amount is negative into outcome, grouped per currency (the currency of the entry's account) the same way GET /api/entries/summary groups its sum. Unlike GET /api/entries/summary, a balance_adjustment's amount (always a signed delta — see account-entries) is included, not excluded. Every period in the requested range is present, even one with no matching entries at all (empty income/outcome).
+         */
+        get: operations["getEntriesFlowSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/entries/summary": {
         parameters: {
             query?: never;
@@ -846,9 +866,14 @@ export interface components {
             account_id: string;
             /**
              * Format: int64
-             * @description Integer minor units at a fixed 4 decimal places (e.g. 105000 represents 10.5000 in the account's currency). Not configurable — see account-entries.
+             * @description Integer minor units at a fixed 4 decimal places (e.g. 105000 represents 10.5000 in the account's currency). Not configurable — see account-entries. Always a signed delta applied to the account's running balance: for a transaction, exactly what was submitted; for a balance_adjustment, computed automatically as the change from the balance immediately before it — never client-supplied for that kind.
              */
             amount: number;
+            /**
+             * Format: int64
+             * @description The absolute reading a balance_adjustment's amount is computed against — present only when kind is balance_adjustment, null for a transaction. This is what the client supplies when creating or editing a balance_adjustment (see EntryCreate/ EntryUpdate), at the same 4-decimal-place scale as amount.
+             */
+            balance?: number | null;
             /** Format: date-time */
             booking_timestamp: string;
             /** @description Required for a transaction, optional for a balance_adjustment. */
@@ -863,10 +888,19 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description amount is required when kind is transaction and rejected when kind is balance_adjustment; balance is required when kind is balance_adjustment and rejected when kind is transaction — exactly one of the two, per kind (400). */
         EntryCreate: {
             account_id: string;
-            /** Format: int64 */
-            amount: number;
+            /**
+             * Format: int64
+             * @description Required for kind=transaction; must be omitted otherwise.
+             */
+            amount?: number;
+            /**
+             * Format: int64
+             * @description Required for kind=balance_adjustment; must be omitted otherwise.
+             */
+            balance?: number;
             /** Format: date-time */
             booking_timestamp: string;
             category_id?: string;
@@ -886,11 +920,13 @@ export interface components {
             count: number;
             sums: components["schemas"]["CurrencySum"][];
         };
-        /** @description No kind field — it is immutable after creation. account_id may be set to move the entry to a different account the caller owns (see account-entries); it must not be disabled, the same rule creation applies. No currency conversion or validation is performed. */
+        /** @description No kind field — it is immutable after creation. account_id may be set to move the entry to a different account the caller owns (see account-entries); it must not be disabled, the same rule creation applies. No currency conversion or validation is performed. amount is only settable when the entry's kind is transaction, balance only when it is balance_adjustment — supplying the other one is rejected (400). */
         EntryUpdate: {
             account_id?: string;
             /** Format: int64 */
             amount?: number;
+            /** Format: int64 */
+            balance?: number;
             /** Format: date-time */
             booking_timestamp?: string;
             /** @description Explicit null clears it (only valid when the entry's kind is balance_adjustment). */
@@ -903,6 +939,16 @@ export interface components {
         Error: {
             error: string;
             request_id?: string;
+        };
+        /** @description One period's income/outcome totals — see GET /api/entries/flow-summary. A currency with only income (or only outcome) entries in this period appears in just that one array, never also in the other with an amount of 0. */
+        FlowBucket: {
+            income: components["schemas"]["CurrencySum"][];
+            outcome: components["schemas"]["CurrencySum"][];
+            /**
+             * Format: date
+             * @description The bucket's first calendar day (YYYY-MM-DD), regardless of unit — a day-unit bucket is just a single day.
+             */
+            period: string;
         };
         Invite: {
             /** Format: date-time */
@@ -2101,6 +2147,37 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getEntriesFlowSummary: {
+        parameters: {
+            query: {
+                /** @description Repeatable. Omitted means every account the caller owns. */
+                account_id?: string[];
+                /** @description 1-12. Required when unit=day, rejected when unit=month. */
+                month?: number;
+                unit: "month" | "day";
+                year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One bucket per period in the requested range. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        buckets: components["schemas"]["FlowBucket"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     getEntriesSummary: {

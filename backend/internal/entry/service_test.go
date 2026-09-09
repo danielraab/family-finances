@@ -45,6 +45,22 @@ func (s *stubAccounts) VisibleIDs(_ context.Context, ownerID string) ([]string, 
 
 var errNotFound = errors.New("account not found")
 
+// stubTimezones satisfies entry.TimezoneLookup — a minimal fake so
+// FlowSummary tests can exercise a non-UTC caller timezone without
+// depending on the real internal/settings package.
+type stubTimezones struct {
+	tz map[string]string
+}
+
+func newStubTimezones() *stubTimezones { return &stubTimezones{tz: map[string]string{}} }
+
+func (s *stubTimezones) Timezone(_ context.Context, ownerID string) (string, error) {
+	if tz, ok := s.tz[ownerID]; ok {
+		return tz, nil
+	}
+	return "UTC", nil
+}
+
 type stubCategories struct {
 	owner    map[string]string // categoryID -> ownerID
 	disabled map[string]bool

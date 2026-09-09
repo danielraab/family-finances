@@ -67,3 +67,17 @@ func (s *Service) Language(ctx context.Context, userID string) (*string, error) 
 	}
 	return row.Language, nil
 }
+
+// Timezone returns userID's resolved timezone ("UTC" when unset) — the same
+// value Get's Settings.Timezone carries. It satisfies internal/entry's
+// TimezoneLookup interface, used to bucket GET /api/entries/flow-summary by
+// the caller's own effective timezone rather than UTC unconditionally.
+// Unlike Language, there is no "raw preference" concern here — flow-summary
+// only ever needs the effective value.
+func (s *Service) Timezone(ctx context.Context, userID string) (string, error) {
+	row, err := s.store.Get(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return Resolve(row).Timezone, nil
+}

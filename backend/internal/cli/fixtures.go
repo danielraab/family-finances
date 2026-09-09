@@ -180,10 +180,11 @@ func generateFixtures(
 			cat := cats[rng.IntN(len(cats))]
 			catID := cat.ID
 
+			amount := randomAmount(rng, cat.Name)
 			_, err := entrySvc.Create(ctx, ownerID, entry.New{
 				AccountID:        acc.ID,
 				Kind:             entry.KindTransaction,
-				Amount:           randomAmount(rng, cat.Name),
+				Amount:           &amount,
 				BookingTimestamp: randomPastDate(rng, 365),
 				Title:            randomTitle(rng, cat.Name),
 				CategoryID:       &catID,

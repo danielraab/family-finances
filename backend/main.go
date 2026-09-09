@@ -79,7 +79,7 @@ func main() {
 	}
 
 	tagSvc, tagHandler := buildTag(pool)
-	entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc)
+	entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc, settingsSvc)
 
 	srv := httpapi.New(cfg, httpapi.Deps{
 		Static:          staticFS,
@@ -139,10 +139,11 @@ func buildTag(pool *postgres.Pool) (*tag.Service, http.Handler) {
 // buildEntry constructs the entry service and its HTTP handler over the
 // Postgres store, wiring accountSvc/categorySvc/tagSvc in as its
 // AccountLookup/CategoryLookup/TagLookup dependencies (see design.md's
-// package-boundaries decision).
-func buildEntry(pool *postgres.Pool, accountSvc *account.Service, categorySvc *category.Service, tagSvc *tag.Service) http.Handler {
+// package-boundaries decision) and settingsSvc as the timezone source
+// GET /api/entries/flow-summary buckets by.
+func buildEntry(pool *postgres.Pool, accountSvc *account.Service, categorySvc *category.Service, tagSvc *tag.Service, settingsSvc *settings.Service) http.Handler {
 	store := postgres.NewEntryStore(pool)
-	svc := entry.NewService(store, accountSvc, categorySvc, tagSvc)
+	svc := entry.NewService(store, accountSvc, categorySvc, tagSvc, entry.WithTimezoneLookup(settingsSvc))
 	return entry.NewHandler(svc, entry.HandlerOptions{RenderError: httpapi.WriteError})
 }
 
