@@ -18,7 +18,7 @@ func testBundle() fstest.MapFS {
 }
 
 func TestStaticHandlerServesBundledFiles(t *testing.T) {
-	handler := staticHandler(testBundle())
+	handler := staticHandler(testBundle(), "")
 
 	cases := []struct{ path, want string }{
 		{"/", "<html>shell</html>"},
@@ -36,7 +36,7 @@ func TestStaticHandlerServesBundledFiles(t *testing.T) {
 }
 
 func TestStaticHandlerSPAFallback(t *testing.T) {
-	handler := staticHandler(testBundle())
+	handler := staticHandler(testBundle(), "")
 
 	// An extensionless GET that resolves to no file is a client route: serve
 	// the shell with 200 so the in-browser router renders it.
@@ -55,7 +55,7 @@ func TestStaticHandlerSPAFallback(t *testing.T) {
 }
 
 func TestStaticHandlerMissingAssetStill404(t *testing.T) {
-	handler := staticHandler(testBundle())
+	handler := staticHandler(testBundle(), "")
 
 	// A path that looks like an asset (has an extension) and misses is a real
 	// 404 — never the SPA shell.
@@ -74,7 +74,7 @@ func TestStaticHandlerMissingAssetStill404(t *testing.T) {
 }
 
 func TestStaticHandlerNonGETMissIs404(t *testing.T) {
-	handler := staticHandler(testBundle())
+	handler := staticHandler(testBundle(), "")
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/login", nil))
@@ -87,7 +87,7 @@ func TestStaticHandlerNonGETMissIs404(t *testing.T) {
 func TestStaticHandlerUsesEmbedded404WhenPresent(t *testing.T) {
 	fsys := testBundle()
 	fsys["404.html"] = &fstest.MapFile{Data: []byte("<html>not found</html>")}
-	handler := staticHandler(fsys)
+	handler := staticHandler(fsys, "")
 
 	// Asset miss with a 404.html in the bundle: serve that page, still 404.
 	rec := httptest.NewRecorder()
@@ -97,6 +97,52 @@ func TestStaticHandlerUsesEmbedded404WhenPresent(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 	assertBody(t, rec, "<html>not found</html>")
+}
+
+func TestStaticHandlerInjectsAnalyticsScript(t *testing.T) {
+	fsys := fstest.MapFS{
+		"index.html": {Data: []byte("<html><head><title>t</title></head><body></body></html>")},
+	}
+	handler := staticHandler(fsys, `<script>console.log("analytics")</script>`)
+
+	want := `<html><head><title>t</title><script>console.log("analytics")</script></head><body></body></html>`
+
+	// Direct "/" request.
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/: status = %d, want 200", rec.Code)
+	}
+	assertBody(t, rec, want)
+
+	// Direct "/index.html" request.
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/index.html", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/index.html: status = %d, want 200", rec.Code)
+	}
+	assertBody(t, rec, want)
+
+	// SPA-fallback path (a client route that misses the bundle).
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/login", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/login: status = %d, want 200", rec.Code)
+	}
+	assertBody(t, rec, want)
+}
+
+func TestStaticHandlerNoAnalyticsScriptLeavesIndexUnchanged(t *testing.T) {
+	handler := staticHandler(testBundle(), "")
+
+	for _, p := range []string{"/", "/index.html", "/login"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: status = %d, want 200", p, rec.Code)
+		}
+		assertBody(t, rec, "<html>shell</html>")
+	}
 }
 
 func assertBody(t *testing.T, rec *httptest.ResponseRecorder, want string) {

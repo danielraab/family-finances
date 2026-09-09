@@ -1,8 +1,5 @@
-# backend-static-serving Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change go-serves-frontend-docker-ci. Update Purpose after archive.
-## Requirements
 ### Requirement: Backend serves the frontend static export
 
 The backend SHALL serve the frontend's built bundle at the root path and at
@@ -68,41 +65,3 @@ bundle's original file.
 - **WHEN** the backend is started with `ANALYTICS_SCRIPT` unset or empty
 - **THEN** every served `index.html` body — for `/`, `/index.html`, and the
   SPA fallback — is byte-identical to the bundle's original `index.html`
-
-### Requirement: Backend routes reserved under /api/
-
-The backend SHALL reserve the `/api/` path prefix for its own routes,
-distinct from static frontend paths, so future API endpoints cannot collide
-with frontend routes. The OpenAPI document SHALL be served as one such route at
-`GET /api/openapi.yaml`.
-
-#### Scenario: Health check under the reserved namespace
-
-- **WHEN** a client requests `GET /api/healthz`
-- **THEN** the backend returns a `200` status
-
-#### Scenario: API namespace does not serve frontend files
-
-- **WHEN** a client requests a path under `/api/` that is not a defined
-  backend route
-- **THEN** the backend does not return frontend HTML/JS content for it
-
-#### Scenario: OpenAPI document served under the reserved namespace
-
-- **WHEN** a client requests `GET /api/openapi.yaml`
-- **THEN** the backend returns `200` with `Content-Type: application/yaml` and
-  the OpenAPI document body, not the SPA shell and not a JSON `404`
-
-### Requirement: Backend builds and tests without a built frontend present
-
-Local development and testing of the backend (`go build`, `go test`,
-`go run`) SHALL succeed without requiring a frontend build to have been
-produced first.
-
-#### Scenario: Backend builds and tests pass from a fresh clone
-
-- **WHEN** a developer runs `go build .` or `go test ./...` in `backend/`
-  immediately after cloning the repository, without having built the
-  frontend
-- **THEN** the build and tests succeed
-

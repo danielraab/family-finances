@@ -57,6 +57,26 @@ func TestRoutesNonAPIServesStatic(t *testing.T) {
 	}
 }
 
+func TestRoutesAnalyticsScript(t *testing.T) {
+	deps := testDeps()
+	deps.Static = fstest.MapFS{
+		"index.html": {Data: []byte("<html><head></head><body></body></html>")},
+	}
+	deps.AnalyticsScript = `<script>console.log("hi")</script>`
+
+	rec := httptest.NewRecorder()
+	Routes(deps).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body, _ := io.ReadAll(rec.Result().Body)
+	want := `<html><head><script>console.log("hi")</script></head><body></body></html>`
+	if string(body) != want {
+		t.Fatalf("body = %q, want %q", body, want)
+	}
+}
+
 func TestRoutesOpenAPIDocument(t *testing.T) {
 	deps := testDeps()
 	deps.OpenAPISpec = []byte("openapi: 3.0.3\ninfo:\n  title: t\n  version: 0\n")

@@ -29,6 +29,13 @@ type Config struct {
 
 	// OIDC holds the single configured OpenID Connect provider.
 	OIDC OIDCConfig
+
+	// AnalyticsScript is an optional, raw HTML snippet (e.g. a
+	// <script>...</script> tag) injected into the served index.html
+	// immediately before </head>. Empty (the default) leaves index.html
+	// byte-identical to the bundled original. Not validated or sanitized —
+	// trusted the same way SMTP_PASSWORD or OIDC_CLIENT_SECRET are.
+	AnalyticsScript string
 }
 
 // AuthConfig is the authentication and session policy, all env-driven.
@@ -107,8 +114,9 @@ type OIDCConfig struct {
 // as-is and the caller is responsible for rejecting an empty value.
 func Load() (Config, error) {
 	cfg := Config{
-		Port:        getenv("PORT", "8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
+		Port:            getenv("PORT", "8080"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		AnalyticsScript: os.Getenv("ANALYTICS_SCRIPT"),
 		Auth: AuthConfig{
 			BaseURL:             os.Getenv("AUTH_BASE_URL"),
 			CookieSecure:        true,

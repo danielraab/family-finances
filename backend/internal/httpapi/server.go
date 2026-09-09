@@ -67,6 +67,11 @@ type Deps struct {
 	// (openapi/openapi.yaml), served verbatim at GET /api/openapi.yaml. Nil
 	// leaves that route unregistered (it 404s as any other unknown /api/ path).
 	OpenAPISpec []byte
+
+	// AnalyticsScript is an optional raw HTML snippet spliced into the
+	// served index.html immediately before </head>. Empty leaves index.html
+	// byte-identical to the bundled build. See config.Config.AnalyticsScript.
+	AnalyticsScript string
 }
 
 // Routes builds the request multiplexer: backend routes live under /api/,
@@ -112,7 +117,7 @@ func Routes(deps Deps) *http.ServeMux {
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, r, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
-	mux.Handle("/", staticHandler(deps.Static))
+	mux.Handle("/", staticHandler(deps.Static, deps.AnalyticsScript))
 	return mux
 }
 
