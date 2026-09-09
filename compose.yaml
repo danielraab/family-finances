@@ -11,6 +11,9 @@
 services:
   db:
     image: postgres:17
+    profiles:
+      - "dev"
+      - "prod"
     environment:
       POSTGRES_USER: familyfinances
       POSTGRES_PASSWORD: familyfinances
@@ -31,6 +34,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    profiles:
+      - "prod"
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://familyfinances:familyfinances@db:5432/familyfinances?sslmode=disable
@@ -52,6 +57,7 @@ services:
     image: adminer:latest
     profiles:
       - "dev"
+      - "dev-only"
     environment:
       ADMINER_DEFAULT_SERVER: db
     ports:
@@ -64,6 +70,7 @@ services:
     image: axllent/mailpit:latest
     profiles:
       - "dev"
+      - "dev-only"
     environment:
       # Accept mail with or without auth and over plain connections — this is a
       # throwaway local catcher, never a real relay.

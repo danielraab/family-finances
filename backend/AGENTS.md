@@ -463,24 +463,38 @@ filterable/searchable/sortable, cursor-paginated listing (`GET`/
 
 ## Seeding fake data
 
-`server seed --yes <email1,email2,...>` (`internal/cli.Seed`, dispatched
-from `main.go` alongside `healthcheck`/`admin`) resets the database and
-creates one user per given email with randomly generated accounts and
-entries — for local/demo use, not anything a product feature depends on.
-The emails are entirely CLI-supplied — nothing is hardcoded — via
-`parseSeedEmails` (splits on `,`, `auth.NormalizeEmail`s and
-`auth.ValidateEmail`s each, rejects an empty list, an invalid address, or
-a duplicate before touching the database).
+`server seed --yes [--entries N] <email1,email2,...>` (`internal/cli.Seed`,
+dispatched from `main.go` alongside `healthcheck`/`admin`) resets the
+database and creates one user per given email with randomly generated
+accounts and entries — for local/demo use, not anything a product feature
+depends on. Args are parsed with the stdlib `flag` package (`parseSeedFlags`):
+`--yes` (bool), `--entries N` (optional, `int`), and one trailing positional
+— the comma-separated email list. The emails are entirely CLI-supplied —
+nothing is hardcoded — via `parseSeedEmails` (splits on `,`,
+`auth.NormalizeEmail`s and `auth.ValidateEmail`s each, rejects an empty
+list, an invalid address, or a duplicate before touching the database).
+
+- **`--entries N`** sets an exact per-user transaction-entry target,
+  spread as evenly as possible across that user's 2-4 accounts (the first
+  `N % numAccounts` accounts take one extra). `0` / omitted keeps the
+  default 15-60 random entries per account, and leaves the fixed-seed
+  fixture byte-identical to before this flag existed. `generateFixtures`
+  returns the count it created; `seedTesters` prints it (`entries=N`) on
+  each user's summary line. A negative `--entries`, an unknown flag, or an
+  extra positional is a usage error (exit `2`, nothing written); ~10k
+  entries takes roughly 30s since each goes through `entry.Service.Create`
+  (one insert + a cheap recompute lookup — there are no balance
+  adjustments in the fixture).
 
 - **It is a full, irreversible reset**, not scoped to the given users:
   every table except `schema_migrations` is `TRUNCATE`d
   (`postgres.ResetAll`/`postgres.TableCounts`, `internal/storage/postgres`)
-  before anything is recreated. Bare `server seed`, or anything other than
-  exactly `--yes` followed by a comma-separated email list, only prints
-  the table/row-count list via `TableCounts` and exits `2` — it never opens
-  a write transaction. `--yes` is required precisely because this ships in
-  the same binary as production and `admin`'s no-confirmation style isn't
-  strict enough for a whole-database wipe.
+  before anything is recreated. Bare `server seed`, or any invocation
+  without `--yes` and an email list, only prints the table/row-count list
+  via `TableCounts` and exits `2` — it never opens a write transaction.
+  `--yes` is required precisely because this ships in the same binary as
+  production and `admin`'s no-confirmation style isn't strict enough for a
+  whole-database wipe.
 - Users are created, in the given order, directly via
   `AuthStore.CreateUserWithIdentity` (pre-verified email, no magic-link
   round-trip) — the same mechanism `internal/cli`'s own tests already used.
@@ -505,8 +519,10 @@ a duplicate before touching the database).
   `financialInstitutePool`), 15-60 transaction entries per account (random
   seeded category, amount sign/magnitude keyed to category — `Salary`
   positive, everything else negative — and 0-2 random tags from that
-  user's pool). A single fixed-seed `math/rand/v2` generator drives the
-  whole run, so `--yes` produces the same fixture every time;
+  user's pool) — or exactly `--entries N` of them, spread across the
+  accounts, when that flag is given. A single fixed-seed `math/rand/v2`
+  generator drives the whole run, so a given argument set produces the
+  same fixture every time;
   types/categories are sorted locally before being indexed by the RNG,
   since a `Store` is only contracted to return "every type/category," not
   in a particular order — tags don't need this, since they're created

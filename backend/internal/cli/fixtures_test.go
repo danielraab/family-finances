@@ -46,7 +46,7 @@ func TestSeedTestersCreatesAllThreeWithTester1Admin(t *testing.T) {
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, &stdout, &stderr)
+	code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
@@ -68,7 +68,7 @@ func TestSeedTestersSeedsStarterAccountTypesAndCategories(t *testing.T) {
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, &stdout, &stderr); code != 0 {
+	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0, &stdout, &stderr); code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
@@ -97,7 +97,7 @@ func TestSeedTestersPrintsSessionTokens(t *testing.T) {
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, &stdout, &stderr); code != 0 {
+	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0, &stdout, &stderr); code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
@@ -124,7 +124,7 @@ func TestSeedTestersTokensAreImmediatelyUsable(t *testing.T) {
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, &stdout, &stderr); code != 0 {
+	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0, &stdout, &stderr); code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
@@ -156,7 +156,7 @@ func TestGenerateFixturesCreatesAccountsAndEntriesInRange(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
-	if err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng); err != nil {
+	if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0); err != nil {
 		t.Fatalf("generateFixtures: %v", err)
 	}
 
@@ -197,7 +197,7 @@ func TestGenerateFixturesCreatesTagsAndAttachesSome(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
-	if err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng); err != nil {
+	if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0); err != nil {
 		t.Fatalf("generateFixtures: %v", err)
 	}
 
@@ -246,7 +246,7 @@ func TestGenerateFixturesSetsFinancialInstitute(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
-	if err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng); err != nil {
+	if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0); err != nil {
 		t.Fatalf("generateFixtures: %v", err)
 	}
 
@@ -274,7 +274,7 @@ func TestGenerateFixturesIsDeterministic(t *testing.T) {
 			t.Fatal(err)
 		}
 		rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
-		if err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng); err != nil {
+		if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0); err != nil {
 			t.Fatal(err)
 		}
 		accounts, err := accountSvc.List(ctx, ownerID)
@@ -350,5 +350,85 @@ func TestRandomAmountSalaryPositiveOthersNegative(t *testing.T) {
 				t.Fatalf("%s amount = %d, want negative", name, v)
 			}
 		}
+	}
+}
+
+func TestParseSeedFlags(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantErr    bool
+		wantYes    bool
+		wantEmails string
+		wantEnt    int
+	}{
+		{name: "yes plus emails", args: []string{"--yes", "a@b.com,c@d.com"}, wantYes: true, wantEmails: "a@b.com,c@d.com"},
+		{name: "entries flag, space form", args: []string{"--yes", "--entries", "10000", "a@b.com"}, wantYes: true, wantEmails: "a@b.com", wantEnt: 10000},
+		{name: "entries flag, equals form", args: []string{"--yes", "--entries=500", "a@b.com"}, wantYes: true, wantEmails: "a@b.com", wantEnt: 500},
+		{name: "flags after nothing else", args: []string{"a@b.com"}, wantYes: false, wantEmails: "a@b.com"},
+		{name: "bare", args: nil},
+		{name: "negative entries", args: []string{"--yes", "--entries", "-1", "a@b.com"}, wantErr: true},
+		{name: "unknown flag", args: []string{"--nope", "a@b.com"}, wantErr: true},
+		{name: "extra positional", args: []string{"--yes", "a@b.com", "surprise"}, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseSeedFlags(tc.args)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("parseSeedFlags(%v) = %+v, want error", tc.args, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseSeedFlags(%v): %v", tc.args, err)
+			}
+			if got.yes != tc.wantYes || got.emails != tc.wantEmails || got.entries != tc.wantEnt {
+				t.Fatalf("parseSeedFlags(%v) = %+v, want {yes:%v emails:%q entries:%d}",
+					tc.args, got, tc.wantYes, tc.wantEmails, tc.wantEnt)
+			}
+		})
+	}
+}
+
+func TestGenerateFixturesEntriesPerUserHitsTargetExactly(t *testing.T) {
+	_, _, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+	ctx := context.Background()
+	const ownerID = "u1"
+	const target = 317 // deliberately not divisible by any likely account count
+
+	if err := accountSvc.SeedDefaults(ctx, ownerID); err != nil {
+		t.Fatal(err)
+	}
+	if err := categorySvc.SeedDefaults(ctx, ownerID); err != nil {
+		t.Fatal(err)
+	}
+
+	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
+	created, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, target)
+	if err != nil {
+		t.Fatalf("generateFixtures: %v", err)
+	}
+	if created != target {
+		t.Fatalf("generateFixtures returned %d, want %d", created, target)
+	}
+
+	// Count every persisted entry, paging through with the keyset cursor
+	// (List clamps a page to 200 rows).
+	total := 0
+	var after *entry.Cursor
+	for {
+		page, cursor, err := entrySvc.List(ctx, ownerID, entry.Filter{Limit: 200, After: after})
+		if err != nil {
+			t.Fatal(err)
+		}
+		total += len(page)
+		if cursor == nil || len(page) == 0 {
+			break
+		}
+		after = cursor
+	}
+	if total != target {
+		t.Fatalf("entries persisted = %d, want %d", total, target)
 	}
 }

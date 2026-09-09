@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -21,7 +22,44 @@ import (
 // a fresh random fixture every time.
 const seedRNGSeed1, seedRNGSeed2 = 0x5EED5EED, 0xFACADE42
 
-const seedUsage = "usage: server seed --yes <email1,email2,...>"
+const seedUsage = "usage: server seed --yes [--entries N] <email1,email2,...>"
+
+// seedFlags is the parsed form of `seed`'s arguments. yes and emails must
+// both be present for a run to touch the database; entries is optional
+// (0 = the default per-account random count).
+type seedFlags struct {
+	yes     bool
+	emails  string
+	entries int
+}
+
+// parseSeedFlags parses `seed`'s args with the standard flag package:
+// `--yes` (bool), `--entries N` (int, per-user transaction-entry target,
+// spread across that user's accounts; 0 keeps the default random count per
+// account), and one trailing positional — the comma-separated email list.
+// A malformed flag or a negative --entries is an error; a missing --yes or
+// email list is not (Seed treats that as "print the plan, change nothing").
+func parseSeedFlags(args []string) (seedFlags, error) {
+	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
+	fs.SetOutput(io.Discard) // Seed prints its own usage
+	yes := fs.Bool("yes", false, "actually reset the database and seed")
+	entries := fs.Int("entries", 0, "transaction entries per seeded user")
+	if err := fs.Parse(args); err != nil {
+		return seedFlags{}, err
+	}
+	if *entries < 0 {
+		return seedFlags{}, fmt.Errorf("--entries must be >= 0")
+	}
+	rest := fs.Args()
+	if len(rest) > 1 {
+		return seedFlags{}, fmt.Errorf("unexpected extra arguments: %v", rest[1:])
+	}
+	f := seedFlags{yes: *yes, entries: *entries}
+	if len(rest) == 1 {
+		f.emails = rest[0]
+	}
+	return f, nil
+}
 
 // Seed runs the `seed` subcommand. Bare (`server seed`), or anything other
 // than exactly "--yes" followed by a comma-separated email list, prints
@@ -52,11 +90,17 @@ func Seed(ctx context.Context, args []string) int {
 		return 1
 	}
 
-	if len(args) != 2 || args[0] != "--yes" {
+	flags, err := parseSeedFlags(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "seed:", err)
+		fmt.Fprintln(os.Stderr, seedUsage)
+		return 2
+	}
+	if !flags.yes || flags.emails == "" {
 		return printResetPlan(ctx, pool, os.Stdout, os.Stderr)
 	}
 
-	emails, err := parseSeedEmails(args[1])
+	emails, err := parseSeedEmails(flags.emails)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		fmt.Fprintln(os.Stderr, seedUsage)
@@ -84,7 +128,7 @@ func Seed(ctx context.Context, args []string) int {
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 
-	return seedTesters(ctx, emails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, os.Stdout, os.Stderr)
+	return seedTesters(ctx, emails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, flags.entries, os.Stdout, os.Stderr)
 }
 
 // parseSeedEmails splits raw on commas, trims and normalizes each address

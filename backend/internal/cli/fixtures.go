@@ -70,6 +70,7 @@ func seedTesters(
 	tagSvc *tag.Service,
 	entrySvc *entry.Service,
 	rng *rand.Rand,
+	entriesPerUser int,
 	stdout, stderr io.Writer,
 ) int {
 	for _, email := range emails {
@@ -91,7 +92,8 @@ func seedTesters(
 			fmt.Fprintf(stderr, "seed: seed categories for %s: %v\n", email, err)
 			return 1
 		}
-		if err := generateFixtures(ctx, user.ID, accountSvc, categorySvc, tagSvc, entrySvc, rng); err != nil {
+		entriesCreated, err := generateFixtures(ctx, user.ID, accountSvc, categorySvc, tagSvc, entrySvc, rng, entriesPerUser)
+		if err != nil {
 			fmt.Fprintf(stderr, "seed: generate fixtures for %s: %v\n", email, err)
 			return 1
 		}
@@ -106,7 +108,7 @@ func seedTesters(
 		if user.IsAdmin {
 			admin = " (admin)"
 		}
-		fmt.Fprintf(stdout, "%s%s session=%s\n", email, admin, token)
+		fmt.Fprintf(stdout, "%s%s entries=%d session=%s\n", email, admin, entriesCreated, token)
 	}
 	return 0
 }
@@ -114,10 +116,13 @@ func seedTesters(
 // generateFixtures creates a fixed pool of tags for ownerID (tagNamePool),
 // then 2-4 random accounts (each a random seeded type + a random currency +
 // a random financial institute + a random opening date within the past two
-// years), then 15-60 random transaction entries per account (random seeded
-// category, booking date within the past year, an amount/title shaped by
-// that category — see randomAmount/randomTitle — and 0-2 random tags drawn
-// from that user's tag pool).
+// years), then transaction entries per account (random seeded category,
+// booking date within the past year, an amount/title shaped by that
+// category — see randomAmount/randomTitle — and 0-2 random tags drawn from
+// that user's tag pool). When entriesPerUser is 0 each account gets 15-60
+// entries at random; when it is > 0 exactly that many entries are spread
+// as evenly as possible across the accounts. Returns the number of entries
+// created.
 func generateFixtures(
 	ctx context.Context,
 	ownerID string,
@@ -126,17 +131,18 @@ func generateFixtures(
 	tagSvc *tag.Service,
 	entrySvc *entry.Service,
 	rng *rand.Rand,
-) error {
+	entriesPerUser int,
+) (int, error) {
 	types, err := accountSvc.ListTypes(ctx, ownerID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	cats, err := categorySvc.List(ctx, ownerID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if len(types) == 0 || len(cats) == 0 {
-		return nil
+		return 0, nil
 	}
 	// Sort before indexing by rng draw: a Store is only contracted to
 	// return "every type/category", not in any particular order (memory's
@@ -153,12 +159,13 @@ func generateFixtures(
 	for _, name := range tagNamePool {
 		t, err := tagSvc.Create(ctx, ownerID, name)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		tags = append(tags, t)
 	}
 
 	numAccounts := 2 + rng.IntN(3) // 2..4
+	created := 0
 	for i := 0; i < numAccounts; i++ {
 		typ := types[rng.IntN(len(types))]
 		currency := accountCurrencies[rng.IntN(len(accountCurrencies))]
@@ -172,10 +179,19 @@ func generateFixtures(
 			OpeningDate:        account.NewDate(randomPastDate(rng, 2*365)),
 		})
 		if err != nil {
-			return err
+			return created, err
 		}
 
 		numEntries := 15 + rng.IntN(46) // 15..60
+		if entriesPerUser > 0 {
+			// Spread the requested total across the accounts as evenly as
+			// possible; the first (entriesPerUser % numAccounts) accounts
+			// take one extra so the sum is exact.
+			numEntries = entriesPerUser / numAccounts
+			if i < entriesPerUser%numAccounts {
+				numEntries++
+			}
+		}
 		for j := 0; j < numEntries; j++ {
 			cat := cats[rng.IntN(len(cats))]
 			catID := cat.ID
@@ -185,17 +201,18 @@ func generateFixtures(
 				AccountID:        acc.ID,
 				Kind:             entry.KindTransaction,
 				Amount:           &amount,
-				BookingTimestamp: randomPastDate(rng, 365),
+				BookingTimestamp: randomPastDate(rng, 1000),
 				Title:            randomTitle(rng, cat.Name),
 				CategoryID:       &catID,
 				TagIDs:           randomTagIDs(rng, tags, rng.IntN(3)), // 0..2
 			})
 			if err != nil {
-				return err
+				return created, err
 			}
+			created++
 		}
 	}
-	return nil
+	return created, nil
 }
 
 // randomTagIDs returns up to n distinct ids drawn from tags, in random
