@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 /** One series (a fixed identity across every category — e.g. "Income"). */
 export type BarChartSeries = {
@@ -15,6 +15,10 @@ export type BarChartDatum = {
 
 const CHART_HEIGHT = 220;
 const BAR_MAX_THICKNESS = 24;
+// Below this the bars stop shrinking to fit and the chart keeps its intrinsic
+// width instead, letting its `overflow-x-auto` wrapper scroll — the mobile /
+// many-categories case.
+const BAR_MIN_THICKNESS = 10;
 const BAR_GAP = 2; // the dataviz skill's "surface gap" between touching bars
 const GROUP_GAP = 12;
 const AXIS_LABEL_HEIGHT = 20;
@@ -43,11 +47,19 @@ function niceMax(value: number): number {
  * it's reusable for any future N-category × M-series bar chart, not just
  * this one's income/outcome-per-month shape.
  *
- * Follows the dataviz skill's mark specs: bars capped at 24px thick with a
- * 4px rounded data-end (square at the baseline), a 2px surface gap between
- * touching bars, hairline recessive gridlines, a legend (always shown for
- * 2+ series), and a per-group hover/focus tooltip listing every series'
- * value (not just the one under the pointer).
+ * Width is responsive: the chart measures its container and lays the groups
+ * out to fill it, capping bar thickness at 24px. Only when that would force
+ * bars below 10px (a narrow viewport, or lots of categories) does it fall
+ * back to an intrinsic min-width and let the `overflow-x-auto` wrapper
+ * scroll — so a desktop panel shows the whole chart, a phone scrolls it.
+ *
+ * Follows the dataviz skill's mark specs: a 4px rounded data-end (square at
+ * the baseline), a 2px surface gap between touching bars, hairline recessive
+ * gridlines, a legend (always shown for 2+ series), and a per-group
+ * hover/focus tooltip listing every series' value (not just the one under
+ * the pointer). Clicking a group pins that tooltip and its highlight so they
+ * stay after the pointer leaves; clicking it again, clicking another group,
+ * clicking away, or pressing Escape releases the pin.
  */
 export function BarChart({
   series,
@@ -58,8 +70,45 @@ export function BarChart({
   data: BarChartDatum[];
   formatValue: (value: number) => string;
 }) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // The group whose tooltip is transiently shown while hovered/focused, and
+  // the one pinned by a click. A pin outlives the pointer; hover still wins
+  // for the preview while it lasts.
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  const activeIndex = hoverIndex ?? pinnedIndex;
+  const [containerWidth, setContainerWidth] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setContainerWidth(entry.contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // While a group is pinned, a click anywhere else (the pinning/re-pinning
+  // clicks stop propagation before they reach here) or Escape releases it.
+  useEffect(() => {
+    if (pinnedIndex === null) return;
+    const release = () => setPinnedIndex(null);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPinnedIndex(null);
+    };
+    window.addEventListener("click", release);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("click", release);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [pinnedIndex]);
+
+  const togglePin = (groupIndex: number) =>
+    setPinnedIndex((prev) => (prev === groupIndex ? null : groupIndex));
 
   const max = niceMax(
     Math.max(
@@ -72,33 +121,52 @@ export function BarChart({
     (_, i) => (max / TICK_COUNT) * i,
   );
 
-  const groupWidth =
-    series.length * BAR_MAX_THICKNESS + (series.length - 1) * BAR_GAP;
-  const chartWidth = data.length * groupWidth + (data.length + 1) * GROUP_GAP;
+  const groupCount = Math.max(data.length, 1);
+  // Intrinsic floor: the width at which bars would hit BAR_MIN_THICKNESS. When
+  // the container is at least this wide the chart fills it; when it's narrower
+  // the chart stays this wide and its wrapper scrolls.
+  const minGroupWidth =
+    series.length * BAR_MIN_THICKNESS +
+    Math.max(series.length - 1, 0) * BAR_GAP;
+  const minChartWidth =
+    MARGIN_LEFT + (groupCount + 1) * GROUP_GAP + groupCount * minGroupWidth;
+  const chartWidth = Math.max(containerWidth, minChartWidth);
+
+  const plotWidth = chartWidth - MARGIN_LEFT;
   const plotHeight = CHART_HEIGHT - AXIS_LABEL_HEIGHT - MARGIN_TOP;
+  const groupWidth = (plotWidth - (groupCount + 1) * GROUP_GAP) / groupCount;
+  const barThickness = Math.min(
+    BAR_MAX_THICKNESS,
+    (groupWidth - Math.max(series.length - 1, 0) * BAR_GAP) / series.length,
+  );
+  const barsWidth =
+    series.length * barThickness + Math.max(series.length - 1, 0) * BAR_GAP;
 
   return (
     <div className="flex flex-col gap-3">
       <ul className="flex flex-wrap gap-4 text-xs text-zinc-600 dark:text-zinc-400">
         {series.map((s) => (
           <li key={s.label} className="flex items-center gap-1.5">
-            <span
+            <svg
               aria-hidden="true"
-              className={`inline-block h-2.5 w-2.5 rounded-sm ${s.fillClassName}`}
-            />
+              viewBox="0 0 10 10"
+              className="inline-block h-2.5 w-2.5"
+            >
+              <rect width="10" height="10" rx="2" className={s.fillClassName} />
+            </svg>
             {s.label}
           </li>
         ))}
       </ul>
 
-      <div className="overflow-x-auto">
+      <div ref={containerRef} className="overflow-x-auto">
         <svg
           role="img"
           aria-labelledby={titleId}
-          viewBox={`0 0 ${chartWidth + MARGIN_LEFT} ${CHART_HEIGHT}`}
-          width={chartWidth + MARGIN_LEFT}
+          viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
+          width={chartWidth}
           height={CHART_HEIGHT}
-          className="min-w-full"
+          className="block"
         >
           <title id={titleId}>
             {series.map((s) => s.label).join(" / ")} by{" "}
@@ -111,7 +179,7 @@ export function BarChart({
               <g key={tick}>
                 <line
                   x1={MARGIN_LEFT}
-                  x2={chartWidth + MARGIN_LEFT}
+                  x2={chartWidth}
                   y1={y}
                   y2={y}
                   className="stroke-zinc-200 dark:stroke-zinc-800"
@@ -133,40 +201,60 @@ export function BarChart({
           {data.map((d, groupIndex) => {
             const groupX =
               MARGIN_LEFT + GROUP_GAP + groupIndex * (groupWidth + GROUP_GAP);
+            const barsStart = groupX + (groupWidth - barsWidth) / 2;
             return (
               // biome-ignore lint/a11y/useSemanticElements: an SVG group has no native interactive equivalent; role+tabIndex is the correct fallback.
               <g
                 key={d.category}
                 tabIndex={0}
                 role="button"
+                aria-pressed={pinnedIndex === groupIndex}
                 aria-label={`${d.category}: ${series
                   .map((s, i) => `${s.label} ${formatValue(d.values[i] ?? 0)}`)
                   .join(", ")}`}
-                onMouseEnter={() => setActiveIndex(groupIndex)}
-                onMouseLeave={() => setActiveIndex(null)}
-                onFocus={() => setActiveIndex(groupIndex)}
-                onBlur={() => setActiveIndex(null)}
-                className="cursor-default outline-none"
+                onMouseEnter={() => setHoverIndex(groupIndex)}
+                onMouseLeave={() => setHoverIndex(null)}
+                onFocus={() => setHoverIndex(groupIndex)}
+                onBlur={() => setHoverIndex(null)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePin(groupIndex);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    togglePin(groupIndex);
+                  }
+                }}
+                className="cursor-pointer outline-none"
               >
                 <rect
                   x={groupX}
                   y={MARGIN_TOP}
                   width={groupWidth}
                   height={plotHeight}
+                  rx={4}
                   fill="transparent"
+                  strokeWidth={1}
+                  className={
+                    pinnedIndex === groupIndex
+                      ? "stroke-zinc-300 dark:stroke-zinc-600"
+                      : "stroke-transparent"
+                  }
                 />
                 {series.map((s, seriesIndex) => {
                   const value = Math.max(0, d.values[seriesIndex] ?? 0);
                   const barHeight = max > 0 ? (value / max) * plotHeight : 0;
                   const barX =
-                    groupX + seriesIndex * (BAR_MAX_THICKNESS + BAR_GAP);
+                    barsStart + seriesIndex * (barThickness + BAR_GAP);
                   const barY = MARGIN_TOP + plotHeight - barHeight;
                   return (
                     <rect
                       key={s.label}
                       x={barX}
                       y={barY}
-                      width={BAR_MAX_THICKNESS}
+                      width={barThickness}
                       height={Math.max(barHeight, 0)}
                       rx={4}
                       className={`${s.fillClassName} transition-opacity ${
@@ -196,10 +284,13 @@ export function BarChart({
           <span className="font-medium">{data[activeIndex].category}</span>
           {series.map((s, i) => (
             <span key={s.label} className="flex items-center gap-1.5">
-              <span
+              <svg
                 aria-hidden="true"
-                className={`inline-block h-2 w-2 rounded-sm ${s.fillClassName}`}
-              />
+                viewBox="0 0 8 8"
+                className="inline-block h-2 w-2"
+              >
+                <rect width="8" height="8" rx="2" className={s.fillClassName} />
+              </svg>
               <span className="text-zinc-500 dark:text-zinc-400">
                 {s.label}
               </span>
