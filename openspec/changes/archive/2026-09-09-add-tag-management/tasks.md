@@ -133,7 +133,7 @@
       `backend-integration` job.
 - [x] 10.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build` —
       clean (route tree regenerated via `pnpm generate-routes` first).
-- [ ] 10.3 Manual pass: create/rename/disable/enable/delete a tag on the
+- [x] 10.3 Manual pass: create/rename/disable/enable/delete a tag on the
       new tab; confirm entry counts update as entries are tagged/untagged/
       deleted; confirm the entry form's tag suggestions exclude disabled
       tags while an entry that already carries one still displays and
