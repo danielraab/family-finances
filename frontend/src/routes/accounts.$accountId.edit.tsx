@@ -37,6 +37,8 @@ function EditAccount() {
         setValues({
           title: data.title,
           description: data.description ?? "",
+          icon: data.icon ?? "",
+          color: data.color ?? "",
           type_id: data.type_id,
           currency: data.currency,
           financial_institute: data.financial_institute ?? "",

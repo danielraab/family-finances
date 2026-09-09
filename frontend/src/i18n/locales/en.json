@@ -182,7 +182,7 @@
       "columnStatus": "Status",
       "statusActive": "Active",
       "statusDisabled": "Disabled",
-      "edit": "Rename",
+      "edit": "Edit",
       "editTitle": "Rename tag",
       "editError": "Couldn't save — please try again.",
       "save": "Save",
@@ -364,14 +364,14 @@
       "moveUp": "Move up",
       "moveDown": "Move down",
       "moveTo": "Move to…",
-      "edit": "Rename",
+      "edit": "Edit",
       "disable": "Disable",
       "enable": "Enable",
       "delete": "Delete",
       "deleteDisabledHint": "Only possible once it has no subcategories and no entry uses it."
     },
     "edit": {
-      "heading": "Rename category",
+      "heading": "Edit category",
       "nameLabel": "Name",
       "save": "Save",
       "saving": "Saving…",
@@ -422,6 +422,24 @@
       "title": "Title",
       "account": "Account",
       "amount": "Amount"
+    }
+  },
+  "entityIcons": {
+    "fieldLabel": "Icon & colour",
+    "placeholder": "None chosen",
+    "done": "Done",
+    "iconLabel": "Icon",
+    "colorLabel": "Colour",
+    "none": "None",
+    "clear": "Clear",
+    "groups": {
+      "banking": "Banking",
+      "income": "Income",
+      "homeBills": "Home & bills",
+      "food": "Food",
+      "transport": "Transport",
+      "life": "Life",
+      "transfers": "Transfers"
     }
   }
 }

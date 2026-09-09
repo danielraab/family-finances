@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
+import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
 import { amountColorClass, formatAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
@@ -425,8 +426,16 @@ function ReportsPage() {
                     </td>
                     <td className="px-3 py-2 font-medium">{entry.title}</td>
                     <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
-                      {accounts.find((a) => a.id === entry.account_id)?.title ??
-                        entry.account_id}
+                      {(() => {
+                        const account = accounts.find(
+                          (a) => a.id === entry.account_id,
+                        );
+                        return account ? (
+                          <AccountLabel account={account} iconSize={16} />
+                        ) : (
+                          entry.account_id
+                        );
+                      })()}
                     </td>
                     <td
                       className={`px-3 py-2 text-right font-mono tabular-nums ${amountColorClass(entry.amount)}`}

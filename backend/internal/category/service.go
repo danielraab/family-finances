@@ -34,6 +34,9 @@ func (s *Service) Create(ctx context.Context, ownerID string, in New) (Category,
 	if err := validateName(in.Name); err != nil {
 		return Category{}, err
 	}
+	if !validPresentationToken(in.Icon) || !validPresentationToken(in.Color) {
+		return Category{}, ErrInvalidValue
+	}
 	if in.ParentID != nil {
 		ok, err := s.store.Exists(ctx, ownerID, *in.ParentID)
 		if err != nil {
@@ -53,6 +56,12 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (C
 		if err := validateName(*upd.Name); err != nil {
 			return Category{}, err
 		}
+	}
+	if upd.Icon != nil && !validPresentationToken(*upd.Icon) {
+		return Category{}, ErrInvalidValue
+	}
+	if upd.Color != nil && !validPresentationToken(*upd.Color) {
+		return Category{}, ErrInvalidValue
 	}
 	if upd.ParentID.Set && upd.ParentID.Value != nil {
 		newParent := *upd.ParentID.Value

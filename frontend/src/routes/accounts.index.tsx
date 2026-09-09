@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { AccountLabel } from "../components/AccountLabel";
 import { amountColorClass, formatAmount } from "../lib/amount";
 import type { Account } from "../lib/useAccountsWithBalances";
 import { useAccountsWithBalances } from "../lib/useAccountsWithBalances";
@@ -99,7 +100,7 @@ function AccountsOverview() {
                 className="flex flex-1 items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-black/[.02] dark:hover:bg-white/[.04]"
               >
                 <div className="flex flex-col gap-0.5">
-                  <span className="font-medium">{account.title}</span>
+                  <AccountLabel account={account} className="font-medium" />
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">
                     {typeName(account.type_id)} · {account.currency}
                   </span>

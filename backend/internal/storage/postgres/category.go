@@ -17,11 +17,11 @@ type CategoryStore struct {
 // NewCategoryStore returns a CategoryStore over pool.
 func NewCategoryStore(pool *pgxpool.Pool) *CategoryStore { return &CategoryStore{pool: pool} }
 
-const categoryCols = `id::text, parent_id::text, name, sort_order, disabled, created_at`
+const categoryCols = `id::text, parent_id::text, name, COALESCE(icon, ''), COALESCE(color, ''), sort_order, disabled, created_at`
 
 func scanCategory(row pgx.Row) (category.Category, error) {
 	var c category.Category
-	err := row.Scan(&c.ID, &c.ParentID, &c.Name, &c.SortOrder, &c.Disabled, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.ParentID, &c.Name, &c.Icon, &c.Color, &c.SortOrder, &c.Disabled, &c.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return category.Category{}, category.ErrNotFound
 	}
@@ -58,13 +58,13 @@ func (s *CategoryStore) Get(ctx context.Context, ownerID, id string) (category.C
 
 func (s *CategoryStore) Create(ctx context.Context, ownerID string, in category.New) (category.Category, error) {
 	c, err := scanCategory(s.pool.QueryRow(ctx, `
-		INSERT INTO categories (owner_id, parent_id, name, sort_order)
-		VALUES ($1, $2, $3, (
+		INSERT INTO categories (owner_id, parent_id, name, icon, color, sort_order)
+		VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), (
 			SELECT COALESCE(MAX(sort_order) + 1, 0) FROM categories
 			WHERE owner_id = $1 AND parent_id IS NOT DISTINCT FROM $2 AND deleted_at IS NULL
 		))
 		RETURNING `+categoryCols,
-		ownerID, in.ParentID, in.Name,
+		ownerID, in.ParentID, in.Name, in.Icon, in.Color,
 	))
 	if isForeignKeyViolation(err) {
 		return category.Category{}, category.ErrInvalidValue
@@ -109,10 +109,12 @@ func (s *CategoryStore) Update(ctx context.Context, ownerID, id string, upd cate
 		UPDATE categories SET
 			name       = COALESCE($3, name),
 			parent_id  = CASE WHEN $4 THEN $5 ELSE parent_id END,
-			sort_order = $6
+			sort_order = $6,
+			icon       = CASE WHEN $7::text IS NULL THEN icon ELSE NULLIF($7, '') END,
+			color      = CASE WHEN $8::text IS NULL THEN color ELSE NULLIF($8, '') END
 		WHERE id = $1 AND owner_id = $2
 		RETURNING `+categoryCols,
-		id, ownerID, upd.Name, upd.ParentID.Set, newParent, sortOrder,
+		id, ownerID, upd.Name, upd.ParentID.Set, newParent, sortOrder, upd.Icon, upd.Color,
 	))
 	if isForeignKeyViolation(err) {
 		return category.Category{}, category.ErrInvalidValue
@@ -243,11 +245,17 @@ func (s *CategoryStore) Exists(ctx context.Context, ownerID, id string) (bool, e
 }
 
 func (s *CategoryStore) SeedDefaults(ctx context.Context, ownerID string) error {
+	names := make([]string, len(category.DefaultCategories))
+	icons := make([]string, len(category.DefaultCategories))
+	colors := make([]string, len(category.DefaultCategories))
+	for i, c := range category.DefaultCategories {
+		names[i], icons[i], colors[i] = c.Name, c.Icon, c.Color
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO categories (owner_id, name, sort_order)
-		SELECT $1, name, ord - 1
-		FROM unnest($2::text[]) WITH ORDINALITY AS t(name, ord)`,
-		ownerID, category.DefaultNames,
+		INSERT INTO categories (owner_id, name, icon, color, sort_order)
+		SELECT $1, name, NULLIF(icon, ''), NULLIF(color, ''), ord - 1
+		FROM unnest($2::text[], $3::text[], $4::text[]) WITH ORDINALITY AS t(name, icon, color, ord)`,
+		ownerID, names, icons, colors,
 	)
 	return err
 }

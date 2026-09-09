@@ -100,6 +100,8 @@ func (s *CategoryStore) Create(_ context.Context, ownerID string, in category.Ne
 		OwnerID:   ownerID,
 		ParentID:  in.ParentID,
 		Name:      in.Name,
+		Icon:      in.Icon,
+		Color:     in.Color,
 		SortOrder: s.nextSortOrder(ownerID, in.ParentID),
 		CreatedAt: time.Now().UTC(),
 	}
@@ -116,6 +118,12 @@ func (s *CategoryStore) Update(_ context.Context, ownerID, id string, upd catego
 	}
 	if upd.Name != nil {
 		c.Name = *upd.Name
+	}
+	if upd.Icon != nil {
+		c.Icon = *upd.Icon
+	}
+	if upd.Color != nil {
+		c.Color = *upd.Color
 	}
 	if upd.ParentID.Set {
 		c.ParentID = upd.ParentID.Value
@@ -235,11 +243,13 @@ func (s *CategoryStore) SeedDefaults(_ context.Context, ownerID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
-	for i, name := range category.DefaultNames {
+	for i, dc := range category.DefaultCategories {
 		c := category.Category{
 			ID:        s.nextID(),
 			OwnerID:   ownerID,
-			Name:      name,
+			Name:      dc.Name,
+			Icon:      dc.Icon,
+			Color:     dc.Color,
 			SortOrder: i,
 			CreatedAt: now,
 		}

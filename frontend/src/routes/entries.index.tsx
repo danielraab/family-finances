@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
+import { AccountLabel } from "../components/AccountLabel";
 import {
   amountColorClass,
   formatAmount,
@@ -363,8 +364,16 @@ function EntriesListPage() {
                   </Link>
                 </td>
                 <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
-                  {accounts.find((a) => a.id === entry.account_id)?.title ??
-                    entry.account_id}
+                  {(() => {
+                    const account = accounts.find(
+                      (a) => a.id === entry.account_id,
+                    );
+                    return account ? (
+                      <AccountLabel account={account} iconSize={16} />
+                    ) : (
+                      entry.account_id
+                    );
+                  })()}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex flex-col items-end gap-0.5">

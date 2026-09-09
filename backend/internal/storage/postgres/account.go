@@ -18,7 +18,8 @@ type AccountStore struct {
 // NewAccountStore returns an AccountStore over pool.
 func NewAccountStore(pool *pgxpool.Pool) *AccountStore { return &AccountStore{pool: pool} }
 
-const accountCols = `id::text, owner_id::text, title, COALESCE(description, ''), type_id::text,
+const accountCols = `id::text, owner_id::text, title, COALESCE(description, ''),
+	COALESCE(icon, ''), COALESCE(color, ''), type_id::text,
 	currency, COALESCE(financial_institute, ''), opening_date, closing_date, disabled,
 	created_at, updated_at`
 
@@ -26,7 +27,8 @@ func scanAccount(row pgx.Row) (account.Account, error) {
 	var acc account.Account
 	var opening time.Time
 	var closing *time.Time
-	err := row.Scan(&acc.ID, &acc.OwnerID, &acc.Title, &acc.Description, &acc.TypeID,
+	err := row.Scan(&acc.ID, &acc.OwnerID, &acc.Title, &acc.Description,
+		&acc.Icon, &acc.Color, &acc.TypeID,
 		&acc.Currency, &acc.FinancialInstitute, &opening, &closing, &acc.Disabled,
 		&acc.CreatedAt, &acc.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -50,10 +52,10 @@ func (s *AccountStore) Create(ctx context.Context, ownerID string, in account.Ne
 		closing = &t
 	}
 	acc, err := scanAccount(s.pool.QueryRow(ctx, `
-		INSERT INTO accounts (owner_id, title, description, type_id, currency, financial_institute, opening_date, closing_date)
-		VALUES ($1, $2, NULLIF($3, ''), $4, $5, NULLIF($6, ''), $7, $8)
+		INSERT INTO accounts (owner_id, title, description, icon, color, type_id, currency, financial_institute, opening_date, closing_date)
+		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), $6, $7, NULLIF($8, ''), $9, $10)
 		RETURNING `+accountCols,
-		ownerID, in.Title, in.Description, in.TypeID, in.Currency, in.FinancialInstitute,
+		ownerID, in.Title, in.Description, in.Icon, in.Color, in.TypeID, in.Currency, in.FinancialInstitute,
 		in.OpeningDate.Time, closing,
 	))
 	if isForeignKeyViolation(err) {
@@ -110,11 +112,14 @@ func (s *AccountStore) Update(ctx context.Context, ownerID, id string, upd accou
 			financial_institute = COALESCE($7, financial_institute),
 			opening_date        = COALESCE($8, opening_date),
 			closing_date        = CASE WHEN $9 THEN $10 ELSE closing_date END,
+			icon                = CASE WHEN $11::text IS NULL THEN icon ELSE NULLIF($11, '') END,
+			color               = CASE WHEN $12::text IS NULL THEN color ELSE NULLIF($12, '') END,
 			updated_at          = now()
 		WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
 		RETURNING `+accountCols,
 		id, ownerID, upd.Title, upd.Description, upd.TypeID, upd.Currency,
 		upd.FinancialInstitute, opening, upd.ClosingDate.Set, closing,
+		upd.Icon, upd.Color,
 	))
 	if isForeignKeyViolation(err) {
 		return account.Account{}, account.ErrInvalidValue

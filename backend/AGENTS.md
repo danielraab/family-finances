@@ -309,7 +309,9 @@ A brand-new user is seeded with a fixed starter set (`account.DefaultTypeTitles`
 — Checking, Savings, Cash, Credit Card, Loan, Investment) via
 `Service.SeedDefaults`, which structurally satisfies `internal/auth`'s
 `NewUserHook` interface; `internal/category`'s `Service.SeedDefaults` does
-the same for a starter set of root categories (`category.DefaultNames`).
+the same for a starter set of root categories (`category.DefaultCategories`
+— name plus a default `icon` and `color` token each; `category.DefaultNames`
+is a derived name-only slice kept for existing callers/tests).
 Neither `internal/account` nor `internal/category` is imported by
 `internal/auth` — `main.go` wires both services in via
 `auth.WithNewUserHooks(accountSvc, categorySvc)`, called once,
@@ -348,6 +350,15 @@ limit; a self/descendant reparent is rejected (`ErrCycle`, `422`).
   either end of the sibling list, never an error.
 - No naming-uniqueness constraint — deliberately dropped rather than
   reworked into an owner-scoped one; duplicate sibling names are allowed.
+- **`icon` / `color`** (migration `0019_account_category_icon_color.sql`,
+  which also adds the pair to `accounts`) are two independent optional
+  fields — short opaque presentation tokens (`^[a-z0-9-]{1,40}$` or empty,
+  validated for shape only in `category.go` / `account.go`; a bad value is
+  `ErrInvalidValue` → `400`). The backend never interprets them — the web
+  client owns the icon set and the colour palette. On update a `*string`
+  distinguishes absent (untouched) from `""` (clear) from a value (set);
+  the Postgres stores use `CASE WHEN $n::text IS NULL THEN col ELSE
+  NULLIF($n, '') END`. Account **types** and tags do **not** carry them.
 
 `internal/entry`'s `CategoryLookup` interface (`*category.Service` satisfies
 it structurally) is `Usable(ctx, ownerID, categoryID) (bool, error)` —

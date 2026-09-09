@@ -50,6 +50,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h.mux.Serv
 
 type categoryBody struct {
 	Name     *string    `json:"name"`
+	Icon     *string    `json:"icon"`
+	Color    *string    `json:"color"`
 	ParentID OptionalID `json:"parent_id"`
 }
 
@@ -85,6 +87,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if body.Name != nil {
 		in.Name = *body.Name
 	}
+	if body.Icon != nil {
+		in.Icon = *body.Icon
+	}
+	if body.Color != nil {
+		in.Color = *body.Color
+	}
 	cat, err := h.svc.Create(r.Context(), user.ID, in)
 	if err != nil {
 		h.renderError(w, r, err)
@@ -104,7 +112,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	cat, err := h.svc.Update(r.Context(), user.ID, r.PathValue("id"), Update{Name: body.Name, ParentID: body.ParentID})
+	cat, err := h.svc.Update(r.Context(), user.ID, r.PathValue("id"), Update{Name: body.Name, Icon: body.Icon, Color: body.Color, ParentID: body.ParentID})
 	if err != nil {
 		h.renderError(w, r, err)
 		return

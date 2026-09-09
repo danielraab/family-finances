@@ -59,6 +59,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h.mux.Serv
 type accountBody struct {
 	Title              *string      `json:"title"`
 	Description        *string      `json:"description"`
+	Icon               *string      `json:"icon"`
+	Color              *string      `json:"color"`
 	TypeID             *string      `json:"type_id"`
 	Currency           *string      `json:"currency"`
 	FinancialInstitute *string      `json:"financial_institute"`
@@ -100,6 +102,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Description != nil {
 		in.Description = *body.Description
+	}
+	if body.Icon != nil {
+		in.Icon = *body.Icon
+	}
+	if body.Color != nil {
+		in.Color = *body.Color
 	}
 	if body.TypeID != nil {
 		in.TypeID = *body.TypeID
@@ -150,6 +158,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	upd := Update{
 		Title:              body.Title,
 		Description:        body.Description,
+		Icon:               body.Icon,
+		Color:              body.Color,
 		TypeID:             body.TypeID,
 		Currency:           body.Currency,
 		FinancialInstitute: body.FinancialInstitute,

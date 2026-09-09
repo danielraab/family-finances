@@ -182,7 +182,7 @@
       "columnStatus": "Status",
       "statusActive": "Aktiv",
       "statusDisabled": "Deaktiviert",
-      "edit": "Umbenennen",
+      "edit": "Bearbeiten",
       "editTitle": "Tag umbenennen",
       "editError": "Speichern fehlgeschlagen — bitte versuche es erneut.",
       "save": "Speichern",
@@ -364,14 +364,14 @@
       "moveUp": "Nach oben",
       "moveDown": "Nach unten",
       "moveTo": "Verschieben…",
-      "edit": "Umbenennen",
+      "edit": "Bearbeiten",
       "disable": "Deaktivieren",
       "enable": "Aktivieren",
       "delete": "Löschen",
       "deleteDisabledHint": "Erst möglich, wenn sie keine Unterkategorien und keine Buchungen mehr hat."
     },
     "edit": {
-      "heading": "Kategorie umbenennen",
+      "heading": "Kategorie bearbeiten",
       "nameLabel": "Name",
       "save": "Speichern",
       "saving": "Wird gespeichert…",
@@ -422,6 +422,24 @@
       "title": "Titel",
       "account": "Konto",
       "amount": "Betrag"
+    }
+  },
+  "entityIcons": {
+    "fieldLabel": "Symbol & Farbe",
+    "placeholder": "Nichts gewählt",
+    "done": "Fertig",
+    "iconLabel": "Symbol",
+    "colorLabel": "Farbe",
+    "none": "Keins",
+    "clear": "Entfernen",
+    "groups": {
+      "banking": "Bank",
+      "income": "Einnahmen",
+      "homeBills": "Wohnen & Rechnungen",
+      "food": "Essen",
+      "transport": "Transport",
+      "life": "Leben",
+      "transfers": "Umbuchungen"
     }
   }
 }

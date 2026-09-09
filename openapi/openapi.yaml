@@ -1899,6 +1899,20 @@ components:
           type: string
         description:
           type: string
+        icon:
+          type: string
+          pattern: ^[a-z0-9-]{1,40}$
+          description: >-
+            Optional opaque presentation token naming a client icon. Stored
+            and echoed verbatim; never interpreted by the backend. Absent
+            when unset.
+        color:
+          type: string
+          pattern: ^[a-z0-9-]{1,40}$
+          description: >-
+            Optional opaque presentation token naming a client colour.
+            Stored and echoed verbatim; never interpreted by the backend.
+            Absent when unset.
         type_id:
           type: string
         currency:
@@ -1933,6 +1947,14 @@ components:
           type: string
         description:
           type: string
+        icon:
+          type: string
+          pattern: ^[a-z0-9-]{1,40}$
+          description: Optional opaque client icon token; not interpreted by the backend.
+        color:
+          type: string
+          pattern: ^[a-z0-9-]{1,40}$
+          description: Optional opaque client colour token; not interpreted by the backend.
         type_id:
           type: string
         currency:
@@ -1953,6 +1975,18 @@ components:
           type: string
         description:
           type: string
+        icon:
+          type: string
+          pattern: ^([a-z0-9-]{1,40})?$
+          description: >-
+            Optional opaque client icon token. An empty string clears it;
+            omitting the field leaves it unchanged.
+        color:
+          type: string
+          pattern: ^([a-z0-9-]{1,40})?$
+          description: >-
+            Optional opaque client colour token. An empty string clears it;
+            omitting the field leaves it unchanged.
         type_id:
           type: string
         currency:
@@ -2007,6 +2041,20 @@ components:
           description: Absent for a root category.
         name:
           type: string
+        icon:
+          type: string
+          pattern: ^[a-z0-9-]{1,40}$
+          description: >-
+            Optional opaque presentation token naming a client icon. Stored
+            and echoed verbatim; never interpreted by the backend. Absent
+            when unset.
+        color:
+          type: string
+          pattern: ^[a-z0-9-]{1,40}$
+          description: >-
+            Optional opaque presentation token naming a client colour.
+            Stored and echoed verbatim; never interpreted by the backend.
+            Absent when unset.
         sort_order:
           type: integer
           description: >-
@@ -2026,6 +2074,18 @@ components:
       properties:
         name:
           type: string
+        icon:
+          type: string
+          pattern: ^([a-z0-9-]{1,40})?$
+          description: >-
+            Optional opaque client icon token. An empty string clears it;
+            omitting the field leaves it unchanged.
+        color:
+          type: string
+          pattern: ^([a-z0-9-]{1,40})?$
+          description: >-
+            Optional opaque client colour token. An empty string clears it;
+            omitting the field leaves it unchanged.
         parent_id:
           type: string
           nullable: true

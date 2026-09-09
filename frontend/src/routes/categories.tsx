@@ -10,6 +10,8 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
+import { CategoryLabel } from "../components/CategoryLabel";
+import { IconColorPicker } from "../components/IconColorPicker";
 import {
   buildCategoryTree,
   type CategoryNode,
@@ -50,8 +52,9 @@ function subtreeIds(categories: Category[], id: string): Set<string> {
 
 /**
  * The /categories management page: the caller's own tree, editable
- * entirely through buttons (rename, disable/enable, ▲/▼ reorder, a "Move
- * to…" reparent picker, delete) — no drag gestures, so it works the same
+ * entirely through buttons (edit name/icon/colour, disable/enable, ▲/▼
+ * reorder, a "Move to…" reparent picker, delete) — no drag gestures, so it
+ * works the same
  * on a phone as on a desktop. See web-client-categories's spec and
  * design.md for why reordering/reparenting are dedicated actions rather
  * than drag-and-drop.
@@ -72,11 +75,15 @@ function CategoriesPage() {
 
   const [createName, setCreateName] = useState("");
   const [createParentId, setCreateParentId] = useState("");
+  const [createIcon, setCreateIcon] = useState("");
+  const [createColor, setCreateColor] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState<Category | null>(null);
   const [editName, setEditName] = useState("");
+  const [editIcon, setEditIcon] = useState("");
+  const [editColor, setEditColor] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -122,6 +129,8 @@ function CategoriesPage() {
     const { data, response } = await api.POST("/api/categories", {
       body: {
         name: createName.trim(),
+        icon: createIcon,
+        color: createColor,
         ...compact({ parent_id: createParentId || undefined }),
       },
     });
@@ -133,11 +142,15 @@ function CategoriesPage() {
     setCategories((prev) => [...(prev ?? []), data]);
     setCreateName("");
     setCreateParentId("");
+    setCreateIcon("");
+    setCreateColor("");
   }
 
   function openEdit(cat: Category) {
     setEditing(cat);
     setEditName(cat.name);
+    setEditIcon(cat.icon ?? "");
+    setEditColor(cat.color ?? "");
     setEditError(null);
   }
 
@@ -148,7 +161,7 @@ function CategoriesPage() {
     setEditError(null);
     const { data, response } = await api.PATCH("/api/categories/{id}", {
       params: { path: { id: editing.id } },
-      body: { name: editName.trim() },
+      body: { name: editName.trim(), icon: editIcon, color: editColor },
     });
     setSaving(false);
     if (!response.ok || !data) {
@@ -249,9 +262,10 @@ function CategoriesPage() {
           style={{ marginLeft: Math.min(depth, 6) * 20 }}
         >
           <div className="flex items-center gap-2 text-sm">
-            <span className="font-medium text-zinc-900 dark:text-zinc-100">
-              {node.name}
-            </span>
+            <CategoryLabel
+              category={node}
+              className="font-medium text-zinc-900 dark:text-zinc-100"
+            />
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                 node.disabled
@@ -344,41 +358,50 @@ function CategoriesPage() {
 
       <form
         onSubmit={onCreate}
-        className="flex flex-col gap-2 rounded-lg border border-black/10 p-4 sm:flex-row sm:items-end dark:border-white/10"
+        className="flex flex-col gap-3 rounded-lg border border-black/10 p-4 dark:border-white/10"
       >
-        <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">
-          {t("categories.create.nameLabel")}
-          <input
-            required
-            value={createName}
-            onChange={(e) => setCreateName(e.target.value)}
-            className={inputClass}
-          />
-        </label>
-        <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">
-          {t("categories.create.parentLabel")}
-          <select
-            value={createParentId}
-            onChange={(e) => setCreateParentId(e.target.value)}
-            className={inputClass}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">
+            {t("categories.create.nameLabel")}
+            <input
+              required
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">
+            {t("categories.create.parentLabel")}
+            <select
+              value={createParentId}
+              onChange={(e) => setCreateParentId(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">{t("categories.create.parentRoot")}</option>
+              {parentOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            disabled={creating}
+            className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
-            <option value="">{t("categories.create.parentRoot")}</option>
-            {parentOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="submit"
-          disabled={creating}
-          className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
-          {creating
-            ? t("categories.create.submitting")
-            : t("categories.create.submit")}
-        </button>
+            {creating
+              ? t("categories.create.submitting")
+              : t("categories.create.submit")}
+          </button>
+        </div>
+        <IconColorPicker
+          value={{ icon: createIcon, color: createColor }}
+          onChange={(next) => {
+            setCreateIcon(next.icon);
+            setCreateColor(next.color);
+          }}
+        />
       </form>
       {createError && (
         <p className="text-sm text-red-600 dark:text-red-400">{createError}</p>
@@ -426,6 +449,13 @@ function CategoriesPage() {
                     className={inputClass}
                   />
                 </label>
+                <IconColorPicker
+                  value={{ icon: editIcon, color: editColor }}
+                  onChange={(next) => {
+                    setEditIcon(next.icon);
+                    setEditColor(next.color);
+                  }}
+                />
                 {editError && (
                   <p className="text-sm text-red-600 dark:text-red-400">
                     {editError}

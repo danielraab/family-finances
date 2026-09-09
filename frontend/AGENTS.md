@@ -254,6 +254,50 @@ it works the same on a phone as on a desktop:
   otherwise-untouched category, matching the backend's "only a category
   explicitly supplied is validated" rule.
 
+## Entity icons & colours
+
+An account or category may carry an optional `icon` and an optional `color`
+(two independent fields; either, both, or neither). Both are short opaque
+strings the backend never interprets — the meaning lives entirely here:
+
+- `src/lib/entityIcons.ts` — the curated icon set as ordered groups
+  (`ENTITY_ICON_GROUPS`), each group an i18n heading key plus
+  `{ token, Component }` entries. Every `Component` is a **static named
+  import** from `lucide-react` (like `FeatureOverview.tsx`), so the bundle
+  carries only these ~45 icons — never a wildcard or runtime-dynamic
+  import. This map is also the allow-list: `entityIconComponent(token)`
+  returns `undefined` for anything not in it.
+- `src/lib/entityColors.ts` — the eight-token palette (`ENTITY_COLORS`,
+  the validated `dataviz` categorical hues). The hex lives in
+  `src/styles.css` as `--entity-<token>` custom properties that switch on
+  `.dark`, so a colour adapts to the theme with no re-render;
+  `entityColorVar(token)` returns `var(--entity-…)` or `undefined` for an
+  unknown token. Keep the two files in sync.
+- `src/components/EntityIcon.tsx` — the badge: a coloured square (or
+  neutral square when only an icon is set, or bare colour chip when only a
+  colour is set) holding the glyph; renders `null` when neither is set, and
+  degrades to "no glyph" / "no colour" for tokens this build doesn't know.
+- `src/components/AccountLabel.tsx` / `CategoryLabel.tsx` — `<EntityIcon>`
+  then the name. **Used everywhere an account or category is shown by name
+  except native `<select>`/`<option>`** (an option can't hold an icon), so
+  the entry-form account/category pickers and the ledger/reports filter
+  dropdowns stay text-only, deliberately. Current call sites: the accounts
+  overview, account detail header, `AccountCard.tsx` (home), the
+  `/categories` tree, and the account column of the entry ledger and the
+  reports results table.
+- `src/components/IconColorPicker.tsx` — controlled `{ icon, color }` where
+  `""` means unset. A field-styled trigger (shows the current badge or a
+  placeholder) opens a `@headlessui/react` `Popover` panel with the colour
+  swatch row above the grouped, scrollable icon grid, each independently
+  set/cleared. It's a `Popover` (portaled `PopoverPanel anchor="bottom
+  start"`) rather than inline or a nested `Dialog` so it composes inside the
+  `/categories` edit dialog. Wired into `AccountForm.tsx` and both the
+  create form and the edit dialog on `categories.tsx`. The forms always
+  send `icon`/`color` in the request body (an empty string clears the
+  field on edit; on create it just stays unset).
+- i18n keys live under `entityIcons.*` (group headings, "Icon"/"Colour"
+  labels, "None").
+
 ## Charts
 
 No charting library is a dependency, deliberately — charts are hand-rolled

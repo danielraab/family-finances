@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
+import { AccountLabel } from "../components/AccountLabel";
 import { BarChart, type BarChartSeries } from "../components/charts/BarChart";
 import {
   LineChart,
@@ -203,7 +204,7 @@ function AccountDetails() {
       <header className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">
-            {account.title}
+            <AccountLabel account={account} iconSize={26} />
           </h1>
           {account.description && (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">

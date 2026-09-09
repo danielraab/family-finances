@@ -9,11 +9,31 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Entity (account/category) colour palette — the eight validated
+     categorical hues. Mirrored in src/lib/entityColors.ts; keep in sync. */
+  --entity-blue: #2a78d6;
+  --entity-orange: #eb6834;
+  --entity-aqua: #1baf7a;
+  --entity-yellow: #eda100;
+  --entity-magenta: #e87ba4;
+  --entity-green: #008300;
+  --entity-violet: #4a3aa7;
+  --entity-red: #e34948;
 }
 
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+
+  --entity-blue: #3987e5;
+  --entity-orange: #d95926;
+  --entity-aqua: #199e70;
+  --entity-yellow: #c98500;
+  --entity-magenta: #d55181;
+  --entity-green: #008300;
+  --entity-violet: #9085e9;
+  --entity-red: #e66767;
 }
 
 @theme inline {

@@ -42,6 +42,8 @@ func (s *AccountStore) Create(_ context.Context, ownerID string, in account.New)
 		OwnerID:            ownerID,
 		Title:              in.Title,
 		Description:        in.Description,
+		Icon:               in.Icon,
+		Color:              in.Color,
 		TypeID:             in.TypeID,
 		Currency:           in.Currency,
 		FinancialInstitute: in.FinancialInstitute,
@@ -89,6 +91,12 @@ func (s *AccountStore) Update(_ context.Context, ownerID, id string, upd account
 	}
 	if upd.Description != nil {
 		acc.Description = *upd.Description
+	}
+	if upd.Icon != nil {
+		acc.Icon = *upd.Icon
+	}
+	if upd.Color != nil {
+		acc.Color = *upd.Color
 	}
 	if upd.TypeID != nil {
 		acc.TypeID = *upd.TypeID

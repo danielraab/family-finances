@@ -785,6 +785,8 @@ export interface components {
         Account: {
             /** Format: date */
             closing_date?: string;
+            /** @description Optional opaque presentation token naming a client colour. Stored and echoed verbatim; never interpreted by the backend. Absent when unset. */
+            color?: string;
             /** Format: date-time */
             created_at: string;
             /** @description ISO-4217 shape (three uppercase letters), not a canonical list. */
@@ -793,6 +795,8 @@ export interface components {
             /** @description Reversible; blocks creating new entries against the account. Independent of closing_date (informational only) and of soft delete. */
             disabled: boolean;
             financial_institute?: string;
+            /** @description Optional opaque presentation token naming a client icon. Stored and echoed verbatim; never interpreted by the backend. Absent when unset. */
+            icon?: string;
             id: string;
             /** Format: date */
             opening_date: string;
@@ -804,9 +808,13 @@ export interface components {
         AccountCreate: {
             /** Format: date */
             closing_date?: string;
+            /** @description Optional opaque client colour token; not interpreted by the backend. */
+            color?: string;
             currency: string;
             description?: string;
             financial_institute?: string;
+            /** @description Optional opaque client icon token; not interpreted by the backend. */
+            icon?: string;
             /** Format: date */
             opening_date: string;
             title: string;
@@ -831,9 +839,13 @@ export interface components {
              * @description Explicit null clears it (re-opening the account).
              */
             closing_date?: string | null;
+            /** @description Optional opaque client colour token. An empty string clears it; omitting the field leaves it unchanged. */
+            color?: string;
             currency?: string;
             description?: string;
             financial_institute?: string;
+            /** @description Optional opaque client icon token. An empty string clears it; omitting the field leaves it unchanged. */
+            icon?: string;
             /** Format: date */
             opening_date?: string;
             title?: string;
@@ -866,10 +878,14 @@ export interface components {
             period: string;
         };
         Category: {
+            /** @description Optional opaque presentation token naming a client colour. Stored and echoed verbatim; never interpreted by the backend. Absent when unset. */
+            color?: string;
             /** Format: date-time */
             created_at: string;
             /** @description Blocks the category from being newly selected on an entry; existing entries and child categories referencing it are unaffected. */
             disabled: boolean;
+            /** @description Optional opaque presentation token naming a client icon. Stored and echoed verbatim; never interpreted by the backend. Absent when unset. */
+            icon?: string;
             id: string;
             name: string;
             /** @description Absent for a root category. */
@@ -878,6 +894,10 @@ export interface components {
             sort_order: number;
         };
         CategoryWrite: {
+            /** @description Optional opaque client colour token. An empty string clears it; omitting the field leaves it unchanged. */
+            color?: string;
+            /** @description Optional opaque client icon token. An empty string clears it; omitting the field leaves it unchanged. */
+            icon?: string;
             name?: string;
             /** @description Explicit null makes it a root category. */
             parent_id?: string | null;

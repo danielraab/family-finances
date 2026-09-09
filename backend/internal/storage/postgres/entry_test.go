@@ -720,19 +720,30 @@ func TestPGEntryMigration0018BackfillPreservesBalances(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadMigrations: %v", err)
 	}
-	var pre, at0018 []migration
+	var pre, at0018, post []migration
 	for _, m := range all {
 		if m.version < "0018" {
 			pre = append(pre, m)
 		} else if m.version == "0018" {
 			at0018 = append(at0018, m)
+		} else {
+			post = append(post, m)
 		}
 	}
 	if len(at0018) != 1 {
 		t.Fatalf("found %d migrations at version 0018, want 1", len(at0018))
 	}
+	// Apply everything except 0018: the pre-0018 schema, plus every later
+	// migration (all of which only add accounts/categories columns and never
+	// touch `entries`), so the account/category store fixtures below run
+	// against the schema the current store code expects. `entries` still has
+	// its pre-0018 shape — no balance_reading column — which is what this
+	// test needs before it hand-inserts legacy-shape adjustment rows.
 	if err := runMigrations(ctx, pool, pre); err != nil {
 		t.Fatalf("apply pre-0018 migrations: %v", err)
+	}
+	if err := runMigrations(ctx, pool, post); err != nil {
+		t.Fatalf("apply post-0018 migrations: %v", err)
 	}
 
 	authStore := NewAuthStore(pool)

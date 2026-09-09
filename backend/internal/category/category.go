@@ -7,25 +7,48 @@ package category
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 	"time"
 )
 
-// DefaultNames is the starter set of root categories seeded for every new
-// user (Service.SeedDefaults, invoked as an internal/auth.NewUserHook), in
-// the order they're assigned sort_order — the same set regardless of the
-// user's language, since a seeded category is immediately theirs to rename
-// like any other.
-var DefaultNames = []string{
-	"Salary",
-	"Groceries",
-	"Rent",
-	"Utilities",
-	"Transportation",
-	"Entertainment",
-	"Health",
-	"Other",
+// DefaultCategory is one entry in the starter set seeded for every new user
+// (Service.SeedDefaults, invoked as an internal/auth.NewUserHook). Icon and
+// Color are opaque client presentation tokens — the same fixed assignment
+// for every user, independent of language — so a fresh tree looks
+// considered rather than blank; the user is free to change or clear them
+// like any other category.
+type DefaultCategory struct {
+	Name  string
+	Icon  string
+	Color string
 }
+
+// DefaultCategories is the starter set of root categories, in the order
+// they're assigned sort_order. The icon tokens come from the web client's
+// curated set and the color tokens from its palette (see the
+// account-category-icon-color change).
+var DefaultCategories = []DefaultCategory{
+	{"Salary", "hand-coins", "green"},
+	{"Groceries", "shopping-cart", "orange"},
+	{"Rent", "house", "blue"},
+	{"Utilities", "zap", "yellow"},
+	{"Transportation", "car", "aqua"},
+	{"Entertainment", "gamepad-2", "magenta"},
+	{"Health", "heart", "red"},
+	{"Other", "circle-dashed", "violet"},
+}
+
+// DefaultNames lists the seeded category names in sort order. Derived from
+// DefaultCategories, which is the single source of truth for the starter
+// set.
+var DefaultNames = func() []string {
+	names := make([]string, len(DefaultCategories))
+	for i, c := range DefaultCategories {
+		names[i] = c.Name
+	}
+	return names
+}()
 
 // Category is one node in a category tree private to its owner. ParentID
 // is nil for a root category.
@@ -33,6 +56,8 @@ type Category struct {
 	ID        string     `json:"id"`
 	ParentID  *string    `json:"parent_id,omitempty"`
 	Name      string     `json:"name"`
+	Icon      string     `json:"icon,omitempty"`
+	Color     string     `json:"color,omitempty"`
 	SortOrder int        `json:"sort_order"`
 	Disabled  bool       `json:"disabled"`
 	CreatedAt time.Time  `json:"created_at"`
@@ -69,6 +94,8 @@ func (o *OptionalID) UnmarshalJSON(b []byte) error {
 type New struct {
 	ParentID *string
 	Name     string
+	Icon     string
+	Color    string
 }
 
 // Update is a partial change; a nil Name leaves it untouched. ParentID uses
@@ -77,6 +104,8 @@ type New struct {
 // (Disable/Enable, MoveUp/MoveDown), never through Update.
 type Update struct {
 	Name     *string
+	Icon     *string
+	Color    *string
 	ParentID OptionalID
 }
 
@@ -85,4 +114,15 @@ func validateName(name string) error {
 		return ErrInvalidValue
 	}
 	return nil
+}
+
+// presentationToken bounds an icon or color value: a short, opaque
+// client-side token the backend stores and echoes but never interprets.
+// An empty value means "unset" and is always allowed.
+var presentationToken = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
+
+// validPresentationToken reports whether s is an acceptable icon/color
+// value — empty (unset) or matching presentationToken.
+func validPresentationToken(s string) bool {
+	return s == "" || presentationToken.MatchString(s)
 }

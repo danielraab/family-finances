@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { compact } from "../lib/compact";
+import { IconColorPicker } from "./IconColorPicker";
 
 type AccountType = components["schemas"]["AccountType"];
 type AccountCreate = components["schemas"]["AccountCreate"];
@@ -26,6 +27,8 @@ function listCurrencies(): string[] {
 export type AccountFormValues = {
   title: string;
   description: string;
+  icon: string;
+  color: string;
   type_id: string;
   currency: string;
   financial_institute: string;
@@ -36,6 +39,8 @@ export type AccountFormValues = {
 export const emptyAccountForm: AccountFormValues = {
   title: "",
   description: "",
+  icon: "",
+  color: "",
   type_id: "",
   currency: "",
   financial_institute: "",
@@ -129,6 +134,10 @@ export function AccountForm({
       type_id: values.type_id,
       currency: values.currency,
       opening_date: values.opening_date,
+      // Always sent: "" leaves the field unset on create and clears it on
+      // edit, so the picker can reset a previously-chosen icon/colour.
+      icon: values.icon,
+      color: values.color,
       ...compact({
         description: values.description.trim() || undefined,
         financial_institute: values.financial_institute.trim() || undefined,
@@ -162,6 +171,14 @@ export function AccountForm({
           className={`${inputClass} min-h-16`}
         />
       </label>
+
+      <IconColorPicker
+        value={{ icon: values.icon, color: values.color }}
+        onChange={(next) => {
+          set("icon", next.icon);
+          set("color", next.color);
+        }}
+      />
 
       <label className="flex flex-col gap-1.5 text-sm font-medium">
         {t("accounts.form.type")}

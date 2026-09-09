@@ -9,11 +9,23 @@ package account
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"at.draab/familyfinances/internal/settings"
 )
+
+// presentationToken bounds an icon or color value: a short, opaque
+// client-side token the backend stores and echoes but never interprets.
+// An empty value means "unset" and is always allowed.
+var presentationToken = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
+
+// validPresentationToken reports whether s is an acceptable icon/color
+// value — empty (unset) or matching presentationToken.
+func validPresentationToken(s string) bool {
+	return s == "" || presentationToken.MatchString(s)
+}
 
 // dateLayout is the wire format for opening_date/closing_date — a calendar
 // date with no time-of-day or zone, matching an HTML <input type="date">.
@@ -87,6 +99,8 @@ type Account struct {
 	ID                 string     `json:"id"`
 	Title              string     `json:"title"`
 	Description        string     `json:"description,omitempty"`
+	Icon               string     `json:"icon,omitempty"`
+	Color              string     `json:"color,omitempty"`
 	TypeID             string     `json:"type_id"`
 	Currency           string     `json:"currency"`
 	FinancialInstitute string     `json:"financial_institute,omitempty"`
@@ -129,6 +143,8 @@ var DefaultTypeTitles = []string{
 type New struct {
 	Title              string
 	Description        string
+	Icon               string
+	Color              string
 	TypeID             string
 	Currency           string
 	FinancialInstitute string
@@ -142,6 +158,8 @@ type New struct {
 type Update struct {
 	Title              *string
 	Description        *string
+	Icon               *string
+	Color              *string
 	TypeID             *string
 	Currency           *string
 	FinancialInstitute *string
@@ -159,6 +177,9 @@ func validateNew(in New) error {
 		return ErrInvalidValue
 	}
 	if err := settings.ValidateCurrency(in.Currency); err != nil {
+		return ErrInvalidValue
+	}
+	if !validPresentationToken(in.Icon) || !validPresentationToken(in.Color) {
 		return ErrInvalidValue
 	}
 	if in.ClosingDate != nil && in.ClosingDate.Time.Before(in.OpeningDate.Time) {
@@ -181,6 +202,12 @@ func validateUpdate(current Account, upd Update) error {
 		if err := settings.ValidateCurrency(*upd.Currency); err != nil {
 			return ErrInvalidValue
 		}
+	}
+	if upd.Icon != nil && !validPresentationToken(*upd.Icon) {
+		return ErrInvalidValue
+	}
+	if upd.Color != nil && !validPresentationToken(*upd.Color) {
+		return ErrInvalidValue
 	}
 
 	opening := current.OpeningDate

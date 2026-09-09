@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { amountColorClass, formatAmount } from "../lib/amount";
 import type { Account } from "../lib/useAccountsWithBalances";
+import { AccountLabel } from "./AccountLabel";
 
 function PlusGlyph() {
   return (
@@ -48,7 +49,7 @@ export function AccountCard({
         params={{ accountId: account.id }}
         className="flex flex-1 flex-col gap-1 transition-opacity hover:opacity-80"
       >
-        <span className="font-medium">{account.title}</span>
+        <AccountLabel account={account} className="font-medium" />
         {account.financial_institute && (
           <span className="text-xs text-zinc-500 dark:text-zinc-400">
             {account.financial_institute}
