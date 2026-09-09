@@ -24,6 +24,9 @@ type Entry = components["schemas"]["Entry"];
 type FlowBucket = components["schemas"]["FlowBucket"];
 type BalancePoint = components["schemas"]["BalancePoint"];
 
+// Only one chart is on screen at a time; the switcher below picks which.
+type ChartView = "flow" | "balance";
+
 const RECENT_LIMIT = 5;
 
 // dataviz-skill categorical slots 6 (green) / 8 (red) — validated together
@@ -46,6 +49,7 @@ function AccountDetails() {
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
   const [balance, setBalance] = useState<number | null>(null);
   const [recent, setRecent] = useState<Entry[] | null>(null);
+  const [chartView, setChartView] = useState<ChartView>("flow");
   const [chartYear, setChartYear] = useState(() => new Date().getFullYear());
   const [flowBuckets, setFlowBuckets] = useState<FlowBucket[] | null>(null);
   // First of the month the balance line is showing — a single Date so
@@ -91,7 +95,10 @@ function AccountDetails() {
     };
   }, [accountId]);
 
+  // Each chart fetches only while it's the one on screen (and re-fetches when
+  // shown again), so opening the page loads a single series, not both.
   useEffect(() => {
+    if (chartView !== "flow") return;
     let cancelled = false;
     api
       .GET("/api/entries/flow-summary", {
@@ -105,9 +112,10 @@ function AccountDetails() {
     return () => {
       cancelled = true;
     };
-  }, [accountId, chartYear]);
+  }, [accountId, chartYear, chartView]);
 
   useEffect(() => {
+    if (chartView !== "balance") return;
     let cancelled = false;
     setBalancePoints(null);
     api
@@ -127,7 +135,7 @@ function AccountDetails() {
     return () => {
       cancelled = true;
     };
-  }, [accountId, balanceMonth]);
+  }, [accountId, balanceMonth, chartView]);
 
   if (account === undefined) {
     return null;
@@ -271,100 +279,114 @@ function AccountDetails() {
       </dl>
 
       <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-            {t("accounts.details.chart.title")}
-          </h2>
-          <div className="flex items-center gap-2 text-sm">
-            <button
-              type="button"
-              onClick={() => setChartYear((y) => y - 1)}
-              aria-label={t("accounts.details.chart.previousYear")}
-              className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-            >
-              ◀
-            </button>
-            <span className="min-w-10 text-center font-medium tabular-nums">
-              {chartYear}
-            </span>
-            <button
-              type="button"
-              onClick={() => setChartYear((y) => y + 1)}
-              aria-label={t("accounts.details.chart.nextYear")}
-              className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-            >
-              ▶
-            </button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-0.5 rounded-md bg-black/[.04] p-0.5 text-sm dark:bg-white/[.06]">
+            {(["flow", "balance"] as const).map((view) => (
+              <button
+                key={view}
+                type="button"
+                aria-pressed={chartView === view}
+                onClick={() => setChartView(view)}
+                className={`rounded px-3 py-1 font-medium transition-colors ${
+                  chartView === view
+                    ? "bg-white text-black shadow-sm dark:bg-neutral-700 dark:text-white"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                }`}
+              >
+                {view === "flow"
+                  ? t("accounts.details.chart.title")
+                  : t("accounts.details.balanceChart.title")}
+              </button>
+            ))}
           </div>
-        </div>
-        {flowBuckets === null ? null : (
-          <BarChart
-            series={chartSeries}
-            data={chartData}
-            formatValue={(v) =>
-              formatAmount(
-                v,
-                account.currency,
-                displayedDecimalPlaces,
-                i18n.resolvedLanguage ?? "en",
-              )
-            }
-          />
-        )}
-      </section>
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-            {t("accounts.details.balanceChart.title")}
-          </h2>
-          <div className="flex items-center gap-2 text-sm">
-            <button
-              type="button"
-              onClick={() =>
-                setBalanceMonth(
-                  (d) => new Date(d.getFullYear(), d.getMonth() - 1, 1),
-                )
-              }
-              aria-label={t("accounts.details.balanceChart.previousMonth")}
-              className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-            >
-              ◀
-            </button>
-            <span className="min-w-32 text-center font-medium tabular-nums">
-              {balanceMonth.toLocaleDateString(i18n.resolvedLanguage, {
-                month: "long",
-                year: "numeric",
-              })}
-            </span>
-            <button
-              type="button"
-              onClick={() =>
-                setBalanceMonth(
-                  (d) => new Date(d.getFullYear(), d.getMonth() + 1, 1),
-                )
-              }
-              aria-label={t("accounts.details.balanceChart.nextMonth")}
-              className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-            >
-              ▶
-            </button>
-          </div>
+          {chartView === "flow" ? (
+            <div className="flex items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={() => setChartYear((y) => y - 1)}
+                aria-label={t("accounts.details.chart.previousYear")}
+                className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                ◀
+              </button>
+              <span className="min-w-10 text-center font-medium tabular-nums">
+                {chartYear}
+              </span>
+              <button
+                type="button"
+                onClick={() => setChartYear((y) => y + 1)}
+                aria-label={t("accounts.details.chart.nextYear")}
+                className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                ▶
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={() =>
+                  setBalanceMonth(
+                    (d) => new Date(d.getFullYear(), d.getMonth() - 1, 1),
+                  )
+                }
+                aria-label={t("accounts.details.balanceChart.previousMonth")}
+                className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                ◀
+              </button>
+              <span className="min-w-32 text-center font-medium tabular-nums">
+                {balanceMonth.toLocaleDateString(i18n.resolvedLanguage, {
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setBalanceMonth(
+                    (d) => new Date(d.getFullYear(), d.getMonth() + 1, 1),
+                  )
+                }
+                aria-label={t("accounts.details.balanceChart.nextMonth")}
+                className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                ▶
+              </button>
+            </div>
+          )}
         </div>
-        {balancePoints === null ? null : (
-          <LineChart
-            series={balanceSeries}
-            data={balanceData}
-            formatValue={(v) =>
-              formatAmount(
-                v,
-                account.currency,
-                displayedDecimalPlaces,
-                i18n.resolvedLanguage ?? "en",
-              )
-            }
-          />
-        )}
+
+        {chartView === "flow"
+          ? flowBuckets !== null && (
+              <BarChart
+                series={chartSeries}
+                data={chartData}
+                formatValue={(v) =>
+                  formatAmount(
+                    v,
+                    account.currency,
+                    displayedDecimalPlaces,
+                    i18n.resolvedLanguage ?? "en",
+                  )
+                }
+              />
+            )
+          : balancePoints !== null && (
+              <LineChart
+                series={balanceSeries}
+                data={balanceData}
+                formatValue={(v) =>
+                  formatAmount(
+                    v,
+                    account.currency,
+                    displayedDecimalPlaces,
+                    i18n.resolvedLanguage ?? "en",
+                  )
+                }
+              />
+            )}
       </section>
 
       <section className="flex flex-col gap-3">

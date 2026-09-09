@@ -100,6 +100,12 @@ export function BarChart({
   const barsWidth =
     series.length * barThickness + Math.max(series.length - 1, 0) * BAR_GAP;
 
+  // The tooltip box is always rendered (just visually hidden when nothing is
+  // selected) so hovering a group never shifts the page below it. When idle it
+  // shows the first group's shape purely to hold the right height.
+  const tooltipVisible = activeIndex !== null && !!data[activeIndex];
+  const tooltipDatum = activeIndex !== null ? data[activeIndex] : data[0];
+
   return (
     <div className="flex flex-col gap-3">
       <ul className="flex flex-wrap gap-4 text-xs text-zinc-600 dark:text-zinc-400">
@@ -237,28 +243,29 @@ export function BarChart({
         </svg>
       </div>
 
-      {activeIndex !== null && data[activeIndex] && (
-        <div className="flex flex-col gap-1 rounded-md border border-black/10 bg-white px-3 py-2 text-xs shadow-sm dark:border-white/10 dark:bg-neutral-900">
-          <span className="font-medium">{data[activeIndex].category}</span>
-          {series.map((s, i) => (
-            <span key={s.label} className="flex items-center gap-1.5">
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 8 8"
-                className="inline-block h-2 w-2"
-              >
-                <rect width="8" height="8" rx="2" className={s.fillClassName} />
-              </svg>
-              <span className="text-zinc-500 dark:text-zinc-400">
-                {s.label}
-              </span>
-              <span className="font-mono tabular-nums">
-                {formatValue(data[activeIndex]?.values[i] ?? 0)}
-              </span>
+      <div
+        aria-hidden={!tooltipVisible}
+        className={`flex flex-col gap-1 rounded-md border border-black/10 bg-white px-3 py-2 text-xs shadow-sm dark:border-white/10 dark:bg-neutral-900${
+          tooltipVisible ? "" : " invisible"
+        }`}
+      >
+        <span className="font-medium">{tooltipDatum?.category ?? " "}</span>
+        {series.map((s, i) => (
+          <span key={s.label} className="flex items-center gap-1.5">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 8 8"
+              className="inline-block h-2 w-2"
+            >
+              <rect width="8" height="8" rx="2" className={s.fillClassName} />
+            </svg>
+            <span className="text-zinc-500 dark:text-zinc-400">{s.label}</span>
+            <span className="font-mono tabular-nums">
+              {formatValue(tooltipDatum?.values[i] ?? 0)}
             </span>
-          ))}
-        </div>
-      )}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
