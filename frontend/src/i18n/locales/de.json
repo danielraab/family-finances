@@ -242,6 +242,12 @@
         "previousYear": "Vorheriges Jahr",
         "nextYear": "Nächstes Jahr"
       },
+      "balanceChart": {
+        "title": "Kontostand im Monatsverlauf",
+        "series": "Kontostand",
+        "previousMonth": "Vorheriger Monat",
+        "nextMonth": "Nächster Monat"
+      },
       "recentEntries": "Letzte Buchungen",
       "seeAll": "Alle anzeigen",
       "noEntries": "Noch keine Buchungen."

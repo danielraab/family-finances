@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId } from "react";
+import { niceMax, useContainerWidth, usePinnableSelection } from "./internal";
 
 /** One series (a fixed identity across every category — e.g. "Income"). */
 export type BarChartSeries = {
@@ -28,17 +29,6 @@ const TICK_COUNT = 4;
 // clips anything outside it by default.
 const MARGIN_LEFT = 60;
 const MARGIN_TOP = 10;
-
-/** Rounds max up to a "nice" number (1/2/5 × a power of ten) for clean axis ticks. */
-function niceMax(value: number): number {
-  if (value <= 0) return 1;
-  const exponent = Math.floor(Math.log10(value));
-  const magnitude = 10 ** exponent;
-  const fraction = value / magnitude;
-  const niceFraction =
-    fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
-  return niceFraction * magnitude;
-}
 
 /**
  * A hand-rolled, dependency-free grouped bar chart — no charting library, per
@@ -73,42 +63,10 @@ export function BarChart({
   // The group whose tooltip is transiently shown while hovered/focused, and
   // the one pinned by a click. A pin outlives the pointer; hover still wins
   // for the preview while it lasts.
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
-  const activeIndex = hoverIndex ?? pinnedIndex;
-  const [containerWidth, setContainerWidth] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { pinnedIndex, activeIndex, setHoverIndex, togglePin } =
+    usePinnableSelection();
+  const { containerRef, containerWidth } = useContainerWidth();
   const titleId = useId();
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) setContainerWidth(entry.contentRect.width);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  // While a group is pinned, a click anywhere else (the pinning/re-pinning
-  // clicks stop propagation before they reach here) or Escape releases it.
-  useEffect(() => {
-    if (pinnedIndex === null) return;
-    const release = () => setPinnedIndex(null);
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPinnedIndex(null);
-    };
-    window.addEventListener("click", release);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("click", release);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [pinnedIndex]);
-
-  const togglePin = (groupIndex: number) =>
-    setPinnedIndex((prev) => (prev === groupIndex ? null : groupIndex));
 
   const max = niceMax(
     Math.max(

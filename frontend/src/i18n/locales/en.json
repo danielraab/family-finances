@@ -242,6 +242,12 @@
         "previousYear": "Previous year",
         "nextYear": "Next year"
       },
+      "balanceChart": {
+        "title": "Balance over the month",
+        "series": "Balance",
+        "previousMonth": "Previous month",
+        "nextMonth": "Next month"
+      },
       "recentEntries": "Recent entries",
       "seeAll": "See all",
       "noEntries": "No entries yet."

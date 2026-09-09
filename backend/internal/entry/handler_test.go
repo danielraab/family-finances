@@ -430,3 +430,121 @@ func TestHandlerFlowSummaryInvalidYearRejected(t *testing.T) {
 		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
 	}
 }
+
+func TestHandlerBalanceSeriesRequiresAuth(t *testing.T) {
+	h, _, _ := newHandlerFixture()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/entries/balance-series?unit=day&year=2026&month=3", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestHandlerBalanceSeries(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	for _, body := range []string{
+		`{"account_id":"acc1","kind":"transaction","amount":100000,"booking_timestamp":"2026-02-01T00:00:00Z","title":"x","category_id":"cat1"}`,
+		`{"account_id":"acc1","kind":"transaction","amount":-2500,"booking_timestamp":"2026-03-10T12:00:00Z","title":"y","category_id":"cat1"}`,
+	} {
+		h.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	}
+
+	target := "/api/entries/balance-series?account_id=acc1&unit=day&year=2026&month=3"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", target, nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "GET", target, rec)
+	var got struct {
+		Points []entry.BalancePoint `json:"points"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Points) != 32 {
+		t.Fatalf("len(Points) = %d, want 32", len(got.Points))
+	}
+	if got.Points[0].Period != "2026-03-01" || got.Points[31].Period != "2026-04-01" {
+		t.Fatalf("periods = %q..%q, want 2026-03-01..2026-04-01", got.Points[0].Period, got.Points[31].Period)
+	}
+	if len(got.Points[9].Balances) != 1 || got.Points[9].Balances[0].Amount != 100000 { // 10 Mar
+		t.Fatalf("points[9] balances = %+v, want [{EUR 100000}]", got.Points[9].Balances)
+	}
+	if got.Points[10].Balances[0].Amount != 97500 { // 11 Mar
+		t.Fatalf("points[10] EUR = %d, want 97500", got.Points[10].Balances[0].Amount)
+	}
+}
+
+func TestHandlerBalanceSeriesRejectsFilteringParams(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	user := auth.User{ID: "u1"}
+
+	for _, q := range []string{
+		"category_id=cat1", "category_mode=exact", "tag_id=t1",
+		"from=2026-03-01T00:00:00Z", "to=2026-03-31T00:00:00Z", "q=coffee",
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/balance-series?unit=day&year=2026&month=3&"+q, nil), user))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want 400", q, rec.Code)
+		}
+	}
+}
+
+func TestHandlerBalanceSeriesRequiresMonth(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/balance-series?unit=day&year=2026", nil), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestHandlerBalanceSeriesRejectsMonthUnit(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/balance-series?unit=month&year=2026&month=3", nil), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestHandlerBalanceSeriesIgnoresUnownedAccount(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u2", "USD")
+	user := auth.User{ID: "u1"}
+
+	target := "/api/entries/balance-series?account_id=acc2&unit=day&year=2026&month=3"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", target, nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (an unowned account_id is silently ignored), body = %s", rec.Code, rec.Body)
+	}
+	var got struct {
+		Points []entry.BalancePoint `json:"points"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Points) != 32 {
+		t.Fatalf("len(Points) = %d, want 32", len(got.Points))
+	}
+	for _, p := range got.Points {
+		if len(p.Balances) != 0 {
+			t.Fatalf("point %s balances = %+v, want [] (no owned accounts matched)", p.Period, p.Balances)
+		}
+	}
+}

@@ -1112,3 +1112,244 @@ func TestFlowSummaryUsesCallerTimezoneForBucketBoundaries(t *testing.T) {
 		t.Fatalf("February (America/New_York) bucket = %+v, want empty — the entry belongs to January there", buckets[1].Income)
 	}
 }
+
+// balanceAt returns the amount for a currency at one BalancePoint, or a
+// fatal error if that currency is not listed on the point.
+func balanceAt(t *testing.T, p entry.BalancePoint, currency string) int64 {
+	t.Helper()
+	for _, b := range p.Balances {
+		if b.Currency == currency {
+			return b.Amount
+		}
+	}
+	t.Fatalf("point %s has no %s balance: %+v", p.Period, currency, p.Balances)
+	return 0
+}
+
+func TestBalanceSeriesHasOnePointPerDayPlusAClosingPoint(t *testing.T) {
+	svc, accounts, _, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+
+	points, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+		Unit: entry.FlowUnitDay, Year: 2026, Month: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 32 {
+		t.Fatalf("len(points) = %d, want 32 (31 days of March + a closing point)", len(points))
+	}
+	if points[0].Period != "2026-03-01" {
+		t.Fatalf("points[0].Period = %q, want 2026-03-01", points[0].Period)
+	}
+	if points[30].Period != "2026-03-31" {
+		t.Fatalf("points[30].Period = %q, want 2026-03-31", points[30].Period)
+	}
+	if points[31].Period != "2026-04-01" {
+		t.Fatalf("points[31].Period = %q, want 2026-04-01 (closing point)", points[31].Period)
+	}
+}
+
+func TestBalanceSeriesFirstPointIsAllPriorHistory(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 12000, "2026-01-10T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -2000, "2026-02-20T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 500, "2026-03-05T12:00:00Z", ptr("cat1"))
+
+	points, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+		Unit: entry.FlowUnitDay, Year: 2026, Month: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 12000 - 2000, and nothing booked on or after 2026-03-01T00:00:00.
+	if got := balanceAt(t, points[0], "EUR"); got != 10000 {
+		t.Fatalf("points[0] EUR = %d, want 10000 (prior history only)", got)
+	}
+}
+
+func TestBalanceSeriesTransactionMovesTheFollowingDay(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100000, "2026-02-01T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -2500, "2026-03-10T12:00:00Z", ptr("cat1"))
+
+	points, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+		Unit: entry.FlowUnitDay, Year: 2026, Month: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := balanceAt(t, points[9], "EUR"); got != 100000 { // 2026-03-10
+		t.Fatalf("points[9] (10 Mar) EUR = %d, want 100000", got)
+	}
+	if got := balanceAt(t, points[10], "EUR"); got != 97500 { // 2026-03-11
+		t.Fatalf("points[10] (11 Mar) EUR = %d, want 97500", got)
+	}
+}
+
+func TestBalanceSeriesMidMonthAdjustmentReanchorsEveryLaterPoint(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 48000, "2026-02-15T00:00:00Z", ptr("cat1"))
+	// Reading 50000 against a pre-adjustment balance of 48000 — a +2000 delta.
+	mustCreate(t, svc, "u1", "acc1", entry.KindBalanceAdjustment, 50000, "2026-03-15T10:00:00Z", nil)
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 1000, "2026-03-20T09:00:00Z", ptr("cat1"))
+
+	points, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+		Unit: entry.FlowUnitDay, Year: 2026, Month: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := balanceAt(t, points[14], "EUR"); got != 48000 { // 15 Mar, before the adjustment's day
+		t.Fatalf("points[14] (15 Mar) EUR = %d, want 48000", got)
+	}
+	if got := balanceAt(t, points[15], "EUR"); got != 50000 { // 16 Mar, adjustment now in effect
+		t.Fatalf("points[15] (16 Mar) EUR = %d, want 50000 (re-anchored)", got)
+	}
+	if got := balanceAt(t, points[20], "EUR"); got != 51000 { // 21 Mar, + the 1000 txn
+		t.Fatalf("points[20] (21 Mar) EUR = %d, want 51000", got)
+	}
+	if got := balanceAt(t, points[31], "EUR"); got != 51000 { // closing point
+		t.Fatalf("closing point EUR = %d, want 51000", got)
+	}
+}
+
+func TestBalanceSeriesUsesCallerTimezoneForDayBoundaries(t *testing.T) {
+	build := func(tz string) []entry.BalancePoint {
+		accounts := newStubAccounts()
+		categories := newStubCategories()
+		tags := newStubTags()
+		tzs := newStubTimezones()
+		tzs.tz["u1"] = tz
+		svc := entry.NewService(memory.NewEntryStore(), accounts, categories, tags, entry.WithTimezoneLookup(tzs))
+		accounts.add("acc1", "u1", "EUR")
+		categories.add("cat1")
+		// 23:30Z on 9 March is 00:30 on 10 March in Europe/Vienna (UTC+1).
+		mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 500, "2026-03-09T23:30:00Z", ptr("cat1"))
+		points, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+			Unit: entry.FlowUnitDay, Year: 2026, Month: 3,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return points
+	}
+
+	utc := build("UTC")
+	if got := balanceAt(t, utc[9], "EUR"); got != 500 { // 10 Mar: the entry is on 9 Mar UTC
+		t.Fatalf("UTC points[9] (10 Mar) EUR = %d, want 500", got)
+	}
+
+	vienna := build("Europe/Vienna")
+	if got := balanceAt(t, vienna[9], "EUR"); got != 0 { // 10 Mar: the entry is 00:30 on 10 Mar local
+		t.Fatalf("Vienna points[9] (10 Mar) EUR = %d, want 0", got)
+	}
+	if got := balanceAt(t, vienna[10], "EUR"); got != 500 { // 11 Mar: now in effect
+		t.Fatalf("Vienna points[10] (11 Mar) EUR = %d, want 500", got)
+	}
+}
+
+func TestBalanceSeriesGroupsByCurrencyAndAlwaysListsEveryCurrency(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "USD")
+	accounts.add("acc3", "u1", "EUR")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2026-02-01T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc3", entry.KindTransaction, 40, "2026-02-01T00:00:00Z", ptr("cat1"))
+	// acc2 (USD) has no entries at all.
+
+	points, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+		Unit: entry.FlowUnitDay, Year: 2026, Month: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range points {
+		if len(p.Balances) != 2 {
+			t.Fatalf("point %s has %d currencies, want 2 (EUR always listed, USD listed with 0)", p.Period, len(p.Balances))
+		}
+		if got := balanceAt(t, p, "EUR"); got != 140 { // acc1 + acc3
+			t.Fatalf("point %s EUR = %d, want 140", p.Period, got)
+		}
+		if got := balanceAt(t, p, "USD"); got != 0 {
+			t.Fatalf("point %s USD = %d, want 0 (present even though acc2 is empty)", p.Period, got)
+		}
+	}
+}
+
+func TestBalanceSeriesNoActivityIsAFlatLine(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 777, "2026-01-01T00:00:00Z", ptr("cat1"))
+
+	points, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+		Unit: entry.FlowUnitDay, Year: 2026, Month: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range points {
+		if got := balanceAt(t, p, "EUR"); got != 777 {
+			t.Fatalf("point %s EUR = %d, want 777 (flat — no activity in or after March)", p.Period, got)
+		}
+	}
+}
+
+func TestBalanceSeriesIgnoresSoftDeletedEntries(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2026-02-01T00:00:00Z", ptr("cat1"))
+	doomed := mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -30, "2026-03-05T12:00:00Z", ptr("cat1"))
+	if err := svc.Delete(context.Background(), "u1", doomed.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	points, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+		Unit: entry.FlowUnitDay, Year: 2026, Month: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := balanceAt(t, points[31], "EUR"); got != 100 {
+		t.Fatalf("closing point EUR = %d, want 100 (the -30 entry was deleted)", got)
+	}
+}
+
+func TestBalanceSeriesRejectsNonDayUnit(t *testing.T) {
+	svc, accounts, _, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+
+	_, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+		Unit: entry.FlowUnitMonth, Year: 2026, Month: 3,
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestBalanceSeriesRequiresMonth(t *testing.T) {
+	svc, accounts, _, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+
+	_, err := svc.BalanceSeries(context.Background(), "u1", entry.BalanceFilter{
+		Unit: entry.FlowUnitDay, Year: 2026,
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}

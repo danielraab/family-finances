@@ -1404,6 +1404,76 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/entries/balance-series:
+    get:
+      operationId: getEntriesBalanceSeries
+      summary: The caller's running account balance sampled per day over a month
+      description: >-
+        Returns the running balance of the caller's own, non-deleted
+        accounts sampled at each local midnight of year/month — one point at
+        00:00 on every calendar day of the month, plus a closing point at
+        00:00 on the first day of the following month — using the caller's
+        resolved timezone setting (see user-settings) to place those
+        midnight boundaries, default UTC. Each point's value is the balance
+        computed exactly as GET /api/accounts/{id}/balance computes it as of
+        that instant (a balance_adjustment acts as an anchor), grouped per
+        currency (the currency of the contributing accounts); accounts
+        sharing a currency are summed. Every currency present in the
+        selected accounts appears on every point, including with an amount
+        of 0 — unlike flow-summary, a balance line needs a value at every
+        point. A month with no activity is a run of identical points.
+        Unlike GET /api/entries and GET /api/entries/summary, this operation
+        accepts no category_id, category_mode, tag_id, from, to, or q — a
+        category- or tag-filtered "balance" is not a balance, since a
+        balance_adjustment carries neither; supplying any of them is a 400.
+      tags: [entries]
+      parameters:
+        - name: account_id
+          in: query
+          required: false
+          description: Repeatable. Omitted means every account the caller owns.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: unit
+          in: query
+          required: true
+          description: Only "day" is defined.
+          schema:
+            type: string
+            enum: [day]
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          required: true
+          description: 1-12.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: One point per day of the requested month, plus a closing point.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [points]
+                properties:
+                  points:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BalancePoint"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/entries/{id}:
     get:
       operationId: getEntry
@@ -2188,6 +2258,26 @@ components:
           items:
             $ref: "#/components/schemas/CurrencySum"
         outcome:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrencySum"
+
+    BalancePoint:
+      type: object
+      required: [period, balances]
+      description: >-
+        One sample of the running account balance — see
+        GET /api/entries/balance-series. balances lists one entry per
+        currency present in the selected accounts, always including that
+        currency even when its amount is 0.
+      properties:
+        period:
+          type: string
+          format: date
+          description: >-
+            The point's local calendar day (YYYY-MM-DD). The closing point
+            is labelled with the first day of the following month.
+        balances:
           type: array
           items:
             $ref: "#/components/schemas/CurrencySum"

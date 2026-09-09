@@ -259,6 +259,33 @@ type FlowBucket struct {
 	Outcome []CurrencySum `json:"outcome"`
 }
 
+// BalanceFilter narrows a BalanceSeries call. AccountIDs is resolved by
+// Service.BalanceSeries to the caller's own visible accounts the same way
+// FlowSummary resolves its own, before anything else runs. Timezone is
+// never caller-supplied — Service.BalanceSeries fills it in from the
+// caller's resolved settings (default UTC), so the midnight sample
+// boundaries reflect the viewer's own calendar. Unit is accepted only as
+// FlowUnitDay.
+type BalanceFilter struct {
+	AccountIDs []string
+	Unit       FlowUnit
+	Year       int
+	Month      int // 1-12, required
+	Timezone   string
+}
+
+// BalancePoint is the running account balance sampled at one local
+// midnight — see Service.BalanceSeries. Period is the point's local
+// calendar day, "YYYY-MM-DD" (the closing point carries the first day of
+// the following month). Balances lists one entry per currency present in
+// the selected accounts, always including that currency even when its
+// amount is 0 — unlike FlowBucket, a balance line needs a value at every
+// point.
+type BalancePoint struct {
+	Period   string        `json:"period"`
+	Balances []CurrencySum `json:"balances"`
+}
+
 const (
 	defaultPageSize = 50
 	maxPageSize     = 200

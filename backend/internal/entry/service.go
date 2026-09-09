@@ -422,6 +422,102 @@ func (s *Service) Balance(ctx context.Context, ownerID, accountID string, asOf t
 	return s.store.Balance(ctx, accountID, asOf)
 }
 
+// BalanceSeries returns ownerID's running account balance sampled at every
+// local midnight of f.Year/f.Month — one point at 00:00 on each calendar
+// day of the month, plus a closing point at 00:00 on the first day of the
+// following month — in the caller's resolved timezone (default UTC). Each
+// point's value per currency is the sum, over the matching accounts of
+// that currency, of Store.Balance strictly before the sample instant (so
+// an entry booked exactly at a midnight belongs to that day, not the point
+// that opens it) — the same anchor-aware computation
+// GET /api/accounts/{id}/balance uses. Every currency present in the
+// resolved accounts appears on every point, including with a 0 amount.
+func (s *Service) BalanceSeries(ctx context.Context, ownerID string, f BalanceFilter) ([]BalancePoint, error) {
+	if f.Unit != FlowUnitDay {
+		return nil, ErrInvalidValue
+	}
+	if f.Month < 1 || f.Month > 12 {
+		return nil, ErrInvalidValue
+	}
+	if f.Year < 1 {
+		return nil, ErrInvalidValue
+	}
+
+	visible, err := s.accounts.VisibleIDs(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	if len(f.AccountIDs) > 0 {
+		f.AccountIDs = intersect(f.AccountIDs, visible)
+	} else {
+		f.AccountIDs = visible
+	}
+
+	f.Timezone = "UTC"
+	if s.timezones != nil {
+		if tz, err := s.timezones.Timezone(ctx, ownerID); err == nil && tz != "" {
+			f.Timezone = tz
+		}
+	}
+	loc, err := time.LoadLocation(f.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+
+	// Resolve every matching account's currency up front, so a currency is
+	// listed on every point even for a day it happens to sum to 0.
+	currencyByAccount := make(map[string]string, len(f.AccountIDs))
+	currencySet := map[string]struct{}{}
+	for _, id := range f.AccountIDs {
+		_, cur, _, err := s.accounts.Owner(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		currencyByAccount[id] = cur
+		currencySet[cur] = struct{}{}
+	}
+	currencies := make([]string, 0, len(currencySet))
+	for c := range currencySet {
+		currencies = append(currencies, c)
+	}
+	sort.Strings(currencies)
+
+	// 00:00 local on days 1..N of the month, then 00:00 local on the 1st of
+	// the next month — the closing point that captures the last day's own
+	// activity.
+	days := time.Date(f.Year, time.Month(f.Month)+1, 0, 0, 0, 0, 0, loc).Day()
+	boundaries := make([]time.Time, 0, days+1)
+	for d := 1; d <= days; d++ {
+		boundaries = append(boundaries, time.Date(f.Year, time.Month(f.Month), d, 0, 0, 0, 0, loc))
+	}
+	boundaries = append(boundaries, time.Date(f.Year, time.Month(f.Month)+1, 1, 0, 0, 0, 0, loc))
+
+	points := make([]BalancePoint, 0, len(boundaries))
+	for _, boundary := range boundaries {
+		asOf := boundary.Add(-time.Nanosecond)
+		byCurrency := make(map[string]int64, len(currencies))
+		for _, c := range currencies {
+			byCurrency[c] = 0
+		}
+		for _, id := range f.AccountIDs {
+			bal, err := s.store.Balance(ctx, id, asOf)
+			if err != nil {
+				return nil, err
+			}
+			byCurrency[currencyByAccount[id]] += bal
+		}
+		p := BalancePoint{
+			Period:   boundary.Format("2006-01-02"),
+			Balances: make([]CurrencySum, 0, len(currencies)),
+		}
+		for _, c := range currencies {
+			p.Balances = append(p.Balances, CurrencySum{Currency: c, Amount: byCurrency[c]})
+		}
+		points = append(points, p)
+	}
+	return points, nil
+}
+
 // intersect returns the elements of a that also appear in b.
 func intersect(a, b []string) []string {
 	set := make(map[string]bool, len(b))

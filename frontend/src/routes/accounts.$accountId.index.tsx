@@ -5,6 +5,10 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { BarChart, type BarChartSeries } from "../components/charts/BarChart";
 import {
+  LineChart,
+  type LineChartSeries,
+} from "../components/charts/LineChart";
+import {
   amountColorClass,
   formatAmount,
   formatSignedAmount,
@@ -18,6 +22,7 @@ export const Route = createFileRoute("/accounts/$accountId/")({
 type Account = components["schemas"]["Account"];
 type Entry = components["schemas"]["Entry"];
 type FlowBucket = components["schemas"]["FlowBucket"];
+type BalancePoint = components["schemas"]["BalancePoint"];
 
 const RECENT_LIMIT = 5;
 
@@ -28,6 +33,12 @@ const RECENT_LIMIT = 5;
 const INCOME_FILL = "fill-[#008300] dark:fill-[#008300]";
 const OUTCOME_FILL = "fill-[#e34948] dark:fill-[#e66767]";
 
+// dataviz-skill categorical slot 1 (blue) — validated for the lightness
+// band, chroma floor, and >=3:1 contrast against both surfaces. A single
+// series needs no CVD-pair check.
+const BALANCE_STROKE = "stroke-[#2a78d6] dark:stroke-[#3987e5]";
+const BALANCE_DOT = "fill-[#2a78d6] dark:fill-[#3987e5]";
+
 function AccountDetails() {
   const { accountId } = Route.useParams();
   const { t, i18n } = useTranslation();
@@ -37,6 +48,15 @@ function AccountDetails() {
   const [recent, setRecent] = useState<Entry[] | null>(null);
   const [chartYear, setChartYear] = useState(() => new Date().getFullYear());
   const [flowBuckets, setFlowBuckets] = useState<FlowBucket[] | null>(null);
+  // First of the month the balance line is showing — a single Date so
+  // previous/next roll the year over for free.
+  const [balanceMonth, setBalanceMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [balancePoints, setBalancePoints] = useState<BalancePoint[] | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +107,28 @@ function AccountDetails() {
     };
   }, [accountId, chartYear]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setBalancePoints(null);
+    api
+      .GET("/api/entries/balance-series", {
+        params: {
+          query: {
+            account_id: [accountId],
+            unit: "day",
+            year: balanceMonth.getFullYear(),
+            month: balanceMonth.getMonth() + 1,
+          },
+        },
+      })
+      .then(({ data }) => {
+        if (!cancelled) setBalancePoints(data?.points ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, balanceMonth]);
+
   if (account === undefined) {
     return null;
   }
@@ -115,6 +157,36 @@ function AccountDetails() {
         { month: "short" },
       ),
       values: [income, outcome],
+    };
+  });
+
+  const balanceSeries: LineChartSeries[] = [
+    {
+      label: t("accounts.details.balanceChart.series"),
+      strokeClassName: BALANCE_STROKE,
+      dotClassName: BALANCE_DOT,
+    },
+  ];
+  const points = balancePoints ?? [];
+  const balanceData = points.map((point, i) => {
+    // The period is a local-day string ("YYYY-MM-DD"); read the day off it
+    // directly rather than through a Date, which would shift under a
+    // negative-offset browser timezone. The last point is the closing
+    // boundary (the 1st of the next month) — label it with month + day so
+    // it doesn't read as a duplicate "1".
+    const day = Number(point.period.slice(8, 10));
+    const isClosing = i === points.length - 1 && day === 1;
+    return {
+      category: isClosing
+        ? new Date(`${point.period}T00:00:00`).toLocaleDateString(
+            i18n.resolvedLanguage,
+            { day: "numeric", month: "short" },
+          )
+        : String(day),
+      values: [
+        point.balances.find((b) => b.currency === account.currency)?.amount ??
+          0,
+      ],
     };
   });
 
@@ -229,6 +301,60 @@ function AccountDetails() {
           <BarChart
             series={chartSeries}
             data={chartData}
+            formatValue={(v) =>
+              formatAmount(
+                v,
+                account.currency,
+                displayedDecimalPlaces,
+                i18n.resolvedLanguage ?? "en",
+              )
+            }
+          />
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+            {t("accounts.details.balanceChart.title")}
+          </h2>
+          <div className="flex items-center gap-2 text-sm">
+            <button
+              type="button"
+              onClick={() =>
+                setBalanceMonth(
+                  (d) => new Date(d.getFullYear(), d.getMonth() - 1, 1),
+                )
+              }
+              aria-label={t("accounts.details.balanceChart.previousMonth")}
+              className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+            >
+              ◀
+            </button>
+            <span className="min-w-32 text-center font-medium tabular-nums">
+              {balanceMonth.toLocaleDateString(i18n.resolvedLanguage, {
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setBalanceMonth(
+                  (d) => new Date(d.getFullYear(), d.getMonth() + 1, 1),
+                )
+              }
+              aria-label={t("accounts.details.balanceChart.nextMonth")}
+              className="rounded-md px-2 py-1 font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+        {balancePoints === null ? null : (
+          <LineChart
+            series={balanceSeries}
+            data={balanceData}
             formatValue={(v) =>
               formatAmount(
                 v,

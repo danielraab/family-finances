@@ -42,6 +42,7 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("POST /api/entries", h.create)
 	h.mux.HandleFunc("GET /api/entries/summary", h.summary)
 	h.mux.HandleFunc("GET /api/entries/flow-summary", h.flowSummary)
+	h.mux.HandleFunc("GET /api/entries/balance-series", h.balanceSeries)
 	h.mux.HandleFunc("GET /api/entries/{id}", h.get)
 	h.mux.HandleFunc("PATCH /api/entries/{id}", h.update)
 	h.mux.HandleFunc("DELETE /api/entries/{id}", h.delete)
@@ -317,6 +318,54 @@ func (h *Handler) flowSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, flowSummaryResponse{Buckets: buckets})
+}
+
+type balanceSeriesResponse struct {
+	Points []BalancePoint `json:"points"`
+}
+
+func (h *Handler) balanceSeries(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	q := r.URL.Query()
+
+	// A balance is defined only by the account and the instant. A
+	// category-, tag-, text-, or time-range filter would drop the
+	// balance_adjustment anchors the running sum depends on, so it is
+	// rejected outright rather than silently changing what the line means.
+	for _, k := range []string{"category_id", "category_mode", "tag_id", "from", "to", "q"} {
+		if q.Has(k) {
+			h.renderError(w, r, ErrInvalidValue)
+			return
+		}
+	}
+
+	f := BalanceFilter{
+		AccountIDs: q["account_id"],
+		Unit:       FlowUnit(q.Get("unit")),
+	}
+	year, err := strconv.Atoi(q.Get("year"))
+	if err != nil {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+	f.Year = year
+	month, err := strconv.Atoi(q.Get("month"))
+	if err != nil {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+	f.Month = month
+
+	points, err := h.svc.BalanceSeries(r.Context(), user.ID, f)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, balanceSeriesResponse{Points: points})
 }
 
 func (h *Handler) balance(w http.ResponseWriter, r *http.Request) {

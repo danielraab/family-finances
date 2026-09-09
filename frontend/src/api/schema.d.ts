@@ -584,6 +584,26 @@ export interface paths {
         patch: operations["patchEntry"];
         trace?: never;
     };
+    "/api/entries/balance-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's running account balance sampled per day over a month
+         * @description Returns the running balance of the caller's own, non-deleted accounts sampled at each local midnight of year/month — one point at 00:00 on every calendar day of the month, plus a closing point at 00:00 on the first day of the following month — using the caller's resolved timezone setting (see user-settings) to place those midnight boundaries, default UTC. Each point's value is the balance computed exactly as GET /api/accounts/{id}/balance computes it as of that instant (a balance_adjustment acts as an anchor), grouped per currency (the currency of the contributing accounts); accounts sharing a currency are summed. Every currency present in the selected accounts appears on every point, including with an amount of 0 — unlike flow-summary, a balance line needs a value at every point. A month with no activity is a run of identical points. Unlike GET /api/entries and GET /api/entries/summary, this operation accepts no category_id, category_mode, tag_id, from, to, or q — a category- or tag-filtered "balance" is not a balance, since a balance_adjustment carries neither; supplying any of them is a 400.
+         */
+        get: operations["getEntriesBalanceSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/entries/flow-summary": {
         parameters: {
             query?: never;
@@ -835,6 +855,15 @@ export interface components {
         Balance: {
             /** Format: int64 */
             balance: number;
+        };
+        /** @description One sample of the running account balance — see GET /api/entries/balance-series. balances lists one entry per currency present in the selected accounts, always including that currency even when its amount is 0. */
+        BalancePoint: {
+            balances: components["schemas"]["CurrencySum"][];
+            /**
+             * Format: date
+             * @description The point's local calendar day (YYYY-MM-DD). The closing point is labelled with the first day of the following month.
+             */
+            period: string;
         };
         Category: {
             /** Format: date-time */
@@ -2147,6 +2176,38 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getEntriesBalanceSeries: {
+        parameters: {
+            query: {
+                /** @description Repeatable. Omitted means every account the caller owns. */
+                account_id?: string[];
+                /** @description 1-12. */
+                month: number;
+                /** @description Only "day" is defined. */
+                unit: "day";
+                year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One point per day of the requested month, plus a closing point. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        points: components["schemas"]["BalancePoint"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     getEntriesFlowSummary: {

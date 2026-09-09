@@ -257,18 +257,29 @@ it works the same on a phone as on a desktop:
 ## Charts
 
 No charting library is a dependency, deliberately — charts are hand-rolled
-SVG/Tailwind components under `src/components/charts/` (e.g. `BarChart.tsx`),
-presentational only: data and series definitions come in as props, nothing
-is fetched inside them, so a chart is reusable across pages instead of
-being a one-off tied to whichever page first needed it. Before building a
-new one, consult the `dataviz` skill for form/color/mark/interaction
-guidance rather than improvising — series colors in particular should come
-from the skill's validated categorical palette (`references/palette.md`),
-applied as Tailwind arbitrary-value fill classes (e.g.
-`fill-[#008300] dark:fill-[#008300]`) rather than the app's own
+SVG/Tailwind components under `src/components/charts/`, presentational only:
+data and series definitions come in as props, nothing is fetched inside
+them, so a chart is reusable across pages instead of being a one-off tied
+to whichever page first needed it. Two exist today — `BarChart.tsx`
+(grouped bars, non-negative baseline) and `LineChart.tsx` (a stepped line
+with a signed, data-framed y-axis and a zero rule line) — and both build on
+`internal.ts`, which holds the shared scaffolding: `useContainerWidth`
+(responsive `ResizeObserver` width), `niceMax` / `niceExtent` (axis-tick
+rounding), and `usePinnableSelection` (the hover-preview / click-to-pin /
+Escape-to-release tooltip state). Extend a chart by lifting anything
+genuinely shared into `internal.ts` rather than duplicating it.
+
+Before building a new one, consult the `dataviz` skill for
+form/color/mark/interaction guidance rather than improvising — series
+colors in particular should come from the skill's validated categorical
+palette (`references/palette.md`), applied as Tailwind arbitrary-value
+`fill-` / `stroke-` classes (e.g. `fill-[#008300] dark:fill-[#008300]`,
+`stroke-[#2a78d6] dark:stroke-[#3987e5]`) rather than the app's own
 `amountColorClass` red/green tokens, which are sized for text, not chart
-fills. Run `scripts/validate_palette.js` on any new color pairing before
-shipping it.
+marks. `LineChart` takes the dot fill as its own literal `dotClassName`
+string (not derived from `strokeClassName` at runtime) so Tailwind's
+scanner still emits it. Run the skill's `scripts/validate_palette.js` on
+any new color pairing before shipping it.
 
 ## Build output
 
