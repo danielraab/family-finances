@@ -18,6 +18,17 @@ in-browser router renders that view on a direct load, refresh, or bookmark
 non-`/api/` request whose path has a file extension (a real asset request) and
 matches no file SHALL still receive `404`.
 
+The backend SHALL support injecting an optional, operator-supplied HTML
+snippet (e.g. a third-party analytics or consent-management tag) into every
+served `index.html`, sourced from the `ANALYTICS_SCRIPT` environment
+variable and inserted immediately before `</head>`. This SHALL apply to
+`index.html` wherever it is served: a direct request for `/` or
+`/index.html`, and the SPA-fallback substitution described above. The
+snippet SHALL be rendered into the served bytes once, at server startup —
+never re-rendered per request. When `ANALYTICS_SCRIPT` is unset or empty
+(the default), the served `index.html` SHALL be byte-identical to the
+bundle's original file.
+
 #### Scenario: Home page loads from the backend
 
 - **WHEN** a client requests `/` from a running backend built with the
@@ -43,6 +54,20 @@ matches no file SHALL still receive `404`.
   matches no bundled file (e.g. `/assets/gone.js`)
 - **THEN** the backend returns a `404` status, not the SPA shell — using the
   bundle's `404.html` body if one is present
+
+#### Scenario: Analytics snippet is injected when configured
+
+- **WHEN** the backend is started with `ANALYTICS_SCRIPT` set to an HTML
+  snippet, and a client requests `/`, `/index.html`, or a client-route path
+  that falls back to the SPA shell
+- **THEN** the response body contains the configured snippet immediately
+  before `</head>`
+
+#### Scenario: No injection when unconfigured
+
+- **WHEN** the backend is started with `ANALYTICS_SCRIPT` unset or empty
+- **THEN** every served `index.html` body — for `/`, `/index.html`, and the
+  SPA fallback — is byte-identical to the bundle's original `index.html`
 
 ### Requirement: Backend routes reserved under /api/
 

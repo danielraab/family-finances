@@ -92,6 +92,7 @@ func main() {
 		TagHandler:      tagHandler,
 		EntryHandler:    entryHandler,
 		OpenAPISpec:     openAPISpec,
+		AnalyticsScript: cfg.AnalyticsScript,
 	})
 
 	if err := run(srv); err != nil {

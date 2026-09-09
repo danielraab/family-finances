@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"io/fs"
 	"net/http"
 	"path"
@@ -13,12 +14,33 @@ import (
 // in-browser router renders it. A request that looks like an asset (it has a
 // file extension) and misses still gets a 404 — an embedded 404.html body if
 // the bundle ships one, otherwise http.FileServer's default.
-func staticHandler(fsys fs.FS) http.Handler {
+//
+// When analyticsScript is non-empty, it is spliced into index.html
+// immediately before </head> once here, at construction — not per request —
+// so every path that ever serves index.html (a direct "/" or "/index.html"
+// request, and the SPA-fallback swap below) carries it.
+func staticHandler(fsys fs.FS, analyticsScript string) http.Handler {
 	fileServer := http.FileServerFS(fsys)
 	indexBody, _ := fs.ReadFile(fsys, "index.html")
 	notFoundBody, _ := fs.ReadFile(fsys, "404.html")
 
+	if analyticsScript != "" {
+		indexBody = bytes.Replace(indexBody, []byte("</head>"), append([]byte(analyticsScript), []byte("</head>")...), 1)
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A direct request for "/" or "/index.html" would otherwise be served
+		// straight from fsys by fileServer, bypassing indexBody (and any
+		// injected analyticsScript) entirely — only the SPA-fallback swap
+		// below reads indexBody.
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && (r.URL.Path == "/" || r.URL.Path == "/index.html") {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			if _, err := w.Write(indexBody); err != nil {
+				Logger(r.Context()).ErrorContext(r.Context(), "write index.html response", "error", err)
+			}
+			return
+		}
+
 		ic := &staticInterceptor{ResponseWriter: w}
 		if spaEligible(r) {
 			ic.swapOn404 = indexBody
