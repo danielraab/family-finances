@@ -22,20 +22,20 @@ function AccountStatus({
     new Date(account.closing_date) <= new Date();
   if (account.disabled) {
     return (
-      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+      <span className="inline-flex shrink-0 items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
         {t("accounts.status.disabled")}
       </span>
     );
   }
   if (closed) {
     return (
-      <span className="inline-flex items-center rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-white/10 dark:text-zinc-400">
+      <span className="inline-flex shrink-0 items-center rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-white/10 dark:text-zinc-400">
         {t("accounts.status.closed")}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+    <span className="inline-flex shrink-0 items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
       {t("accounts.status.open")}
     </span>
   );
@@ -88,55 +88,55 @@ function AccountsOverview() {
           {t("accounts.empty")}
         </p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {accounts.map((account) => (
-            <li
+            <div
               key={account.id}
-              className="flex items-center gap-1 rounded-lg border border-black/10 pr-2 dark:border-white/10"
+              className="flex flex-col gap-3 rounded-lg border border-black/10 p-4 dark:border-white/10"
             >
               <Link
                 to="/accounts/$accountId"
                 params={{ accountId: account.id }}
-                className="flex flex-1 items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-black/[.02] dark:hover:bg-white/[.04]"
+                className="flex flex-1 flex-col gap-1 transition-opacity hover:opacity-80"
               >
-                <div className="flex flex-col gap-0.5">
-                  <AccountLabel account={account} className="font-medium" />
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {typeName(account.type_id)} · {account.currency}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`font-mono text-sm tabular-nums ${
-                      account.id in balances
-                        ? amountColorClass(balances[account.id] ?? 0)
-                        : ""
-                    }`}
-                  >
-                    {account.id in balances
-                      ? formatAmount(
-                          balances[account.id] ?? 0,
-                          account.currency,
-                          displayedDecimalPlaces,
-                          i18n.resolvedLanguage ?? "en",
-                        )
-                      : "…"}
-                  </span>
+                <div className="flex items-start justify-between gap-2">
+                  <AccountLabel
+                    account={account}
+                    className="min-w-0 font-medium"
+                  />
                   <AccountStatus account={account} t={t} />
                 </div>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {typeName(account.type_id)} · {account.currency}
+                </span>
+                <span
+                  className={`mt-2 font-mono text-lg tabular-nums ${
+                    account.id in balances
+                      ? amountColorClass(balances[account.id] ?? 0)
+                      : ""
+                  }`}
+                >
+                  {account.id in balances
+                    ? formatAmount(
+                        balances[account.id] ?? 0,
+                        account.currency,
+                        displayedDecimalPlaces,
+                        i18n.resolvedLanguage ?? "en",
+                      )
+                    : "…"}
+                </span>
               </Link>
               <Link
                 to="/entries/new"
                 search={{ account_id: account.id }}
-                aria-label={t("entries.create")}
-                title={t("entries.create")}
-                className="flex shrink-0 items-center justify-center rounded-md p-2 text-zinc-500 transition-colors hover:bg-black/[.06] hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/[.08] dark:hover:text-zinc-100"
+                className="flex items-center gap-1.5 self-end rounded-md border border-black/10 px-2 py-1 text-sm text-zinc-500 transition-colors hover:bg-black/[.06] hover:text-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/[.08] dark:hover:text-zinc-100"
               >
                 <PlusGlyph />
+                {t("entries.create")}
               </Link>
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </section>
   );
