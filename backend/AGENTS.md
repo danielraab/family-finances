@@ -410,6 +410,48 @@ disabled, checked only against the ids a create/update is *newly adding*
 tag stay attached across unrelated edits while still blocking it from being
 picked for the first time.
 
+## Accounts and sharing
+
+`internal/account` owns `accounts` plus `account_shares` (migration
+`0020_account_sharing.sql`) — a many-to-many grant of one of four
+`Permission` tiers (`view`, `append`, `entry_admin`, `owner`, ranked in that
+order; `Permission.AtLeast(other)` is the comparison every authorization
+check uses) from an account's real owner to another user.
+
+- **`Access(ctx, accountID, callerID)`** is the one place that resolves a
+  caller's effective tier: the real owner always resolves to `owner`;
+  otherwise it's whatever `account_shares` row matches, or the empty string
+  for no access at all. Handlers and `internal/entry` both branch on this —
+  an empty permission is `ErrNotFound` (`404`, indistinguishable from the
+  account not existing); a real but insufficient tier is `ErrForbidden`
+  (`403`).
+- **A shared `owner`-tier grant has full parity with the real owner**,
+  including disabling/deleting the account and managing other shares — with
+  one exception: it cannot change `type_id` (`ErrForbidden` if the update
+  body even includes the field, whether or not the value actually changes).
+- **`GET`/`POST /api/accounts/{id}/shares`,
+  `PATCH`/`DELETE /api/accounts/{id}/shares/{userId}`,
+  `POST /api/accounts/{id}/shares/leave`** — list requires any tier; invite/
+  update/revoke require `owner`, except a caller may always self-leave
+  regardless of tier. The real owner can never be a target of update, revoke,
+  or self-leave (`ErrInvalidValue`, `400`).
+- **Sharing is by email, resolved through `UserLookup`** (`internal/auth`'s
+  `*Service` satisfies it structurally via `ByEmail`/`InvitingEnabled`, wired
+  in `main.go` with `account.WithUserLookup` since it's a post-construction
+  dependency loop — `auth` doesn't import `account`). A match creates/
+  updates the share row and sends a notification email
+  (`mailer.SendAccountShare`); no match returns `{matched: false,
+  invite_allowed}` without writing anything, leaving the frontend to offer
+  sending a real invite when invites are enabled.
+- **Revoking a share is immediate and total**: the revoked user loses read/
+  write access to the account and to every entry they created on it (their
+  entries stay intact and fully visible/editable to everyone who retains
+  access — see `created_by` below, not an ownership transfer).
+- **`GET /api/accounts` and the caller's visible-account set widen to
+  "owned or shared"** (`Access.Permission != ""`), and the `Account`
+  response carries the caller's own `permission` plus, only when the caller
+  isn't the real owner, `shared: true` and `owner_name`.
+
 ## Entries
 
 `internal/entry` owns `entries` — transactions and balance adjustments
@@ -417,6 +459,17 @@ recorded against an account — plus their live balance computation and a
 filterable/searchable/sortable, cursor-paginated listing (`GET`/
 `POST /api/entries`, `GET`/`PATCH`/`DELETE /api/entries/{id}`,
 `GET /api/accounts/{id}/balance`).
+
+- **`created_by`** (renamed from `owner_id` in migration `0020`) records
+  which user logged an entry, always the caller at `Create` time, and is
+  returned to every viewer as `created_by`/`created_by_name` — not scoped to
+  "only shown when it's someone else's entry." Write access is gated by the
+  caller's `account.Access` tier on the entry's account
+  (`entry.AccountLookup.Access`, a flat-value mirror of `account.Access` to
+  avoid an import cycle — see the `TagLookup`/`CategoryLookup` pattern
+  above): `append` may only edit/delete entries where `created_by` is the
+  caller (`ErrForbidden` otherwise); `entry_admin` and `owner` may edit/
+  delete any entry on the account; `view` may never write.
 
 - **`amount` is always a signed delta applied to the running balance,
   for both kinds.** For a `transaction` it's exactly what the caller

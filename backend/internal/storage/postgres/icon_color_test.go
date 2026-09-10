@@ -29,7 +29,7 @@ func TestPGAccountIconColorRoundTripAndClear(t *testing.T) {
 		t.Fatalf("after Create: icon/color = %q/%q, want wallet/blue", acc.Icon, acc.Color)
 	}
 
-	got, err := store.Get(ctx, owner.ID, acc.ID)
+	got, err := store.Get(ctx, acc.ID, owner.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestPGAccountIconColorRoundTripAndClear(t *testing.T) {
 
 	// Clear the icon, leave the color untouched (nil pointer).
 	empty := ""
-	upd, err := store.Update(ctx, owner.ID, acc.ID, account.Update{Icon: &empty})
+	upd, err := store.Update(ctx, acc.ID, account.Update{Icon: &empty})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestPGAccountIconColorRoundTripAndClear(t *testing.T) {
 
 	// Set a new icon value.
 	newIcon := "piggy-bank"
-	upd2, err := store.Update(ctx, owner.ID, acc.ID, account.Update{Icon: &newIcon})
+	upd2, err := store.Update(ctx, acc.ID, account.Update{Icon: &newIcon})
 	if err != nil {
 		t.Fatal(err)
 	}

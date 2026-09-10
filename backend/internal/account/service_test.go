@@ -195,7 +195,7 @@ func TestDeleteTypeInUseRejected(t *testing.T) {
 	}
 }
 
-func TestOwnerLookup(t *testing.T) {
+func TestAccessLookup(t *testing.T) {
 	svc, _ := newService(t)
 	typeID := mustType(t, svc, "u1")
 	opening, _ := account.ParseDate("2024-01-01")
@@ -204,12 +204,23 @@ func TestOwnerLookup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ownerID, currency, disabled, err := svc.Owner(context.Background(), acc.ID)
+	currency, disabled, permission, err := svc.Access(context.Background(), acc.ID, "u1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ownerID != "u1" || currency != "USD" || disabled {
-		t.Fatalf("Owner = %q %q %v", ownerID, currency, disabled)
+	if currency != "USD" || disabled || permission != string(account.PermissionOwner) {
+		t.Fatalf("Access = %q %v %q", currency, disabled, permission)
+	}
+
+	// A user with no ownership or share has an empty permission, not an
+	// error — Access never returns ErrNotFound just because the caller
+	// lacks access; that translation happens in Service.Get.
+	_, _, permission, err = svc.Access(context.Background(), acc.ID, "u2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if permission != "" {
+		t.Fatalf("Access(u2) permission = %q, want empty", permission)
 	}
 }
 

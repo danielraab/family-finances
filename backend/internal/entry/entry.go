@@ -80,8 +80,12 @@ func (m CategoryMode) valid() bool {
 }
 
 // Entry is a transaction or balance adjustment recorded against exactly one
-// account. It has exactly one owner (the account's owner at creation time,
-// its own column — see design.md) and is visible only to them.
+// account. CreatedBy is the user who logged it — not necessarily the
+// account's real owner, once account-sharing lets any permitted user
+// create one — and is immutable after creation. Visibility is scoped to
+// every user holding any permission on the entry's parent account (see
+// account-sharing), not to CreatedBy; CreatedBy matters only for the
+// append tier's "edit only what I created" rule — see design.md.
 //
 // Amount is always a signed delta applied to the account's running balance —
 // for a transaction, exactly what the caller supplied; for a balance
@@ -90,6 +94,10 @@ func (m CategoryMode) valid() bool {
 // absolute reading the caller supplied for a balance adjustment (nil for a
 // transaction) — it is what a balance adjustment's amount is defined
 // against, never computed itself.
+//
+// CreatedByName is resolved server-side (never by the client joining
+// against a shares list) so a viewer can see who logged an entry across a
+// cursor-paginated, filtered list with no second request — see design.md.
 type Entry struct {
 	ID               string     `json:"id"`
 	AccountID        string     `json:"account_id"`
@@ -103,8 +111,45 @@ type Entry struct {
 	TagIDs           []string   `json:"tag_ids"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
-	OwnerID          string     `json:"-"`
+	CreatedBy        string     `json:"created_by"`
+	CreatedByName    string     `json:"created_by_name,omitempty"`
 	DeletedAt        *time.Time `json:"-"`
+}
+
+// Permission mirrors internal/account's four-tier model as plain values so
+// entry.AccountLookup can be satisfied structurally by *account.Service
+// without entry importing internal/account (see design.md's
+// package-boundaries decision — the same reason AccountLookup.Access
+// returns plain strings/bools rather than a shared struct type). Entry
+// never grants or revokes a permission itself, only compares tiers.
+type Permission string
+
+const (
+	PermissionView       Permission = "view"
+	PermissionAppend     Permission = "append"
+	PermissionEntryAdmin Permission = "entry_admin"
+	PermissionOwner      Permission = "owner"
+)
+
+var permissionRank = map[Permission]int{
+	PermissionView:       1,
+	PermissionAppend:     2,
+	PermissionEntryAdmin: 3,
+	PermissionOwner:      4,
+}
+
+// AtLeast reports whether p is other or a stronger tier. An empty
+// Permission (no access at all) is never AtLeast anything.
+func (p Permission) AtLeast(other Permission) bool {
+	pr, ok := permissionRank[p]
+	if !ok {
+		return false
+	}
+	or, ok := permissionRank[other]
+	if !ok {
+		return false
+	}
+	return pr >= or
 }
 
 // OptionalID distinguishes a JSON key that is absent (Set is false) from one

@@ -68,15 +68,30 @@ func main() {
 		os.Exit(1)
 	}
 
+	mail := mailer.New(mailer.Config{
+		Host:     cfg.SMTP.Host,
+		Port:     cfg.SMTP.Port,
+		Username: cfg.SMTP.Username,
+		Password: cfg.SMTP.Password,
+		From:     cfg.SMTP.From,
+		TLS:      mailer.TLSMode(cfg.SMTP.TLS),
+	})
+
 	settingsSvc, settingsHandler := buildSettings(pool)
-	accountSvc, accountHandler := buildAccount(pool)
+	accountSvc, accountHandler := buildAccount(pool, mail, cfg.Auth.BaseURL)
 	categorySvc, categoryHandler := buildCategory(pool)
 
-	authSvc, authHandler, err := buildAuth(ctx, cfg, pool, settingsSvc, accountSvc, categorySvc)
+	authSvc, authHandler, err := buildAuth(ctx, cfg, pool, mail, settingsSvc, accountSvc, categorySvc)
 	if err != nil {
 		slog.Error("build auth", "error", err)
 		os.Exit(1)
 	}
+	// account.Service and auth.Service have a wiring cycle (auth needs
+	// accountSvc as a NewUserHook, built above; accountSvc needs authSvc as
+	// its email-lookup/invite-eligibility source for sharing) that no
+	// constructor option can resolve on its own — see account.Service.
+	// SetUserLookup's doc comment.
+	accountSvc.SetUserLookup(authSvc)
 
 	tagSvc, tagHandler := buildTag(pool)
 	entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc, settingsSvc)
@@ -111,10 +126,14 @@ func buildSettings(pool *postgres.Pool) (*settings.Service, http.Handler) {
 }
 
 // buildAccount constructs the account service and its HTTP handler over the
-// Postgres store.
-func buildAccount(pool *postgres.Pool) (*account.Service, http.Handler) {
+// Postgres store. mail and baseURL back the share-notification email
+// (see account.WithMailer/WithBaseURL); the email-lookup/invite-
+// eligibility source (account.UserLookup) is wired in separately, once
+// auth.Service exists — see main()'s SetUserLookup call and that method's
+// doc comment for why.
+func buildAccount(pool *postgres.Pool, mail *mailer.Mailer, baseURL string) (*account.Service, http.Handler) {
 	store := postgres.NewAccountStore(pool)
-	svc := account.NewService(store)
+	svc := account.NewService(store, account.WithMailer(mail), account.WithBaseURL(baseURL))
 	handler := account.NewHandler(svc, account.HandlerOptions{RenderError: httpapi.WriteError})
 	return svc, handler
 }
@@ -149,23 +168,15 @@ func buildEntry(pool *postgres.Pool, accountSvc *account.Service, categorySvc *c
 }
 
 // buildAuth constructs the auth service and its HTTP handler: the Postgres
-// store, the SMTP mailer, and — only when OIDC_ISSUER is set — a discovered
-// OIDC client. settingsSvc is wired in as the raw-language-preference source
-// for GET /api/auth/me (see internal/settings' design note); accountSvc and
+// store, the given SMTP mailer (shared with account.Service — see main()),
+// and — only when OIDC_ISSUER is set — a discovered OIDC client.
+// settingsSvc is wired in as the raw-language-preference source for
+// GET /api/auth/me (see internal/settings' design note); accountSvc and
 // categorySvc are wired in as NewUserHooks so a brand-new user is seeded
 // with starter account types and categories (see account-types-per-user's
 // design note).
-func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, settingsSvc *settings.Service, accountSvc *account.Service, categorySvc *category.Service) (*auth.Service, http.Handler, error) {
+func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, mail *mailer.Mailer, settingsSvc *settings.Service, accountSvc *account.Service, categorySvc *category.Service) (*auth.Service, http.Handler, error) {
 	store := postgres.NewAuthStore(pool)
-
-	mail := mailer.New(mailer.Config{
-		Host:     cfg.SMTP.Host,
-		Port:     cfg.SMTP.Port,
-		Username: cfg.SMTP.Username,
-		Password: cfg.SMTP.Password,
-		From:     cfg.SMTP.From,
-		TLS:      mailer.TLSMode(cfg.SMTP.TLS),
-	})
 
 	var oidcClient auth.OIDCClient
 	// Both are required for a working flow; an issuer without a client id

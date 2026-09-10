@@ -13,4 +13,5 @@ func init() {
 	registerErrStatus(account.ErrInvalidValue, http.StatusBadRequest)
 	registerErrStatus(account.ErrTypeInUse, http.StatusConflict)
 	registerErrStatus(account.ErrTypeDisabled, http.StatusUnprocessableEntity)
+	registerErrStatus(account.ErrForbidden, http.StatusForbidden)
 }

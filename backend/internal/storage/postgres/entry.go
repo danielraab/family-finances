@@ -22,16 +22,23 @@ type EntryStore struct {
 func NewEntryStore(pool *pgxpool.Pool) *EntryStore { return &EntryStore{pool: pool} }
 
 // entryCols always assumes the query's FROM clause is literally "entries"
-// (no alias), since the tag_ids subquery correlates against entries.id.
-const entryCols = `id::text, owner_id::text, account_id::text, kind, amount, balance_reading, booking_timestamp, title,
+// (no alias), since the tag_ids and created_by_name subqueries correlate
+// against entries.id / entries.created_by. created_by_name reaches into
+// internal/auth's users table by raw SQL — entry.Store doesn't import
+// internal/auth, but its Postgres implementation may still name its
+// tables, the same precedent internal/storage/postgres/tag.go's
+// entry_count and category.go's Delete already establish for reaching
+// into another domain's table.
+const entryCols = `id::text, created_by::text, account_id::text, kind, amount, balance_reading, booking_timestamp, title,
 	COALESCE(description, ''), category_id::text, created_at, updated_at,
-	COALESCE((SELECT array_agg(tag_id::text) FROM entry_tags WHERE entry_id = entries.id), '{}')`
+	COALESCE((SELECT array_agg(tag_id::text) FROM entry_tags WHERE entry_id = entries.id), '{}'),
+	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = entries.created_by), '')`
 
 func scanEntry(row pgx.Row) (entry.Entry, error) {
 	var e entry.Entry
 	var kind string
-	err := row.Scan(&e.ID, &e.OwnerID, &e.AccountID, &kind, &e.Amount, &e.Balance, &e.BookingTimestamp, &e.Title,
-		&e.Description, &e.CategoryID, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs)
+	err := row.Scan(&e.ID, &e.CreatedBy, &e.AccountID, &kind, &e.Amount, &e.Balance, &e.BookingTimestamp, &e.Title,
+		&e.Description, &e.CategoryID, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return entry.Entry{}, entry.ErrNotFound
 	}
@@ -56,7 +63,7 @@ func parseEntryID(id string) (int64, error) {
 	return n, nil
 }
 
-func (s *EntryStore) Create(ctx context.Context, ownerID string, in entry.New) (entry.Entry, error) {
+func (s *EntryStore) Create(ctx context.Context, createdBy string, in entry.New) (entry.Entry, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return entry.Entry{}, err
@@ -76,10 +83,10 @@ func (s *EntryStore) Create(ctx context.Context, ownerID string, in entry.New) (
 	var id int64
 	var bookingTS time.Time
 	err = tx.QueryRow(ctx, `
-		INSERT INTO entries (owner_id, account_id, kind, amount, balance_reading, booking_timestamp, title, description, category_id)
+		INSERT INTO entries (created_by, account_id, kind, amount, balance_reading, booking_timestamp, title, description, category_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9)
 		RETURNING id, booking_timestamp`,
-		ownerID, in.AccountID, string(in.Kind), amount, in.Balance, in.BookingTimestamp, in.Title, in.Description, in.CategoryID,
+		createdBy, in.AccountID, string(in.Kind), amount, in.Balance, in.BookingTimestamp, in.Title, in.Description, in.CategoryID,
 	).Scan(&id, &bookingTS)
 	if isForeignKeyViolation(err) || isCheckViolation(err) {
 		return entry.Entry{}, entry.ErrInvalidValue
@@ -111,18 +118,18 @@ func (s *EntryStore) Create(ctx context.Context, ownerID string, in entry.New) (
 	return e, nil
 }
 
-func (s *EntryStore) Get(ctx context.Context, ownerID, id string) (entry.Entry, error) {
+func (s *EntryStore) Get(ctx context.Context, id string) (entry.Entry, error) {
 	eid, err := parseEntryID(id)
 	if err != nil {
 		return entry.Entry{}, err
 	}
 	return scanEntry(s.pool.QueryRow(ctx,
-		`SELECT `+entryCols+` FROM entries WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
-		eid, ownerID,
+		`SELECT `+entryCols+` FROM entries WHERE id = $1 AND deleted_at IS NULL`,
+		eid,
 	))
 }
 
-func (s *EntryStore) Update(ctx context.Context, ownerID, id string, upd entry.Update) (entry.Entry, error) {
+func (s *EntryStore) Update(ctx context.Context, id string, upd entry.Update) (entry.Entry, error) {
 	eid, err := parseEntryID(id)
 	if err != nil {
 		return entry.Entry{}, err
@@ -141,8 +148,8 @@ func (s *EntryStore) Update(ctx context.Context, ownerID, id string, upd entry.U
 	var oldAccountID string
 	var oldTS time.Time
 	if err := tx.QueryRow(ctx,
-		`SELECT account_id::text, booking_timestamp FROM entries WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
-		eid, ownerID,
+		`SELECT account_id::text, booking_timestamp FROM entries WHERE id = $1 AND deleted_at IS NULL`,
+		eid,
 	).Scan(&oldAccountID, &oldTS); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entry.Entry{}, entry.ErrNotFound
@@ -158,16 +165,16 @@ func (s *EntryStore) Update(ctx context.Context, ownerID, id string, upd entry.U
 	}
 	tag, err := tx.Exec(ctx, `
 		UPDATE entries SET
-			account_id        = COALESCE($3, account_id),
-			amount            = COALESCE($4, amount),
-			balance_reading   = COALESCE($5, balance_reading),
-			booking_timestamp = COALESCE($6, booking_timestamp),
-			title             = COALESCE($7, title),
-			description       = COALESCE($8, description),
-			category_id       = CASE WHEN $9 THEN $10 ELSE category_id END,
+			account_id        = COALESCE($2, account_id),
+			amount            = COALESCE($3, amount),
+			balance_reading   = COALESCE($4, balance_reading),
+			booking_timestamp = COALESCE($5, booking_timestamp),
+			title             = COALESCE($6, title),
+			description       = COALESCE($7, description),
+			category_id       = CASE WHEN $8 THEN $9 ELSE category_id END,
 			updated_at        = now()
-		WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
-		eid, ownerID, upd.AccountID, upd.Amount, upd.Balance, upd.BookingTimestamp, upd.Title, upd.Description, categorySet, categoryID,
+		WHERE id = $1 AND deleted_at IS NULL`,
+		eid, upd.AccountID, upd.Amount, upd.Balance, upd.BookingTimestamp, upd.Title, upd.Description, categorySet, categoryID,
 	)
 	if isForeignKeyViolation(err) || isCheckViolation(err) {
 		return entry.Entry{}, entry.ErrInvalidValue
@@ -228,7 +235,7 @@ func (s *EntryStore) Update(ctx context.Context, ownerID, id string, upd entry.U
 	return e, nil
 }
 
-func (s *EntryStore) SoftDelete(ctx context.Context, ownerID, id string) error {
+func (s *EntryStore) SoftDelete(ctx context.Context, id string) error {
 	eid, err := parseEntryID(id)
 	if err != nil {
 		return err
@@ -243,8 +250,8 @@ func (s *EntryStore) SoftDelete(ctx context.Context, ownerID, id string) error {
 	var accountID string
 	var ts time.Time
 	if err := tx.QueryRow(ctx,
-		`SELECT account_id::text, booking_timestamp FROM entries WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
-		eid, ownerID,
+		`SELECT account_id::text, booking_timestamp FROM entries WHERE id = $1 AND deleted_at IS NULL`,
+		eid,
 	).Scan(&accountID, &ts); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entry.ErrNotFound
@@ -267,19 +274,23 @@ func (s *EntryStore) SoftDelete(ctx context.Context, ownerID, id string) error {
 }
 
 // buildWhere returns the WHERE clauses and positional args shared by List
-// and Sum, scoping to ownerID's non-deleted entries matching f's
+// and Sum, scoping to non-deleted entries matching f's
 // account/category/tag/kind/date-range/query filters — every column is
 // qualified with "entries." so the same clauses work whether or not a
-// caller's query joins another table. Callers append their own additional
-// clauses (and, via the same numbering, args) as needed.
-func buildWhere(ownerID string, f entry.Filter) (where []string, args []any) {
+// caller's query joins another table. f.AccountIDs is always the sole
+// caller-scoping mechanism (already narrowed by entry.Service to the
+// caller's visible, owned-or-shared accounts before it reaches here — see
+// design.md) rather than an owner/creator equality clause, so a viewer
+// sees every entry on a visible account regardless of who created it.
+// Callers append their own additional clauses (and, via the same
+// numbering, args) as needed.
+func buildWhere(f entry.Filter) (where []string, args []any) {
 	arg := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
 	}
 
 	where = []string{
-		"entries.owner_id = " + arg(ownerID),
 		"entries.deleted_at IS NULL",
 		"entries.account_id = ANY(" + arg(f.AccountIDs) + "::uuid[])",
 	}
@@ -309,12 +320,12 @@ func buildWhere(ownerID string, f entry.Filter) (where []string, args []any) {
 // clause and a positional argument; sort/dir pick the ORDER BY column and
 // direction; the keyset comparison on (sortColumn, id) implements the
 // cursor. It fetches Limit+1 rows to know whether a next page exists.
-func (s *EntryStore) List(ctx context.Context, ownerID string, f entry.Filter) ([]entry.Entry, *entry.Cursor, error) {
+func (s *EntryStore) List(ctx context.Context, f entry.Filter) ([]entry.Entry, *entry.Cursor, error) {
 	if len(f.AccountIDs) == 0 {
 		return nil, nil, nil
 	}
 
-	where, args := buildWhere(ownerID, f)
+	where, args := buildWhere(f)
 	arg := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
@@ -465,7 +476,7 @@ func recomputeFrom(ctx context.Context, tx pgx.Tx, accountID string, ts time.Tim
 // SQL. It returns no currency — Service.Sum resolves each account's currency
 // via AccountLookup and groups by it there, since this package has no
 // business joining into a currency concept that belongs to internal/account.
-func (s *EntryStore) Sum(ctx context.Context, ownerID string, f entry.Filter) (map[string]int64, int, error) {
+func (s *EntryStore) Sum(ctx context.Context, f entry.Filter) (map[string]int64, int, error) {
 	if len(f.AccountIDs) == 0 {
 		return map[string]int64{}, 0, nil
 	}
@@ -476,7 +487,7 @@ func (s *EntryStore) Sum(ctx context.Context, ownerID string, f entry.Filter) (m
 	// (which would wrongly return zero rows whenever f.Kind was set to
 	// anything but transaction).
 	f.Kind = nil
-	where, args := buildWhere(ownerID, f)
+	where, args := buildWhere(f)
 	where = append(where, "entries.kind = 'transaction'")
 
 	query := `SELECT entries.account_id::text, SUM(entries.amount), COUNT(*)
@@ -512,26 +523,27 @@ func (s *EntryStore) Sum(ctx context.Context, ownerID string, f entry.Filter) (m
 // resolved it) and truncated to f.Unit ('month' or 'day' — usable directly
 // as date_trunc's field argument, since FlowUnit's only two values are
 // exactly those words). income/outcome split by amount's sign via FILTER,
-// so a currency needs no CASE-WHEN gymnastics.
-func (s *EntryStore) FlowSummary(ctx context.Context, ownerID string, f entry.FlowFilter) ([]entry.FlowRow, error) {
+// so a currency needs no CASE-WHEN gymnastics. f.AccountIDs is the sole
+// caller-scoping mechanism, already narrowed by Service to the caller's
+// visible accounts.
+func (s *EntryStore) FlowSummary(ctx context.Context, f entry.FlowFilter) ([]entry.FlowRow, error) {
 	if len(f.AccountIDs) == 0 {
 		return nil, nil
 	}
 
 	where := []string{
-		"owner_id = $1",
-		"account_id = ANY($2::uuid[])",
+		"account_id = ANY($1::uuid[])",
 		"deleted_at IS NULL",
-		"EXTRACT(year FROM timezone($3, booking_timestamp)) = $5",
+		"EXTRACT(year FROM timezone($2, booking_timestamp)) = $4",
 	}
-	args := []any{ownerID, f.AccountIDs, f.Timezone, string(f.Unit), f.Year}
+	args := []any{f.AccountIDs, f.Timezone, string(f.Unit), f.Year}
 	if f.Unit == entry.FlowUnitDay {
-		where = append(where, "EXTRACT(month FROM timezone($3, booking_timestamp)) = $6")
+		where = append(where, "EXTRACT(month FROM timezone($2, booking_timestamp)) = $5")
 		args = append(args, f.Month)
 	}
 
 	query := `
-		SELECT date_trunc($4, timezone($3, booking_timestamp))::date AS period,
+		SELECT date_trunc($3, timezone($2, booking_timestamp))::date AS period,
 		       account_id::text,
 		       COALESCE(SUM(amount) FILTER (WHERE amount > 0), 0) AS income,
 		       COALESCE(-SUM(amount) FILTER (WHERE amount < 0), 0) AS outcome
