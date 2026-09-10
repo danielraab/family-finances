@@ -217,10 +217,24 @@ function EditEntry() {
   // the current, selected value (so the form doesn't look like it lost
   // data) but isn't offered as a choice for switching to a different one —
   // mirroring AccountForm.tsx's disabled account-type handling. Leaving it
-  // untouched and saving other fields is unaffected either way.
+  // untouched and saving other fields is unaffected either way. A category
+  // shared at view tier only (or since unshared/downgraded below append)
+  // gets the same treatment — it can't be newly selected, but stays as the
+  // current value if that's what the entry already carries.
   const currentCategory = categories.find((c) => c.id === categoryId);
+  // A shared category's parent_id is cleared before flattening so it always
+  // renders top-level, even in the rare case its real parent happens to
+  // also be shared with this caller — mirrors entries.new.tsx.
   const categoryOptions = flattenCategoryTree(
-    categories.filter((c) => !c.disabled || c.id === categoryId),
+    categories
+      .filter(
+        (c) => (!c.disabled && c.permission !== "view") || c.id === categoryId,
+      )
+      .map((c) => {
+        if (!c.shared) return c;
+        const { parent_id, ...rest } = c;
+        return rest;
+      }),
   );
 
   // The entry's current account still renders as a selectable option while

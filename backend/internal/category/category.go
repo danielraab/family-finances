@@ -51,7 +51,17 @@ var DefaultNames = func() []string {
 }()
 
 // Category is one node in a category tree private to its owner. ParentID
-// is nil for a root category.
+// is nil for a root category. It has exactly one real owner (OwnerID) but
+// MAY be shared with other users at one of two permission tiers — see
+// Permission and CategoryShare.
+//
+// Permission and OwnerName are populated by Service, never by Store — they
+// depend on the viewing caller (Permission) or a cross-package user lookup
+// (OwnerName), neither of which a Store implementation has access to.
+// OwnerName is resolved for every category, real owner's own view included
+// (mirroring account.Account.OwnerName) — only meaningful to render when
+// Shared is true, so the client can show a "shared by X" badge without a
+// second request.
 type Category struct {
 	ID        string    `json:"id"`
 	ParentID  *string   `json:"parent_id,omitempty"`
@@ -61,14 +71,99 @@ type Category struct {
 	SortOrder int       `json:"sort_order"`
 	Disabled  bool      `json:"disabled"`
 	CreatedAt time.Time `json:"created_at"`
-	// EntryCount is the number of the owner's non-deleted entries directly
-	// categorized under this category — direct references only, not rolled
-	// up from descendant categories. Computed by the store, never persisted
-	// directly; storage/memory has no visibility into entries and always
-	// reports 0 (see its doc comment), mirroring tag.Tag.EntryCount.
+	// EntryCount is the number of the *viewing caller's own* non-deleted
+	// entries directly categorized under this category — direct references
+	// only, not rolled up from descendant categories, and scoped to the
+	// caller even when they are viewing a category shared with them rather
+	// than one they own. Computed by the store, never persisted directly;
+	// storage/memory has no visibility into entries and always reports 0
+	// (see its doc comment), mirroring tag.Tag.EntryCount.
 	EntryCount int        `json:"entry_count"`
+	Permission Permission `json:"permission"`
+	Shared     bool       `json:"shared"`
+	OwnerName  string     `json:"owner_name,omitempty"`
 	OwnerID    string     `json:"-"`
 	DeletedAt  *time.Time `json:"-"`
+}
+
+// Permission is the level of access a user has on a category: either the
+// real owner (implicitly PermissionOwner, with no CategoryShare row) or a
+// tier granted via a share. Unlike internal/account, there is no shareable
+// "owner" tier — PermissionOwner is only ever the real owner's own,
+// implicit permission, never granted through a share. append is a strict
+// superset of view — see AtLeast.
+type Permission string
+
+const (
+	// PermissionView grants seeing the category resolve wherever it's
+	// referenced — entry-list/report category filters, and the name shown
+	// on an entry already categorized under it — but not selecting it on a
+	// new or edited entry.
+	PermissionView Permission = "view"
+	// PermissionAppend additionally grants selecting the category on a new
+	// or edited entry.
+	PermissionAppend Permission = "append"
+	// PermissionOwner is the real owner's own, implicit permission. It is
+	// never a valid value for a share (see (Permission).valid) — only the
+	// real owner may ever edit a category's own metadata, lifecycle, or
+	// shares.
+	PermissionOwner Permission = "owner"
+)
+
+// permissionRank orders the three tiers for AtLeast; not exported —
+// callers compare via AtLeast, never the raw rank.
+var permissionRank = map[Permission]int{
+	PermissionView:   1,
+	PermissionAppend: 2,
+	PermissionOwner:  3,
+}
+
+// valid reports whether p is a value a share may be created or updated at
+// (view or append) — never PermissionOwner, which a client can never
+// request.
+func (p Permission) valid() bool {
+	return p == PermissionView || p == PermissionAppend
+}
+
+// AtLeast reports whether p is other or a stronger tier. An empty
+// Permission (no access at all) is never AtLeast anything, including
+// PermissionView.
+func (p Permission) AtLeast(other Permission) bool {
+	pr, ok := permissionRank[p]
+	if !ok {
+		return false
+	}
+	or, ok := permissionRank[other]
+	if !ok {
+		return false
+	}
+	return pr >= or
+}
+
+// CategoryShare is one row granting a non-owner user a Permission on a
+// category. The category's real owner (Category.OwnerID) never has a row
+// here — see Service.ListShares, which synthesizes the real owner's entry
+// separately for display.
+type CategoryShare struct {
+	CategoryID    string     `json:"-"`
+	UserID        string     `json:"user_id"`
+	Name          string     `json:"name"`
+	Email         string     `json:"email"`
+	Permission    Permission `json:"permission"`
+	GrantedBy     string     `json:"granted_by"`
+	GrantedByName string     `json:"granted_by_name"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// ShareResult is the outcome of Service.InviteShare: either a created/
+// updated share (Matched), or a report that the email matched no user
+// (!Matched), including whether the instance currently allows sending an
+// application invite — mirrors account.ShareResult.
+type ShareResult struct {
+	Matched       bool
+	Share         *CategoryShare
+	InviteAllowed bool
 }
 
 // OptionalID distinguishes a JSON key that is absent (Set is false) from

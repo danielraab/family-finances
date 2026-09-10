@@ -351,6 +351,7 @@
   "categories": {
     "title": "Categories",
     "empty": "No categories yet. Create one to get started.",
+    "notFound": "This category doesn't exist, or you don't have access to it.",
     "loadError": "Couldn't load your categories — please try again.",
     "deleteError": "Couldn't delete \"{{name}}\" — it still has subcategories or entries referencing it.",
     "entryCount_one": "{{count}} entry",
@@ -371,10 +372,21 @@
       "moveUp": "Move up",
       "moveDown": "Move down",
       "edit": "Edit",
+      "share": "Share",
+      "viewSharing": "Sharing",
+      "leave": "Leave",
       "disable": "Disable",
       "enable": "Enable",
       "delete": "Delete",
       "deleteDisabledHint": "Only possible once it has no subcategories and no entry uses it."
+    },
+    "shared": {
+      "badgeTitle": "Shared by {{owner}}"
+    },
+    "sharedWithMe": {
+      "heading": "Shared with me",
+      "confirmLeaveTitle": "Leave \"{{name}}\"?",
+      "confirmLeaveBody": "You'll immediately lose access to this category — it will no longer be selectable on your entries or appear in your filters."
     },
     "edit": {
       "heading": "Edit category",
@@ -391,6 +403,36 @@
       "deleteBody": "This is only possible while it has no subcategories and no entry uses it. This cannot be undone here.",
       "cancel": "Cancel",
       "confirmAction": "Confirm"
+    },
+    "sharing": {
+      "title": "Share “{{category}}”",
+      "subtitle": "Everyone listed here can filter and see entries by this category; append additionally lets them select it for their own entries.",
+      "realOwner": "Owner",
+      "unknownUser": "Unknown user",
+      "grantedBy": "Added by {{name}} on {{date}}",
+      "leave": "Leave",
+      "revoke": "Revoke",
+      "noShares": "Not shared with anyone yet.",
+      "inviteTitle": "Share with someone",
+      "email": "Email",
+      "permissionLabel": "Permission",
+      "inviteSubmit": "Share",
+      "inviteError": "Couldn't share this category — please check the form and try again.",
+      "unmatched": "No account is registered for {{email}}.",
+      "appInviteSent": "Invitation sent.",
+      "sendAppInvite": "Send them an invitation",
+      "inviteUnavailable": "Invitations are currently unavailable on this instance.",
+      "permission": {
+        "view": "View only",
+        "append": "Append",
+        "owner": "Owner"
+      },
+      "confirm": {
+        "revokeTitle": "Revoke this share?",
+        "revokeBody": "{{name}} will immediately lose access to this category.",
+        "leaveTitle": "Leave this shared category?",
+        "leaveBody": "You'll immediately lose access to this category."
+      }
     }
   },
   "reports": {

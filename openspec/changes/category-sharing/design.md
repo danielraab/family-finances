@@ -164,41 +164,85 @@ shared with them. Because there's no cascade, this is simple: a shared
 category's `Subtree` (as resolved for filtering) is just `[id]` itself —
 resolving successfully where today it would silently fail (a category
 outside the caller's own tree doesn't `Exists`, so today's `Subtree`
-calls never reach a shared id at all). `category.Service` gains a second,
-caller-scoped method for this:
+calls never reach a shared id at all).
+
+**Implementation note (simpler than first planned):** an earlier draft of
+this decision introduced a separate `FilterSubtree` method and had
+`main.go` "re-point" `entry.CategoryLookup.Subtree` at it. That doesn't
+apply here — `*category.Service` is passed directly into
+`entry.NewService(store, accounts, categories, tags, …)` as the
+structural `CategoryLookup` implementation, with no adapter layer for
+`main.go` to rewire. Since `entry.CategoryLookup.Subtree` is satisfied by
+`category.Service.Subtree` however that method's *body* is written, the
+actual fix is simply to change that body in place:
 
 ```go
-// FilterSubtree resolves id and its descendants within the categories
-// visible to callerID (owned, full recursion; shared, just the id
-// itself — there is no cascade to resolve into). Used only by
-// internal/entry's category-filter resolution — never for reparent-cycle
-// detection, which stays strictly own-tree via Subtree above.
-func (s *Service) FilterSubtree(ctx context.Context, callerID, id string) ([]string, error)
+// Subtree satisfies internal/entry's CategoryLookup interface. For a
+// category callerID owns, delegates to the Store's owner-scoped
+// recursive Subtree (unchanged from before sharing). For one visible to
+// callerID only via a share, returns [id] alone — no cascade. For one
+// callerID has no access to at all, returns empty.
+func (s *Service) Subtree(ctx context.Context, callerID, id string) ([]string, error) {
+    c, err := s.store.GetForCaller(ctx, callerID, id)
+    if errors.Is(err, ErrNotFound) {
+        return nil, nil
+    }
+    if err != nil {
+        return nil, err
+    }
+    if c.Permission == "" {
+        return nil, nil
+    }
+    if c.Permission == PermissionOwner {
+        return s.store.Subtree(ctx, callerID, id)
+    }
+    return []string{id}, nil
+}
 ```
 
-`entry.CategoryLookup.Subtree` is re-pointed at `FilterSubtree` instead of
-`Subtree` — a one-line wiring change in `main.go`, no interface or
-`internal/entry` code change (the interface's method name in `entry.go`
-can stay `Subtree`; only which `category.Service` method backs it moves).
+No `FilterSubtree`, no `main.go` change, no `internal/entry` change at
+all — the exported name stays `Subtree` throughout; only its
+implementation grew permission-awareness. The reparent-cycle check in
+`Service.Update` is unaffected: it calls `s.store.Subtree` (the low-level
+Store method) directly, never this Service-level method.
 
 ### Decision: a shared category always renders flat — no server-side `parent_id` rewriting needed
 
 A shared category keeps its real, stored `parent_id` in every API
 response — `GetForCaller`/`List` never null it out. Since a share never
-cascades, the parent it points at is (almost always) not itself visible
-to the recipient, so it's simply absent from their `GET /api/categories`
-response. `frontend/src/lib/categoryTree.ts`'s existing
-`buildCategoryTree`/`flattenCategoryTree` already bucket every category
-by `parent_id` and treat anything whose parent isn't present in the list
-as a root (`byParent.get(key) ?? []` walks starting from key `""`, and a
-`parent_id` matching no known category simply never gets visited as
-anyone's child) — so a shared category is *already* promoted to
-top-level for free, with no special-casing needed on either side. (The
-rare edge case — the recipient happens to independently own or be shared
-a category with the same id as the real parent — can't occur: ids are
-globally unique, so a `parent_id` only ever resolves to that exact
-category, which by definition isn't shared unless it's the one node
-someone chose to share.)
+cascades, the parent it points at is *usually* not itself visible to the
+recipient, so it's simply absent from their `GET /api/categories`
+response, and `frontend/src/lib/categoryTree.ts`'s `buildCategoryTree`/
+`flattenCategoryTree` already treat a category whose `parent_id` matches
+nothing in the list as a root, for free.
+
+**Correction from live end-to-end testing:** an earlier draft of this
+decision claimed the "recipient also happens to have access to a
+category with the same id as the real parent" case "can't occur," on the
+theory that ids are globally unique. That reasoning had a hole: ids being
+unique doesn't stop the recipient from being *independently* shared the
+parent itself, as a second, separate share — a real scenario, not a
+hypothetical (verified live: sharing a category and its child with the
+same recipient at two independent shares reproduces it every time). When
+that happens, the child's real `parent_id` *does* match a category now
+present in the recipient's own list — namely the separately-shared
+parent — so `buildCategoryTree`/`flattenCategoryTree` would nest them
+together if both were fed through the same tree-building pass. This
+doesn't leak any permission (nesting is display-only; the recipient's
+actual access to each category is still whatever its own share says),
+but it does violate this decision's "always flat" guarantee.
+
+Two call sites merge owned and shared categories before tree-building,
+and only one of them was actually at risk:
+
+- `/categories`' own "shared with me" section (task 7) never tree-builds
+  shared rows at all — it renders each one as an independent flat row via
+  a dedicated `renderSharedNode`, so this collision cannot reach it.
+- The entry-form category picker (task 9) *does* run owned + shared
+  categories through the same `flattenCategoryTree` call, so it needed an
+  explicit fix: strip `parent_id` off every shared category before
+  flattening, so a shared category is flat *deterministically* rather
+  than "flat because its parent usually isn't in the list."
 
 ### Decision: `Usable`'s widening only affects *newly assigned* categories, exactly like the existing not-disabled rule
 
@@ -313,17 +357,21 @@ shape is needed beyond parameterizing the existing correlated subquery by
    `ShareByUser`, `UpdateSharePermission`, `DeleteShare`; `Exists`/
    `Subtree` (cycle-detection) unchanged.
 3. `internal/category/service.go`: `Usable` widens per the decision
-   above; new `FilterSubtree`; new `ListShares`/`InviteShare`/
+   above; `Subtree`'s body (the same method satisfying `entry.
+   CategoryLookup`) becomes permission-aware in place — no new method
+   name, no `main.go` rewiring; new `ListShares`/`InviteShare`/
    `UpdateSharePermission`/`RevokeShare`, real-owner-gated (no shared
    owner tier); new `UserLookup`/`Mailer` interfaces + `Option`s.
 4. `internal/mailer`: `SendCategoryShare`.
-5. `internal/category/handler.go`: `GET`/`POST /api/categories/{id}/
-   shares`, `PATCH`/`DELETE /api/categories/{id}/shares/{userId}`;
-   `Category` JSON gains `permission`/`shared`/`owner_name`.
-6. `main.go`: wire `category.WithUserLookup(authSvc)`,
-   `category.WithMailer(...)`, `category.WithBaseURL(...)`; re-point
-   `entry.NewService`'s `CategoryLookup.Subtree` wiring at
-   `category.Service.FilterSubtree`.
+5. `internal/category/handler.go`: `GET /api/categories/{id}` (new —
+   there was no single-fetch category endpoint before this change),
+   `GET`/`POST /api/categories/{id}/shares`,
+   `PATCH`/`DELETE /api/categories/{id}/shares/{userId}`; `Category`
+   JSON gains `permission`/`shared`/`owner_name`.
+6. `main.go`: wire `category.WithMailer(...)`, `category.
+   WithBaseURL(...)` at construction; `categorySvc.SetUserLookup(authSvc)`
+   after `buildAuth`, mirroring `accountSvc`'s. `internal/entry` needs no
+   changes at all.
 7. `openapi/openapi.yaml`: `CategoryPermission`, `CategoryShare`,
    `CategoryShareInvite`, `CategoryShareInviteResult`,
    `CategorySharePermissionUpdate` (mirroring the `Account*` schemas of

@@ -202,15 +202,17 @@ Invitations, and Tags for everyone; Users only when `user.is_admin`) plus
 ## Categories
 
 `/categories` — the only page a category can be created or renamed from —
-lists the caller's own tree (`GET /api/categories`, per-user now, see
-`backend/AGENTS.md`'s "Categories" section) via `buildCategoryTree` in
-`src/lib/categoryTree.ts` (nests by `parent_id`, orders each level by
-`sort_order`) — a separate helper from that file's older
-`flattenCategoryTree`, which the entry form's category `<select>` still
-uses. Editing is entirely button-driven, deliberately no drag-and-drop, so
-it works the same on a phone as on a desktop. The inline node row carries
-only ▲/▼ reorder and **Edit**; every other per-category action lives in the
-edit dialog:
+lists the caller's own tree (`GET /api/categories`, now the union of the
+caller's own tree plus every category shared with them — see "Categories
+and sharing" below, and `backend/AGENTS.md`'s "Categories and sharing"
+section) via `buildCategoryTree` in `src/lib/categoryTree.ts` (nests by
+`parent_id`, orders each level by `sort_order`), fed only the caller's own
+(`permission === "owner"`) categories — a separate helper from that file's
+older `flattenCategoryTree`, which the entry form's category `<select>`
+still uses. Editing is entirely button-driven, deliberately no
+drag-and-drop, so it works the same on a phone as on a desktop. The inline
+node row carries only ▲/▼ reorder, **Edit**, and **Share**; every other
+per-category action lives in the edit dialog:
 
 - Create (name + parent picker, defaulting to root) goes through
   `POST /api/categories`, the same inline-form shape as the Tags settings
@@ -242,12 +244,74 @@ edit dialog:
   active/disabled status pill, labelled via the pluralised
   `categories.entryCount` i18n key.
 - The entry form's category picker (`entries.new.tsx` /
-  `entries.$entryId.edit.tsx`) excludes disabled categories from new
-  selections; on the edit page, a category disabled since the entry was
-  categorized still renders as the current, selected-but-non-selectable
-  option; it does **not** block saving an otherwise-untouched category,
-  matching the backend's "only a category explicitly supplied is
-  validated" rule.
+  `entries.$entryId.edit.tsx`) excludes disabled categories, and now also
+  `view`-tier shared categories, from new selections; on the edit page, a
+  category disabled (or since unshared/downgraded below `append`) since
+  the entry was categorized still renders as the current,
+  selected-but-non-selectable option; it does **not** block saving an
+  otherwise-untouched category, matching the backend's "only a category
+  explicitly supplied is validated" rule.
+
+## Categories and sharing
+
+Every `Category` response carries the caller's own `permission` (`view`,
+`append`, or `owner`) and, only when the caller isn't the real owner,
+`shared: true` plus `owner_name` — see `backend/AGENTS.md`'s "Categories
+and sharing" section for the tier semantics (two shareable tiers, no
+shareable owner tier — only the real owner ever edits a category's own
+metadata, lifecycle, or shares).
+
+- `categories.tsx` splits the fetched `Category[]` into `ownCategories`
+  (`permission === "owner"`, fed to `buildCategoryTree`/
+  `flattenCategoryTree` exactly as before sharing existed) and
+  `sharedCategories` (`shared === true`). The latter render in a separate
+  "Shared with me" section below the owned tree — one flat row per
+  category via a dedicated `renderSharedNode`, which deliberately never
+  consults `parent_id` (so two independently-shared categories that
+  happen to have a real parent/child relationship to each other can never
+  get nested together here — see the next bullet for why that matters).
+  Each row shows `CategoryLabel`, a permission indicator, and a
+  self-leave action (`Dialog`-confirmed); no edit/reorder/disable/delete
+  controls. The section is omitted when empty. Each of the caller's own
+  category rows additionally gets a Share `Link` to
+  `/categories/{id}/sharing`.
+- **A shared category's `parent_id` is not reliably absent from the
+  caller's own category list.** It usually is (a share doesn't cascade,
+  so the real parent is usually invisible to the recipient) — but if the
+  recipient is *also*, independently, shared the parent itself, both ids
+  now appear together in the same `GET /api/categories` response, and
+  naively running them both through `flattenCategoryTree` would nest the
+  child under the parent. This is real, not hypothetical — verified live
+  by sharing a category and its own child with the same recipient as two
+  separate shares. It doesn't leak any permission (nesting is
+  presentational only), but it breaks the "a shared category always
+  renders flat" guarantee. The categories page's own "Shared with me"
+  section sidesteps this entirely (previous bullet); the entry form's
+  category picker (`entries.new.tsx`/`entries.$entryId.edit.tsx`), which
+  *does* merge owned and shared categories through one `flattenCategoryTree`
+  call, fixes it by stripping `parent_id` off every shared category
+  first, so a shared category is flat deterministically rather than by
+  coincidence.
+- `entries.new.tsx`/`entries.$entryId.edit.tsx`'s category picker offers
+  the caller's own categories plus every `append`-tier shared one
+  (flattened per the previous bullet); a `view`-tier shared category is
+  excluded, same treatment as a disabled one. `entries.index.tsx`/
+  `reports.tsx`'s category filter needed no changes at all — both already
+  pass the full `GET /api/categories` result through `flattenCategoryTree`
+  with no permission filtering, and that response already includes every
+  `view`+ shared category from the backend.
+- `src/components/CategoryLabel.tsx` renders the shared badge + `owner_name`
+  whenever `category.shared` is true, mirroring `AccountLabel.tsx` exactly
+  — used everywhere a category is shown by name outside a native
+  `<select>` (the `/categories` tree/shared section, the entry ledger).
+- `src/routes/categories.$categoryId.sharing.tsx` is the one page a
+  category share is managed from — structurally identical to
+  `accounts.$accountId.sharing.tsx`, with a two-option permission
+  `<select>` (`view`/`append`) instead of four: real owner always first,
+  unremovable row; the real owner additionally sees the invite form
+  (with the "not registered" nudge) and per-row permission `<select>`/
+  Revoke; everyone else is read-only except a Leave action on their own
+  row.
 
 ## Accounts and sharing
 

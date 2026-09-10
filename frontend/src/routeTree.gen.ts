@@ -29,6 +29,7 @@ import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as AccountsAccountIdIndexRouteImport } from './routes/accounts.$accountId.index'
 import { Route as AccountsAccountIdEditRouteImport } from './routes/accounts.$accountId.edit'
 import { Route as AccountsAccountIdSharingRouteImport } from './routes/accounts.$accountId.sharing'
+import { Route as CategoriesCategoryIdSharingRouteImport } from './routes/categories.$categoryId.sharing'
 import { Route as EntriesEntryIdEditRouteImport } from './routes/entries.$entryId.edit'
 
 const IndexRoute = IndexRouteImport.update({
@@ -132,6 +133,12 @@ const AccountsAccountIdSharingRoute =
     path: '/sharing',
     getParentRoute: () => AccountsAccountIdRoute,
   } as any)
+const CategoriesCategoryIdSharingRoute =
+  CategoriesCategoryIdSharingRouteImport.update({
+    id: '/$categoryId/sharing',
+    path: '/$categoryId/sharing',
+    getParentRoute: () => CategoriesRoute,
+  } as any)
 const EntriesEntryIdEditRoute = EntriesEntryIdEditRouteImport.update({
   id: '/$entryId/edit',
   path: '/$entryId/edit',
@@ -141,7 +148,7 @@ const EntriesEntryIdEditRoute = EntriesEntryIdEditRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRouteWithChildren
-  '/categories': typeof CategoriesRoute
+  '/categories': typeof CategoriesRouteWithChildren
   '/entries': typeof EntriesRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
@@ -158,12 +165,13 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
+  '/categories/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/categories': typeof CategoriesRoute
+  '/categories': typeof CategoriesRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
@@ -177,6 +185,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
+  '/categories/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
   '/accounts/$accountId': typeof AccountsAccountIdIndexRoute
 }
@@ -184,7 +193,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRouteWithChildren
-  '/categories': typeof CategoriesRoute
+  '/categories': typeof CategoriesRouteWithChildren
   '/entries': typeof EntriesRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
@@ -201,6 +210,7 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
+  '/categories/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
@@ -226,6 +236,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/accounts/$accountId/edit'
     | '/accounts/$accountId/sharing'
+    | '/categories/$categoryId/sharing'
     | '/entries/$entryId/edit'
     | '/accounts/$accountId/'
   fileRoutesByTo: FileRoutesByTo
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/accounts/$accountId/edit'
     | '/accounts/$accountId/sharing'
+    | '/categories/$categoryId/sharing'
     | '/entries/$entryId/edit'
     | '/accounts/$accountId'
   id:
@@ -268,6 +280,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/accounts/$accountId/edit'
     | '/accounts/$accountId/sharing'
+    | '/categories/$categoryId/sharing'
     | '/entries/$entryId/edit'
     | '/accounts/$accountId/'
   fileRoutesById: FileRoutesById
@@ -275,7 +288,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountsRoute: typeof AccountsRouteWithChildren
-  CategoriesRoute: typeof CategoriesRoute
+  CategoriesRoute: typeof CategoriesRouteWithChildren
   EntriesRoute: typeof EntriesRouteWithChildren
   HomeRoute: typeof HomeRoute
   LoginRoute: typeof LoginRoute
@@ -425,6 +438,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountsAccountIdSharingRouteImport
       parentRoute: typeof AccountsAccountIdRoute
     }
+    '/categories/$categoryId/sharing': {
+      id: '/categories/$categoryId/sharing'
+      path: '/$categoryId/sharing'
+      fullPath: '/categories/$categoryId/sharing'
+      preLoaderRoute: typeof CategoriesCategoryIdSharingRouteImport
+      parentRoute: typeof CategoriesRoute
+    }
     '/entries/$entryId/edit': {
       id: '/entries/$entryId/edit'
       path: '/$entryId/edit'
@@ -466,6 +486,18 @@ const AccountsRouteWithChildren = AccountsRoute._addFileChildren(
   AccountsRouteChildren,
 )
 
+interface CategoriesRouteChildren {
+  CategoriesCategoryIdSharingRoute: typeof CategoriesCategoryIdSharingRoute
+}
+
+const CategoriesRouteChildren: CategoriesRouteChildren = {
+  CategoriesCategoryIdSharingRoute: CategoriesCategoryIdSharingRoute,
+}
+
+const CategoriesRouteWithChildren = CategoriesRoute._addFileChildren(
+  CategoriesRouteChildren,
+)
+
 interface EntriesRouteChildren {
   EntriesNewRoute: typeof EntriesNewRoute
   EntriesIndexRoute: typeof EntriesIndexRoute
@@ -502,7 +534,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountsRoute: AccountsRouteWithChildren,
-  CategoriesRoute: CategoriesRoute,
+  CategoriesRoute: CategoriesRouteWithChildren,
   EntriesRoute: EntriesRouteWithChildren,
   HomeRoute: HomeRoute,
   LoginRoute: LoginRoute,

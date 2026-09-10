@@ -106,6 +106,23 @@ func (m *Mailer) SendAccountShare(ctx context.Context, addr, accountTitle, grant
 	return m.send(ctx, addr, "An account was shared with you on Family Finances", text, html)
 }
 
+// SendCategoryShare emails addr that categoryName has been shared with
+// them by granterName at the given permission tier, with a link into the
+// application. Satisfies category.Mailer.
+func (m *Mailer) SendCategoryShare(ctx context.Context, addr, categoryName, granterName, permission, link string) error {
+	by := granterName
+	if by == "" {
+		by = "a member"
+	}
+	text := by + ` shared the category "` + categoryName + `" with you (` + permission + ` access). Open it here:` +
+		"\n\n" + link
+	html := paragraphs(
+		htmlEscape(by)+` shared the category "`+htmlEscape(categoryName)+`" with you (`+htmlEscape(permission)+` access). Open it here:`,
+		`<a href="`+htmlEscape(link)+`">`+htmlEscape(link)+`</a>`,
+	)
+	return m.send(ctx, addr, "A category was shared with you on Family Finances", text, html)
+}
+
 // send composes the MIME message and delivers it.
 func (m *Mailer) send(ctx context.Context, to, subject, textBody, htmlBody string) error {
 	msg, err := m.compose(to, subject, textBody, htmlBody)

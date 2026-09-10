@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"at.draab/familyfinances/internal/category"
 	"github.com/jackc/pgx/v5"
@@ -17,10 +18,31 @@ type CategoryStore struct {
 // NewCategoryStore returns a CategoryStore over pool.
 func NewCategoryStore(pool *pgxpool.Pool) *CategoryStore { return &CategoryStore{pool: pool} }
 
-const categoryCols = `id::text, parent_id::text, name, COALESCE(icon, ''), COALESCE(color, ''), sort_order, disabled, created_at, (
-	SELECT count(*) FROM entries e
-	WHERE e.category_id = categories.id AND e.deleted_at IS NULL
-)`
+// categoryCols is the plain column list, parameterized by callerParam — the
+// 1-based positional parameter index bound to whichever user's own entries
+// entry_count should reflect. For the strictly-owner-scoped methods below
+// (Create/Update/SetDisabled/move/Get), that's always the ownerID param,
+// since caller and owner are the same there; GetForCaller/List bind their
+// own callerID instead, who may be a share recipient rather than the real
+// owner.
+func categoryCols(callerParam int) string {
+	return fmt.Sprintf(`id::text, parent_id::text, name, COALESCE(icon, ''), COALESCE(color, ''), sort_order, disabled, created_at, (
+		SELECT count(*) FROM entries e
+		WHERE e.category_id = categories.id AND e.deleted_at IS NULL AND e.created_by = $%[1]d
+	)`, callerParam)
+}
+
+// categoryViewCols is categoryCols plus three caller-dependent columns —
+// permission, shared, owner_name — used by GetForCaller/List, mirroring
+// internal/storage/postgres/account.go's accountViewCols.
+func categoryViewCols(callerParam int) string {
+	return categoryCols(callerParam) + fmt.Sprintf(`,
+	CASE WHEN owner_id = $%[1]d THEN 'owner' ELSE COALESCE(
+		(SELECT permission FROM category_shares WHERE category_id = categories.id AND user_id = $%[1]d), ''
+	) END,
+	(owner_id != $%[1]d),
+	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = categories.owner_id), '')`, callerParam)
+}
 
 func scanCategory(row pgx.Row) (category.Category, error) {
 	var c category.Category
@@ -31,10 +53,30 @@ func scanCategory(row pgx.Row) (category.Category, error) {
 	return c, err
 }
 
-func (s *CategoryStore) List(ctx context.Context, ownerID string) ([]category.Category, error) {
+func scanCategoryView(row pgx.Row) (category.Category, error) {
+	var c category.Category
+	var permission string
+	err := row.Scan(&c.ID, &c.ParentID, &c.Name, &c.Icon, &c.Color, &c.SortOrder, &c.Disabled, &c.CreatedAt, &c.EntryCount,
+		&permission, &c.Shared, &c.OwnerName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return category.Category{}, category.ErrNotFound
+	}
+	if err != nil {
+		return category.Category{}, err
+	}
+	c.Permission = category.Permission(permission)
+	return c, nil
+}
+
+func (s *CategoryStore) List(ctx context.Context, callerID string) ([]category.Category, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+categoryCols+` FROM categories WHERE owner_id = $1 AND deleted_at IS NULL ORDER BY sort_order, id`,
-		ownerID,
+		`SELECT `+categoryViewCols(1)+` FROM categories
+		 WHERE deleted_at IS NULL
+		   AND (owner_id = $1 OR EXISTS (
+		       SELECT 1 FROM category_shares WHERE category_id = categories.id AND user_id = $1
+		   ))
+		 ORDER BY sort_order, id`,
+		callerID,
 	)
 	if err != nil {
 		return nil, err
@@ -43,7 +85,7 @@ func (s *CategoryStore) List(ctx context.Context, ownerID string) ([]category.Ca
 
 	var out []category.Category
 	for rows.Next() {
-		c, err := scanCategory(rows)
+		c, err := scanCategoryView(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -54,8 +96,15 @@ func (s *CategoryStore) List(ctx context.Context, ownerID string) ([]category.Ca
 
 func (s *CategoryStore) Get(ctx context.Context, ownerID, id string) (category.Category, error) {
 	return scanCategory(s.pool.QueryRow(ctx,
-		`SELECT `+categoryCols+` FROM categories WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
+		`SELECT `+categoryCols(2)+` FROM categories WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
 		id, ownerID,
+	))
+}
+
+func (s *CategoryStore) GetForCaller(ctx context.Context, callerID, id string) (category.Category, error) {
+	return scanCategoryView(s.pool.QueryRow(ctx,
+		`SELECT `+categoryViewCols(2)+` FROM categories WHERE id = $1 AND deleted_at IS NULL`,
+		id, callerID,
 	))
 }
 
@@ -66,7 +115,7 @@ func (s *CategoryStore) Create(ctx context.Context, ownerID string, in category.
 			SELECT COALESCE(MAX(sort_order) + 1, 0) FROM categories
 			WHERE owner_id = $1 AND parent_id IS NOT DISTINCT FROM $2 AND deleted_at IS NULL
 		))
-		RETURNING `+categoryCols,
+		RETURNING `+categoryCols(1),
 		ownerID, in.ParentID, in.Name, in.Icon, in.Color,
 	))
 	if isForeignKeyViolation(err) {
@@ -83,7 +132,7 @@ func (s *CategoryStore) Update(ctx context.Context, ownerID, id string, upd cate
 	defer tx.Rollback(ctx)
 
 	current, err := scanCategory(tx.QueryRow(ctx,
-		`SELECT `+categoryCols+` FROM categories WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL FOR UPDATE`,
+		`SELECT `+categoryCols(2)+` FROM categories WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL FOR UPDATE`,
 		id, ownerID,
 	))
 	if err != nil {
@@ -116,7 +165,7 @@ func (s *CategoryStore) Update(ctx context.Context, ownerID, id string, upd cate
 			icon       = CASE WHEN $7::text IS NULL THEN icon ELSE NULLIF($7, '') END,
 			color      = CASE WHEN $8::text IS NULL THEN color ELSE NULLIF($8, '') END
 		WHERE id = $1 AND owner_id = $2
-		RETURNING `+categoryCols,
+		RETURNING `+categoryCols(2),
 		id, ownerID, upd.Name, upd.ParentID.Set, newParent, sortOrder, upd.Icon, upd.Color,
 	))
 	if isForeignKeyViolation(err) {
@@ -169,7 +218,7 @@ func (s *CategoryStore) SetDisabled(ctx context.Context, ownerID, id string, dis
 	return scanCategory(s.pool.QueryRow(ctx, `
 		UPDATE categories SET disabled = $3
 		WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
-		RETURNING `+categoryCols,
+		RETURNING `+categoryCols(2),
 		id, ownerID, disabled,
 	))
 }
@@ -185,7 +234,7 @@ func (s *CategoryStore) move(ctx context.Context, ownerID, id string, up bool) (
 	defer tx.Rollback(ctx)
 
 	current, err := scanCategory(tx.QueryRow(ctx,
-		`SELECT `+categoryCols+` FROM categories WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL FOR UPDATE`,
+		`SELECT `+categoryCols(2)+` FROM categories WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL FOR UPDATE`,
 		id, ownerID,
 	))
 	if err != nil {
@@ -218,8 +267,8 @@ func (s *CategoryStore) move(ctx context.Context, ownerID, id string, up bool) (
 		return category.Category{}, err
 	}
 	updated, err := scanCategory(tx.QueryRow(ctx,
-		`UPDATE categories SET sort_order = $2 WHERE id = $1 RETURNING `+categoryCols,
-		id, sibSortOrder,
+		`UPDATE categories SET sort_order = $2 WHERE id = $1 RETURNING `+categoryCols(3),
+		id, sibSortOrder, ownerID,
 	))
 	if err != nil {
 		return category.Category{}, err
@@ -291,4 +340,99 @@ func (s *CategoryStore) Subtree(ctx context.Context, ownerID, id string) ([]stri
 		out = append(out, cid)
 	}
 	return out, rows.Err()
+}
+
+// --- sharing -------------------------------------------------------------
+
+const categoryShareCols = `category_shares.user_id::text, COALESCE(u.display_name, u.email), u.email,
+	permission, granted_by::text, COALESCE(gu.display_name, gu.email), category_shares.created_at, category_shares.updated_at`
+
+const categoryShareJoins = `FROM category_shares
+	JOIN users u ON u.id = category_shares.user_id
+	JOIN users gu ON gu.id = category_shares.granted_by`
+
+func scanCategoryShare(row pgx.Row, categoryID string) (category.CategoryShare, error) {
+	var sh category.CategoryShare
+	err := row.Scan(&sh.UserID, &sh.Name, &sh.Email, &sh.Permission, &sh.GrantedBy, &sh.GrantedByName, &sh.CreatedAt, &sh.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return category.CategoryShare{}, category.ErrNotFound
+	}
+	sh.CategoryID = categoryID
+	return sh, err
+}
+
+func (s *CategoryStore) CreateOrUpdateShare(ctx context.Context, categoryID, userID string, permission category.Permission, grantedBy string) (category.CategoryShare, error) {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO category_shares (category_id, user_id, permission, granted_by)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (category_id, user_id)
+		DO UPDATE SET permission = $3, granted_by = $4, updated_at = now()`,
+		categoryID, userID, permission, grantedBy,
+	)
+	if isForeignKeyViolation(err) {
+		return category.CategoryShare{}, category.ErrInvalidValue
+	}
+	if err != nil {
+		return category.CategoryShare{}, err
+	}
+	return scanCategoryShare(s.pool.QueryRow(ctx,
+		`SELECT `+categoryShareCols+` `+categoryShareJoins+` WHERE category_shares.category_id = $1 AND category_shares.user_id = $2`,
+		categoryID, userID,
+	), categoryID)
+}
+
+func (s *CategoryStore) ListShares(ctx context.Context, categoryID string) ([]category.CategoryShare, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+categoryShareCols+` `+categoryShareJoins+` WHERE category_shares.category_id = $1 ORDER BY category_shares.created_at`,
+		categoryID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []category.CategoryShare
+	for rows.Next() {
+		sh, err := scanCategoryShare(rows, categoryID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sh)
+	}
+	return out, rows.Err()
+}
+
+func (s *CategoryStore) ShareByUser(ctx context.Context, categoryID, userID string) (category.CategoryShare, error) {
+	return scanCategoryShare(s.pool.QueryRow(ctx,
+		`SELECT `+categoryShareCols+` `+categoryShareJoins+` WHERE category_shares.category_id = $1 AND category_shares.user_id = $2`,
+		categoryID, userID,
+	), categoryID)
+}
+
+func (s *CategoryStore) UpdateSharePermission(ctx context.Context, categoryID, userID string, permission category.Permission) (category.CategoryShare, error) {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE category_shares SET permission = $3, updated_at = now() WHERE category_id = $1 AND user_id = $2`,
+		categoryID, userID, permission,
+	)
+	if err != nil {
+		return category.CategoryShare{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return category.CategoryShare{}, category.ErrNotFound
+	}
+	return s.ShareByUser(ctx, categoryID, userID)
+}
+
+func (s *CategoryStore) DeleteShare(ctx context.Context, categoryID, userID string) error {
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM category_shares WHERE category_id = $1 AND user_id = $2`,
+		categoryID, userID,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return category.ErrNotFound
+	}
+	return nil
 }

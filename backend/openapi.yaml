@@ -854,6 +854,30 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 
   /api/categories/{id}:
+    get:
+      operationId: getCategory
+      summary: Get a category
+      description: >-
+        Visible to any caller holding at least view permission on it (real
+        ownership or any share).
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
     patch:
       operationId: patchCategory
       summary: Update a category
@@ -987,6 +1011,153 @@ paths:
                 $ref: "#/components/schemas/Category"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/categories/{id}/shares:
+    get:
+      operationId: getCategoryShares
+      summary: List a category's shares
+      description: >-
+        Visible to any caller holding at least view permission (real
+        ownership or any share) — every user with access to a category can
+        see who else has access. Does not include the real owner as a row
+        (their identity is on the Category itself via owner_name); a
+        client renders that as the fixed first row separately.
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Every current share on the category.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryShare"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: postCategoryShare
+      summary: Share a category with a user by email
+      description: >-
+        Real-owner only — unlike account-sharing there is no shareable
+        "owner" tier that could also admit this. Deliberately does not hide
+        whether email matched a registered user — the caller already holds
+        an authenticated, real-owner grant on a real category. A match
+        creates or updates (201, share overwrites any existing one for that
+        user in place) a share and emails the recipient a notification with
+        an application link. No match returns 200 with matched: false and
+        invite_allowed reflecting whether the instance currently permits
+        sending a new application invite for that email; no share is
+        created. Sharing with the caller's own email is rejected (400).
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryShareInvite"
+      responses:
+        "200":
+          description: No user matched that email; see invite_allowed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryShareInviteResult"
+        "201":
+          description: The share was created or updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryShareInviteResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/categories/{id}/shares/{userId}:
+    patch:
+      operationId: patchCategoryShare
+      summary: Change a share's permission
+      description: >-
+        Real-owner only. The real owner can never be a target (400) — they
+        carry no share row to change.
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/ShareUserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategorySharePermissionUpdate"
+      responses:
+        "200":
+          description: The updated share.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryShare"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteCategoryShare
+      summary: Revoke a share, or leave a shared category
+      description: >-
+        The real owner may target any user's share (revoke). Any user may
+        target their own (userId equal to the caller's own id) — self-leave,
+        requiring no owner permission of its own. Either way access is
+        removed immediately and unconditionally (no soft delete); entries
+        already categorized under it keep resolving and displaying that
+        category normally for every user who can otherwise see them. The
+        real owner can never be a target (400) — they carry no share row,
+        so self-leave is unavailable to them.
+      tags: [categories]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/ShareUserId"
+      responses:
+        "204":
+          description: The share is removed.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -2164,7 +2335,7 @@ components:
 
     Category:
       type: object
-      required: [id, name, sort_order, disabled, created_at, entry_count]
+      required: [id, name, sort_order, disabled, created_at, entry_count, permission, shared]
       properties:
         id:
           type: string
@@ -2203,9 +2374,101 @@ components:
         entry_count:
           type: integer
           description: >-
-            The number of the caller's own non-deleted entries directly
-            categorized under this category. Direct references only —
-            entries under a descendant category are not counted.
+            The number of the *viewing caller's own* non-deleted entries
+            directly categorized under this category. Direct references
+            only — entries under a descendant category are not counted.
+        permission:
+          $ref: '#/components/schemas/CategoryPermission'
+        shared:
+          type: boolean
+          description: >-
+            True when the caller is not this category's real owner (i.e.
+            they hold it via a share). Never true for the real owner's own
+            view of their own category.
+        owner_name:
+          type: string
+          description: >-
+            The real owner's display name (or email, as a fallback). Present
+            for every category, but only meaningful to render when shared is
+            true.
+
+    CategoryPermission:
+      type: string
+      enum: [view, append, owner]
+      description: >-
+        Two shareable tiers, each a strict superset of the one before it:
+        view (the category resolves in entry-list/report filters and on
+        entries already categorized under it, but cannot be newly selected),
+        append (+ selectable when categorizing an entry). owner is the real
+        owner's own, implicit permission — never a valid value for a share;
+        only the real owner may ever edit a category's own metadata,
+        lifecycle, or shares.
+
+    CategoryShare:
+      type: object
+      required:
+        - user_id
+        - name
+        - email
+        - permission
+        - granted_by
+        - granted_by_name
+        - created_at
+        - updated_at
+      properties:
+        user_id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        permission:
+          $ref: '#/components/schemas/CategoryPermission'
+        granted_by:
+          type: string
+        granted_by_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CategoryShareInvite:
+      type: object
+      required: [email, permission]
+      properties:
+        email:
+          type: string
+        permission:
+          $ref: '#/components/schemas/CategoryPermission'
+
+    CategoryShareInviteResult:
+      type: object
+      required: [matched, invite_allowed]
+      properties:
+        matched:
+          type: boolean
+          description: >-
+            True when email matched an existing, active user and a share
+            was created or updated (share is then present). False when no
+            such user exists.
+        invite_allowed:
+          type: boolean
+          description: >-
+            Only meaningful when matched is false: whether the instance
+            currently allows sending a new application invite for this
+            email (mirrors POST /api/auth/invites' own gating).
+        share:
+          $ref: '#/components/schemas/CategoryShare'
+
+    CategorySharePermissionUpdate:
+      type: object
+      required: [permission]
+      properties:
+        permission:
+          $ref: '#/components/schemas/CategoryPermission'
 
     CategoryWrite:
       type: object
