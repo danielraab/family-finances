@@ -11,7 +11,7 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
 
-export const Route = createFileRoute("/categories/$categoryId/sharing")({
+export const Route = createFileRoute("/categories_/$categoryId/sharing")({
   component: SharingPage,
 });
 
