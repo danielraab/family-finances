@@ -48,11 +48,6 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("DELETE /api/accounts/{id}/shares/{userId}", h.revokeShare)
 
 	h.mux.HandleFunc("GET /api/account-types", h.listTypes)
-	h.mux.HandleFunc("POST /api/account-types", h.createType)
-	h.mux.HandleFunc("PATCH /api/account-types/{id}", h.updateType)
-	h.mux.HandleFunc("DELETE /api/account-types/{id}", h.deleteType)
-	h.mux.HandleFunc("POST /api/account-types/{id}/disable", h.disableType)
-	h.mux.HandleFunc("POST /api/account-types/{id}/enable", h.enableType)
 
 	return h
 }
@@ -66,7 +61,7 @@ type accountBody struct {
 	Description        *string      `json:"description"`
 	Icon               *string      `json:"icon"`
 	Color              *string      `json:"color"`
-	TypeID             *string      `json:"type_id"`
+	Type               *string      `json:"type"`
 	Currency           *string      `json:"currency"`
 	FinancialInstitute *string      `json:"financial_institute"`
 	OpeningDate        *Date        `json:"opening_date"`
@@ -114,8 +109,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if body.Color != nil {
 		in.Color = *body.Color
 	}
-	if body.TypeID != nil {
-		in.TypeID = *body.TypeID
+	if body.Type != nil {
+		in.Type = *body.Type
 	}
 	if body.Currency != nil {
 		in.Currency = *body.Currency
@@ -165,7 +160,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Description:        body.Description,
 		Icon:               body.Icon,
 		Color:              body.Color,
-		TypeID:             body.TypeID,
+		Type:               body.Type,
 		Currency:           body.Currency,
 		FinancialInstitute: body.FinancialInstitute,
 		OpeningDate:        body.OpeningDate,
@@ -332,105 +327,24 @@ func (h *Handler) revokeShare(w http.ResponseWriter, r *http.Request) {
 
 // --- account types ---------------------------------------------------
 
+// listTypes returns the caller's distinct in-use account type labels, for
+// the account form's autocomplete. There is no create/update/delete
+// counterpart — a type exists only by being written on an account.
 func (h *Handler) listTypes(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeUnauthorized(w)
 		return
 	}
-	types, err := h.svc.ListTypes(r.Context(), user.ID)
+	types, err := h.svc.ListInUseTypes(r.Context(), user.ID)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
 	}
 	if types == nil {
-		types = []Type{}
+		types = []string{}
 	}
 	writeJSON(w, http.StatusOK, types)
-}
-
-type accountTypeBody struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-}
-
-func (h *Handler) createType(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		writeUnauthorized(w)
-		return
-	}
-	var body accountTypeBody
-	if err := decodeJSON(r, &body); err != nil {
-		h.renderError(w, r, ErrInvalidValue)
-		return
-	}
-	t, err := h.svc.CreateType(r.Context(), user.ID, body.Title, body.Description)
-	if err != nil {
-		h.renderError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, t)
-}
-
-func (h *Handler) updateType(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		writeUnauthorized(w)
-		return
-	}
-	var body accountTypeBody
-	if err := decodeJSON(r, &body); err != nil {
-		h.renderError(w, r, ErrInvalidValue)
-		return
-	}
-	t, err := h.svc.UpdateType(r.Context(), user.ID, r.PathValue("id"), body.Title, body.Description)
-	if err != nil {
-		h.renderError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, t)
-}
-
-func (h *Handler) deleteType(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		writeUnauthorized(w)
-		return
-	}
-	if err := h.svc.DeleteType(r.Context(), user.ID, r.PathValue("id")); err != nil {
-		h.renderError(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *Handler) disableType(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		writeUnauthorized(w)
-		return
-	}
-	t, err := h.svc.DisableType(r.Context(), user.ID, r.PathValue("id"))
-	if err != nil {
-		h.renderError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, t)
-}
-
-func (h *Handler) enableType(w http.ResponseWriter, r *http.Request) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok {
-		writeUnauthorized(w)
-		return
-	}
-	t, err := h.svc.EnableType(r.Context(), user.ID, r.PathValue("id"))
-	if err != nil {
-		h.renderError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, t)
 }
 
 func decodeJSON(r *http.Request, v any) error {

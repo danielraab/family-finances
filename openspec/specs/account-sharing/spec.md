@@ -16,17 +16,20 @@ See `accounts` for the account a share applies to and its real owner, and
 
 An account MAY be shared with any number of other registered users, each at
 exactly one of four permission tiers: `view`, `append`, `entry_admin`, or
-`owner`. `view` grants reading the account's entries and balance. `append`
+`owner`. A caller's tier SHALL be the sole determinant of what they may do
+on the account, and each tier SHALL grant every capability of the tiers
+below it. `view` grants reading the account's entries and balance. `append`
 additionally grants creating entries and editing/deleting only entries the
 same user created. `entry_admin` additionally grants editing/deleting any
 entry on the account (not only ones that user created). `owner` additionally
-grants editing the account's own metadata (all fields except `type_id`, see
-`accounts`), disabling/enabling/soft-deleting the account, and managing
-shares (inviting, changing a permission, revoking). A shared `owner`-tier
-grant carries every one of these rights identically to the account's real
-owner (`accounts.owner_id`), which this capability never reassigns — the
-real owner is always a distinct, always-knowable identity from any
-`owner`-tier share.
+grants editing every one of the account's own metadata fields (including
+`type`, which is now plain text on the account rather than a reference into
+a per-real-owner lookup), disabling/enabling/soft-deleting the account, and
+managing shares (inviting, changing a permission, revoking). A shared
+`owner`-tier grant carries every one of these rights identically to the
+account's real owner (`accounts.owner_id`), which this capability never
+reassigns — the real owner is always a distinct, always-knowable identity
+from any `owner`-tier share.
 
 #### Scenario: view grants reading only
 
@@ -51,7 +54,8 @@ real owner is always a distinct, always-knowable identity from any
 #### Scenario: owner grants full account management
 
 - **WHEN** a user with a shared `owner`-tier permission edits the account's
-  title, disables the account, or invites another user to it
+  title, edits the account's `type`, disables the account, or invites
+  another user to it
 - **THEN** each request succeeds, identically to the real owner performing
   it
 

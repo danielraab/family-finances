@@ -6,14 +6,11 @@ The authenticated /settings page: the sidebar link to it, its auth gate,
 its Common tab (language/timezone/default-currency/displayed-decimal-places
 preferences), its My
 Invitations tab (every authenticated visitor's own sent invitations, with
-revoke), its Account Types tab, open to every authenticated visitor
-(list/create/edit/disable/enable/delete their own account types), its Tags
-tab, also open to every authenticated visitor (list/create/rename/
-disable/enable/delete their own tags), and its admin-only Users tab
-(list/invite/disable/enable/delete/revoke). See `user-settings` and
-`user-administration` for the backend capabilities the Users tab calls,
-`internal/account`'s account-type slice (`backend/AGENTS.md`) for the
-Account Types tab, and `entry-tags` for the Tags tab.
+revoke), its Tags tab, open to every authenticated visitor
+(list/create/rename/disable/enable/delete their own tags), and its
+admin-only Users tab (list/invite/disable/enable/delete/revoke). See
+`user-settings` and `user-administration` for the backend capabilities the
+Users tab calls, and `entry-tags` for the Tags tab.
 
 ## Requirements
 
@@ -216,73 +213,10 @@ tab SHALL show text stating that plainly instead of an empty list.
 - **THEN** the tab displays text saying there are none, instead of rendering
   an empty list
 
-### Requirement: Account Types tab lists, creates, edits, disables/enables, and deletes account types
-
-The settings page SHALL offer an **Account Types** tab to every
-authenticated visitor, positioned alongside Common and My Invitations —
-not gated on `is_admin`. The tab SHALL list only the caller's own account
-types (`GET /api/account-types`) showing each type's title, description,
-and an Active/Disabled status, with actions to create a new type, edit an
-existing type's title and description, disable or enable it, and delete
-it. Each state-changing action SHALL be confirmed via the same
-`@headlessui/react` `Dialog` pattern already used by the Users tab. A
-delete rejected by the backend (`409`, still referenced by one of the
-caller's own accounts) SHALL surface an inline error rather than silently
-doing nothing.
-
-#### Scenario: Any authenticated visitor sees the Account Types tab
-
-- **WHEN** an authenticated visitor (admin or not) opens `/settings`
-- **THEN** the Account Types tab is shown in the tab list
-
-#### Scenario: A visitor creates a new account type
-
-- **WHEN** an authenticated visitor submits the create form with a title
-  and a description
-- **THEN** `POST /api/account-types` is called and the new type appears in
-  the list, Active
-
-#### Scenario: A visitor disables a type in use
-
-- **WHEN** an authenticated visitor disables a type that their own
-  accounts reference
-- **THEN** the type's status shows Disabled, and those accounts are
-  unaffected
-
-#### Scenario: Deleting an in-use type shows an error
-
-- **WHEN** an authenticated visitor attempts to delete a type still
-  referenced by one of their own accounts
-- **THEN** the backend's `409` surfaces as an inline error and the type
-  remains in the list
-
-### Requirement: The account form only offers live types for a new assignment
-
-The account create/edit form's type selector SHALL exclude disabled types
-when choosing a type for a new account or changing an existing account's
-type. If the account being edited currently holds a disabled type, that
-type SHALL still be shown (labeled distinctly, e.g. as disabled) so the
-form does not appear to have lost the account's data, but it SHALL NOT be
-resubmittable as the account's type — the form SHALL require a different,
-non-disabled selection before the edit can be saved, mirroring how a blank
-required field already blocks submission.
-
-#### Scenario: Creating an account only offers live types
-
-- **WHEN** an authenticated visitor opens the new-account form
-- **THEN** the type dropdown lists only non-disabled account types
-
-#### Scenario: Editing an account on a disabled type forces reselection
-
-- **WHEN** an authenticated visitor edits an account whose current type is
-  disabled
-- **THEN** the form shows that type as the current, non-selectable value
-  and blocks saving until a different, non-disabled type is chosen
-
 ### Requirement: Tags tab lists, creates, renames, disables/enables, and deletes tags
 
 The settings page SHALL offer a **Tags** tab to every authenticated
-visitor, positioned alongside Common, My Invitations, and Account Types —
+visitor, positioned alongside Common and My Invitations —
 not gated on `is_admin`. The tab SHALL list only the caller's own tags
 (`GET /api/tags`) showing each tag's name, its `entry_count`, and an
 Active/Disabled status, with actions to create a new tag, rename an
@@ -330,10 +264,9 @@ carrying the tag.
 
 Each tag row's delete action SHALL require an explicit confirmation step,
 via the same `@headlessui/react` `Dialog` pattern used elsewhere in
-`/settings`, before `DELETE /api/tags/{id}` is called. Unlike account types
-or categories, delete is never blocked by use — the confirmation copy
-SHALL state that the tag will be removed from every entry that currently
-carries it.
+`/settings`, before `DELETE /api/tags/{id}` is called. Unlike categories,
+a tag delete is never blocked by use — the confirmation copy SHALL state
+that the tag will be removed from every entry that currently carries it.
 
 #### Scenario: Confirmation blocks an accidental delete
 

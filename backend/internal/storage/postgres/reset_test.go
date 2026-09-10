@@ -15,9 +15,7 @@ func TestResetAllTruncatesEveryDataTable(t *testing.T) {
 	authStore := NewAuthStore(pool)
 	owner := mustUser(t, authStore, "reset-check@example.com")
 	accStore := NewAccountStore(pool)
-	if _, err := accStore.CreateType(ctx, owner.ID, "Checking", ""); err != nil {
-		t.Fatal(err)
-	}
+	mustAccount(t, accStore, owner.ID, "Checking", "Checking")
 
 	before, err := TableCounts(ctx, pool)
 	if err != nil {

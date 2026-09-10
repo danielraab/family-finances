@@ -64,10 +64,7 @@ function PlusGlyph() {
 function AccountsOverview() {
   const { t, i18n } = useTranslation();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
-  const { accounts, types, balances } = useAccountsWithBalances();
-
-  const typeName = (typeId: string) =>
-    types.find((type) => type.id === typeId)?.title ?? typeId;
+  const { accounts, balances } = useAccountsWithBalances();
 
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-12 sm:px-10">
@@ -107,7 +104,7 @@ function AccountsOverview() {
                   <AccountStatus account={account} t={t} />
                 </div>
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {typeName(account.type_id)} · {account.currency}
+                  {account.type} · {account.currency}
                 </span>
                 <span
                   className={`mt-2 font-mono text-lg tabular-nums ${

@@ -29,37 +29,32 @@ func createAccount(t *testing.T, h http.Handler, user auth.User, body string) ac
 }
 
 func TestHandlerCreateAccountWithIconAndColor(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
+	h, _ := newHandler(t)
 	user := auth.User{ID: "u1"}
 
-	acc := createAccount(t, h, user, `{"title":"Main","type_id":"`+typ.ID+
-		`","currency":"EUR","opening_date":"2024-01-01","icon":"wallet","color":"blue"}`)
+	acc := createAccount(t, h, user, `{"title":"Main","type":"Checking","currency":"EUR","opening_date":"2024-01-01","icon":"wallet","color":"blue"}`)
 	if acc.Icon != "wallet" || acc.Color != "blue" {
 		t.Fatalf("icon/color = %q/%q, want wallet/blue", acc.Icon, acc.Color)
 	}
 }
 
 func TestHandlerCreateAccountWithoutIconOrColor(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
+	h, _ := newHandler(t)
 	user := auth.User{ID: "u1"}
 
-	acc := createAccount(t, h, user, `{"title":"Main","type_id":"`+typ.ID+
-		`","currency":"EUR","opening_date":"2024-01-01"}`)
+	acc := createAccount(t, h, user, `{"title":"Main","type":"Checking","currency":"EUR","opening_date":"2024-01-01"}`)
 	if acc.Icon != "" || acc.Color != "" {
 		t.Fatalf("icon/color = %q/%q, want both empty", acc.Icon, acc.Color)
 	}
 }
 
 func TestHandlerCreateAccountMalformedIconRejected(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
+	h, _ := newHandler(t)
 	user := auth.User{ID: "u1"}
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/accounts", strings.NewReader(
-		`{"title":"Main","type_id":"`+typ.ID+`","currency":"EUR","opening_date":"2024-01-01","icon":"Wallet Icon!"}`,
+		`{"title":"Main","type":"Checking","currency":"EUR","opening_date":"2024-01-01","icon":"Wallet Icon!"}`,
 	)), user))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
@@ -68,11 +63,9 @@ func TestHandlerCreateAccountMalformedIconRejected(t *testing.T) {
 }
 
 func TestHandlerUpdateAccountMalformedColorRejected(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
+	h, _ := newHandler(t)
 	user := auth.User{ID: "u1"}
-	acc := createAccount(t, h, user, `{"title":"Main","type_id":"`+typ.ID+
-		`","currency":"EUR","opening_date":"2024-01-01"}`)
+	acc := createAccount(t, h, user, `{"title":"Main","type":"Checking","currency":"EUR","opening_date":"2024-01-01"}`)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/accounts/"+acc.ID, strings.NewReader(
@@ -85,11 +78,9 @@ func TestHandlerUpdateAccountMalformedColorRejected(t *testing.T) {
 }
 
 func TestHandlerUpdateAccountClearsIconKeepsColor(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
+	h, _ := newHandler(t)
 	user := auth.User{ID: "u1"}
-	acc := createAccount(t, h, user, `{"title":"Main","type_id":"`+typ.ID+
-		`","currency":"EUR","opening_date":"2024-01-01","icon":"wallet","color":"blue"}`)
+	acc := createAccount(t, h, user, `{"title":"Main","type":"Checking","currency":"EUR","opening_date":"2024-01-01","icon":"wallet","color":"blue"}`)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/accounts/"+acc.ID, strings.NewReader(
@@ -112,11 +103,9 @@ func TestHandlerUpdateAccountClearsIconKeepsColor(t *testing.T) {
 }
 
 func TestHandlerUpdateAccountUnrelatedFieldPreservesIconAndColor(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
+	h, _ := newHandler(t)
 	user := auth.User{ID: "u1"}
-	acc := createAccount(t, h, user, `{"title":"Main","type_id":"`+typ.ID+
-		`","currency":"EUR","opening_date":"2024-01-01","icon":"wallet","color":"blue"}`)
+	acc := createAccount(t, h, user, `{"title":"Main","type":"Checking","currency":"EUR","opening_date":"2024-01-01","icon":"wallet","color":"blue"}`)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/accounts/"+acc.ID, strings.NewReader(

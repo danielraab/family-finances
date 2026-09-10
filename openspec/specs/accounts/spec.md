@@ -5,8 +5,9 @@
 Accounts a user owns for tracking their finances — title,
 description, type, currency, financial institute, opening/closing
 dates — their ownership/visibility rules, the reversible `disabled`
-flag, soft delete, and the per-user, self-managed `account_types` lookup
-they are classified by. See `account-entries` for the entries recorded
+flag, and soft delete. `type` is a free-text label stored on the
+account; `GET /api/account-types` lists the caller's distinct in-use
+values for autocomplete. See `account-entries` for the entries recorded
 against an account and its live balance, and `web-client-accounts`
 for the client surface.
 
@@ -15,19 +16,31 @@ for the client surface.
 ### Requirement: Account fields and creation
 
 An account SHALL carry: `title` (required, non-empty), `description`
-(optional), `type_id` (required, references `account_types`), `currency`
-(required, ISO-4217 shape — three uppercase letters, not checked against a
-canonical list, validated the same way as `user-settings`'
+(optional), `type` (required, a free-text label the backend only trims of
+leading/trailing whitespace before storing — non-empty after trimming, not
+case-folded, not checked against any canonical list or lookup table),
+`currency` (required, ISO-4217 shape — three uppercase letters, not checked
+against a canonical list, validated the same way as `user-settings`'
 `default_currency`), `financial_institute` (optional), `opening_date`
 (required), and `closing_date` (optional). When `closing_date` is present it
-SHALL NOT be before `opening_date`.
+SHALL NOT be before `opening_date`. `type` SHALL be accepted on
+`POST /api/accounts` and `PATCH /api/accounts/{id}` and SHALL appear on
+every response that carries an `Account`.
 
 #### Scenario: Creating an account with valid fields
 
 - **WHEN** an authenticated user calls `POST /api/accounts` with a title, a
-  valid `type_id`, a three-letter currency, and an opening date
+  non-empty `type`, a three-letter currency, and an opening date
 - **THEN** the response is `201` with the created account, owned by the
-  caller
+  caller, its `type` stored with surrounding whitespace trimmed and its
+  casing preserved verbatim
+
+#### Scenario: A blank type is rejected
+
+- **WHEN** `POST /api/accounts` or `PATCH /api/accounts/{id}` sends a
+  `type` that is empty or only whitespace
+- **THEN** the request is rejected (`400` — the same `ErrInvalidValue`
+  mapping as a blank `title`) and nothing is created or changed
 
 #### Scenario: Closing date before opening date rejected
 
@@ -104,89 +117,35 @@ account the caller does not really own, the real owner's identity.
   enables, or soft-deletes the account
 - **THEN** each request succeeds identically to the real owner performing it
 
-### Requirement: `type_id` remains reassignable only by the real owner
+### Requirement: In-use account types are listed for autocomplete
 
-An account's `type_id` SHALL be changeable only by the account's real owner
-(`owner_id`), even when a caller holds a shared `owner`-tier permission on
-the account — `account_types` remains a per-real-owner lookup, unextended
-by sharing. `PATCH /api/accounts/{id}` from a shared `owner`-tier caller
-that includes `type_id` SHALL be rejected (`403`); the same request with
-every other field, and no `type_id`, SHALL succeed normally.
+`GET /api/account-types` SHALL return a JSON array of strings: the
+distinct, non-empty `type` values present on the authenticated caller's own
+non-deleted accounts, compared verbatim (case-sensitively, after the same
+trimming applied on write), sorted case-insensitively ascending. It SHALL
+never include values from another user's accounts. The endpoint is
+read-only — there is no endpoint to create, rename, disable, enable, or
+delete an account type, and `type` is only ever set by writing an account.
 
-#### Scenario: A shared owner cannot reassign the account's type
+#### Scenario: The caller's distinct in-use types are returned
 
-- **WHEN** a user with a shared `owner`-tier permission calls
-  `PATCH /api/accounts/{id}` including a `type_id`
-- **THEN** the response is `403` and the account's `type_id` is unchanged
+- **WHEN** an authenticated user with accounts of type `Checking`,
+  `Savings`, and a second `Checking` calls `GET /api/account-types`
+- **THEN** the response is `200` with `["Checking", "Savings"]`
 
-#### Scenario: A shared owner can edit every other field
+#### Scenario: Another user's types are not included
 
-- **WHEN** a user with a shared `owner`-tier permission calls
-  `PATCH /api/accounts/{id}` changing `title`, `description`, `icon`,
-  `color`, or other non-`type_id` fields
-- **THEN** the update succeeds
+- **WHEN** an authenticated user whose own accounts are all `Checking`
+  calls `GET /api/account-types`, while a different user has an account of
+  type `Brokerage`
+- **THEN** the response contains `Checking` and does not contain
+  `Brokerage`
 
-### Requirement: Account types are a per-user, self-managed lookup
+#### Scenario: A user with no accounts gets an empty list
 
-`account_types` SHALL be private to the user who owns them, via a required
-`owner_id` set to the authenticated caller at creation — not a single flat
-table shared by the whole instance. `GET /api/account-types` SHALL return
-only the authenticated caller's own types. Creating, updating, disabling,
-enabling, and deleting an account type SHALL require only authentication —
-there is no admin-only gate on any account-type operation. A type belonging
-to a different owner SHALL behave as if it does not exist (`404` on direct
-access; rejected as an invalid `type_id` when referenced as another user's
-account's `type_id`), never `403`. Deleting an account type referenced by
-at least one non-deleted account SHALL still be rejected (`409`) rather
-than performed or cascaded — unchanged from before, now scoped to the
-owner's own accounts.
-
-#### Scenario: An authenticated user lists their own account types
-
-- **WHEN** an authenticated user calls `GET /api/account-types`
-- **THEN** the response is `200` with every non-deleted account type they
-  own, and none belonging to any other user
-
-#### Scenario: Any authenticated user manages their own account types
-
-- **WHEN** an authenticated user calls `POST`, `PATCH`, `DELETE`, or the
-  `/disable`/`/enable` actions on an account type they own
-- **THEN** the request is not rejected for lack of admin privileges
-
-#### Scenario: A user cannot see or use another user's account type
-
-- **WHEN** an authenticated user calls an operation on an account type
-  owned by a different user, or attempts to set it as `type_id` on their
-  own account
-- **THEN** the response is `404` for direct access, or the request is
-  rejected as an invalid `type_id` for the account operation
-
-#### Scenario: Deleting an in-use account type is rejected
-
-- **WHEN** a user attempts to delete an account type referenced by a
-  non-deleted account they own
-- **THEN** the response is `409` and the account type is not deleted
-
-### Requirement: A new user starts with a seeded set of default account types
-
-Every new user account SHALL be seeded, at creation, with a fixed starter
-set of account types owned by them (Checking, Savings, Cash, Credit Card,
-Loan, Investment) — the same set for every user, in English, regardless of
-any language preference. A user MAY freely rename, disable, or delete any
-seeded type exactly as if they had created it themselves; seeding SHALL NOT
-recur or top up a user's set after account creation.
-
-#### Scenario: A freshly created user already has account types to choose from
-
-- **WHEN** a new user account is created (via either sign-in method)
-- **THEN** `GET /api/account-types` for that user immediately returns the
-  full starter set, before they have created any account type themselves
-
-#### Scenario: Seeded types are ordinary, fully editable types
-
-- **WHEN** a user renames, disables, or deletes a seeded account type
-- **THEN** the operation succeeds exactly as it would for a type they
-  created themselves
+- **WHEN** an authenticated user with no non-deleted accounts calls
+  `GET /api/account-types`
+- **THEN** the response is `200` with `[]`
 
 ### Requirement: An account can be disabled and re-enabled, blocking new entries without hiding it
 

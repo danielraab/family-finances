@@ -23,7 +23,6 @@ import { Route as AccountsNewRouteImport } from './routes/accounts.new'
 import { Route as EntriesIndexRouteImport } from './routes/entries.index'
 import { Route as EntriesNewRouteImport } from './routes/entries.new'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
-import { Route as SettingsAccountTypesRouteImport } from './routes/settings.account-types'
 import { Route as SettingsInvitationsRouteImport } from './routes/settings.invitations'
 import { Route as SettingsTagsRouteImport } from './routes/settings.tags'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
@@ -102,11 +101,6 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsAccountTypesRoute = SettingsAccountTypesRouteImport.update({
-  id: '/account-types',
-  path: '/account-types',
-  getParentRoute: () => SettingsRoute,
-} as any)
 const SettingsInvitationsRoute = SettingsInvitationsRouteImport.update({
   id: '/invitations',
   path: '/invitations',
@@ -156,7 +150,6 @@ export interface FileRoutesByFullPath {
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
-  '/settings/account-types': typeof SettingsAccountTypesRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/settings/users': typeof SettingsUsersRoute
@@ -176,7 +169,6 @@ export interface FileRoutesByTo {
   '/reports': typeof ReportsRoute
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
-  '/settings/account-types': typeof SettingsAccountTypesRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/settings/users': typeof SettingsUsersRoute
@@ -201,7 +193,6 @@ export interface FileRoutesById {
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
-  '/settings/account-types': typeof SettingsAccountTypesRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/tags': typeof SettingsTagsRoute
   '/settings/users': typeof SettingsUsersRoute
@@ -227,7 +218,6 @@ export interface FileRouteTypes {
     | '/accounts/$accountId'
     | '/accounts/new'
     | '/entries/new'
-    | '/settings/account-types'
     | '/settings/invitations'
     | '/settings/tags'
     | '/settings/users'
@@ -247,7 +237,6 @@ export interface FileRouteTypes {
     | '/reports'
     | '/accounts/new'
     | '/entries/new'
-    | '/settings/account-types'
     | '/settings/invitations'
     | '/settings/tags'
     | '/settings/users'
@@ -271,7 +260,6 @@ export interface FileRouteTypes {
     | '/accounts/$accountId'
     | '/accounts/new'
     | '/entries/new'
-    | '/settings/account-types'
     | '/settings/invitations'
     | '/settings/tags'
     | '/settings/users'
@@ -395,13 +383,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/account-types': {
-      id: '/settings/account-types'
-      path: '/account-types'
-      fullPath: '/settings/account-types'
-      preLoaderRoute: typeof SettingsAccountTypesRouteImport
-      parentRoute: typeof SettingsRoute
-    }
     '/settings/invitations': {
       id: '/settings/invitations'
       path: '/invitations'
@@ -501,7 +482,6 @@ const EntriesRouteWithChildren =
   EntriesRoute._addFileChildren(EntriesRouteChildren)
 
 interface SettingsRouteChildren {
-  SettingsAccountTypesRoute: typeof SettingsAccountTypesRoute
   SettingsInvitationsRoute: typeof SettingsInvitationsRoute
   SettingsTagsRoute: typeof SettingsTagsRoute
   SettingsUsersRoute: typeof SettingsUsersRoute
@@ -509,7 +489,6 @@ interface SettingsRouteChildren {
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
-  SettingsAccountTypesRoute: SettingsAccountTypesRoute,
   SettingsInvitationsRoute: SettingsInvitationsRoute,
   SettingsTagsRoute: SettingsTagsRoute,
   SettingsUsersRoute: SettingsUsersRoute,

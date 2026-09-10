@@ -19,6 +19,13 @@ import (
 // randomly draws from.
 var accountCurrencies = []string{"EUR", "USD", "GBP"}
 
+// fixtureAccountTypes is the pool of free-text type labels a generated
+// account randomly draws from — the former seeded default set, now just
+// strings written straight onto the account.
+var fixtureAccountTypes = []string{
+	"Checking", "Savings", "Cash", "Credit Card", "Loan", "Investment",
+}
+
 // financialInstitutePool is the small pool of bank names a generated
 // account's optional financial_institute randomly draws from.
 var financialInstitutePool = []string{
@@ -52,11 +59,12 @@ var categoryTitlePools = map[string][]string{
 // bypassing the magic-link/OIDC flows entirely. Because that goes straight
 // to the store, internal/auth's NewUserHooks (wired only inside
 // auth.Service) never fire here; internal/cli already imports
-// account/category directly (the same way main.go's builders do), so it
-// calls each user's SeedDefaults itself instead of routing through that
-// indirection — NewUserHook exists to let internal/auth notify
-// account/category without importing them, a problem internal/cli doesn't
-// have. authSvc is used only to mint each tester's session token via
+// category directly (the same way main.go's builders do), so it calls each
+// user's categorySvc.SeedDefaults itself instead of routing through that
+// indirection — NewUserHook exists to let internal/auth notify category
+// without importing it, a problem internal/cli doesn't have. Account types
+// are no longer seeded (a type is just a text label on the account now).
+// authSvc is used only to mint each tester's session token via
 // IssueSession. Prints (email, admin?, session token) per tester to stdout
 // as it goes; returns 0 on success, or 1 with a stderr message on the
 // first failure.
@@ -84,10 +92,6 @@ func seedTesters(
 			return 1
 		}
 
-		if err := accountSvc.SeedDefaults(ctx, user.ID); err != nil {
-			fmt.Fprintf(stderr, "seed: seed account types for %s: %v\n", email, err)
-			return 1
-		}
 		if err := categorySvc.SeedDefaults(ctx, user.ID); err != nil {
 			fmt.Fprintf(stderr, "seed: seed categories for %s: %v\n", email, err)
 			return 1
@@ -133,23 +137,18 @@ func generateFixtures(
 	rng *rand.Rand,
 	entriesPerUser int,
 ) (int, error) {
-	types, err := accountSvc.ListTypes(ctx, ownerID)
-	if err != nil {
-		return 0, err
-	}
 	cats, err := categorySvc.List(ctx, ownerID)
 	if err != nil {
 		return 0, err
 	}
-	if len(types) == 0 || len(cats) == 0 {
+	if len(cats) == 0 {
 		return 0, nil
 	}
 	// Sort before indexing by rng draw: a Store is only contracted to
-	// return "every type/category", not in any particular order (memory's
-	// ListTypes, for one, ties on CreatedAt for a freshly seeded set and
-	// doesn't sort further) — sorting here keeps the fixed-seed RNG
-	// reproducible regardless of what order the store happens to return.
-	sort.Slice(types, func(i, j int) bool { return types[i].Title < types[j].Title })
+	// return "every category", not in any particular order — sorting here
+	// keeps the fixed-seed RNG reproducible regardless of what order the
+	// store happens to return. Account types are a fixed local slice
+	// (fixtureAccountTypes), already in a stable order.
 	sort.Slice(cats, func(i, j int) bool { return cats[i].Name < cats[j].Name })
 
 	// Created directly from tagNamePool's fixed order, not read back via
@@ -167,13 +166,13 @@ func generateFixtures(
 	numAccounts := 2 + rng.IntN(3) // 2..4
 	created := 0
 	for i := 0; i < numAccounts; i++ {
-		typ := types[rng.IntN(len(types))]
+		typ := fixtureAccountTypes[rng.IntN(len(fixtureAccountTypes))]
 		currency := accountCurrencies[rng.IntN(len(accountCurrencies))]
 		institute := financialInstitutePool[rng.IntN(len(financialInstitutePool))]
 
 		acc, err := accountSvc.Create(ctx, ownerID, account.New{
-			Title:              fmt.Sprintf("%s %s", currency, typ.Title),
-			TypeID:             typ.ID,
+			Title:              fmt.Sprintf("%s %s", currency, typ),
+			Type:               typ,
 			Currency:           currency,
 			FinancialInstitute: institute,
 			OpeningDate:        account.NewDate(randomPastDate(rng, 2*365)),

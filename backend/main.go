@@ -81,16 +81,15 @@ func main() {
 	accountSvc, accountHandler := buildAccount(pool, mail, cfg.Auth.BaseURL)
 	categorySvc, categoryHandler := buildCategory(pool)
 
-	authSvc, authHandler, err := buildAuth(ctx, cfg, pool, mail, settingsSvc, accountSvc, categorySvc)
+	authSvc, authHandler, err := buildAuth(ctx, cfg, pool, mail, settingsSvc, categorySvc)
 	if err != nil {
 		slog.Error("build auth", "error", err)
 		os.Exit(1)
 	}
-	// account.Service and auth.Service have a wiring cycle (auth needs
-	// accountSvc as a NewUserHook, built above; accountSvc needs authSvc as
-	// its email-lookup/invite-eligibility source for sharing) that no
-	// constructor option can resolve on its own — see account.Service.
-	// SetUserLookup's doc comment.
+	// accountSvc needs authSvc as its email-lookup/invite-eligibility
+	// source for sharing, and authSvc is built after it — a
+	// post-construction wiring no constructor option can resolve on its
+	// own. See account.Service.SetUserLookup's doc comment.
 	accountSvc.SetUserLookup(authSvc)
 
 	tagSvc, tagHandler := buildTag(pool)
@@ -171,11 +170,10 @@ func buildEntry(pool *postgres.Pool, accountSvc *account.Service, categorySvc *c
 // store, the given SMTP mailer (shared with account.Service — see main()),
 // and — only when OIDC_ISSUER is set — a discovered OIDC client.
 // settingsSvc is wired in as the raw-language-preference source for
-// GET /api/auth/me (see internal/settings' design note); accountSvc and
-// categorySvc are wired in as NewUserHooks so a brand-new user is seeded
-// with starter account types and categories (see account-types-per-user's
-// design note).
-func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, mail *mailer.Mailer, settingsSvc *settings.Service, accountSvc *account.Service, categorySvc *category.Service) (*auth.Service, http.Handler, error) {
+// GET /api/auth/me (see internal/settings' design note); categorySvc is
+// wired in as a NewUserHook so a brand-new user is seeded with starter
+// categories (account types are a free-text label now, nothing to seed).
+func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, mail *mailer.Mailer, settingsSvc *settings.Service, categorySvc *category.Service) (*auth.Service, http.Handler, error) {
 	store := postgres.NewAuthStore(pool)
 
 	var oidcClient auth.OIDCClient
@@ -206,7 +204,7 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, mail
 		MagicLinkTTL:        cfg.Auth.MagicLinkTTL,
 		OIDCIssuer:          cfg.OIDC.Issuer,
 		OIDCLabel:           cfg.OIDC.Label,
-	}, auth.WithLanguageLookup(settingsSvc), auth.WithNewUserHooks(accountSvc, categorySvc))
+	}, auth.WithLanguageLookup(settingsSvc), auth.WithNewUserHooks(categorySvc))
 
 	handler := auth.NewHandler(svc, auth.HandlerOptions{
 		RenderError:  httpapi.WriteError,

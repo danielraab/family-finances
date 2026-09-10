@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"strings"
 )
@@ -75,36 +74,13 @@ func NewService(store Store, opts ...Option) *Service {
 // email-invite fail closed (ErrInvalidValue), never panic.
 func (s *Service) SetUserLookup(u UserLookup) { s.users = u }
 
-// resolveAssignableType checks that id may be (re)assigned as an account's
-// type_id: it must exist, belong to ownerID, and not be disabled. A missing
-// or cross-owner type_id is ErrInvalidValue rather than ErrNotFound — it's
-// caller-supplied input, the same contract the old TypeExists-based check
-// had. ownerID here is always the account's *real* owner (see Update) —
-// type_id stays validated against the real owner's own account_types
-// regardless of who is editing.
-func (s *Service) resolveAssignableType(ctx context.Context, ownerID, id string) error {
-	t, err := s.store.GetType(ctx, ownerID, id)
-	if errors.Is(err, ErrNotFound) {
-		return ErrInvalidValue
-	}
-	if err != nil {
-		return err
-	}
-	if t.Disabled {
-		return ErrTypeDisabled
-	}
-	return nil
-}
-
 // Create validates in and creates an account owned by ownerID — the real
 // owner, always the caller.
 func (s *Service) Create(ctx context.Context, ownerID string, in New) (Account, error) {
 	if err := validateNew(in); err != nil {
 		return Account{}, err
 	}
-	if err := s.resolveAssignableType(ctx, ownerID, in.TypeID); err != nil {
-		return Account{}, err
-	}
+	in.Type = strings.TrimSpace(in.Type)
 	acc, err := s.store.Create(ctx, ownerID, in)
 	if err != nil {
 		return Account{}, err
@@ -159,12 +135,9 @@ func (s *Service) Access(ctx context.Context, id, callerID string) (currency str
 
 // Update validates and applies a partial change to id, authorized for
 // callerID. The caller must hold owner-tier permission (real ownership or
-// a shared owner grant); a request that includes TypeID additionally
-// requires callerID to be the *real* owner — type_id stays a real-owner-
-// only field even for a shared owner, since account_types is still a
-// per-real-owner lookup this change doesn't extend (see design.md). The
-// account's *effective* type_id (upd.TypeID if provided, else its current
-// one) must resolve to a non-disabled type owned by the real owner.
+// a shared owner grant); every field, type included, is editable by any
+// owner-tier caller. A provided type is trimmed of surrounding whitespace
+// before it is stored.
 func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (Account, error) {
 	current, err := s.store.Get(ctx, id, callerID)
 	if err != nil {
@@ -176,18 +149,12 @@ func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (
 	if !current.Permission.AtLeast(PermissionOwner) {
 		return Account{}, ErrForbidden
 	}
-	if upd.TypeID != nil && current.OwnerID != callerID {
-		return Account{}, ErrForbidden
-	}
 	if err := validateUpdate(current, upd); err != nil {
 		return Account{}, err
 	}
-	effectiveTypeID := current.TypeID
-	if upd.TypeID != nil {
-		effectiveTypeID = *upd.TypeID
-	}
-	if err := s.resolveAssignableType(ctx, current.OwnerID, effectiveTypeID); err != nil {
-		return Account{}, err
+	if upd.Type != nil {
+		trimmed := strings.TrimSpace(*upd.Type)
+		upd.Type = &trimmed
 	}
 	updated, err := s.store.Update(ctx, id, upd)
 	if err != nil {
@@ -371,50 +338,10 @@ func (s *Service) RevokeShare(ctx context.Context, callerID, accountID, targetUs
 
 // --- account types -----------------------------------------------------
 
-// ListTypes returns every account type ownerID owns, including disabled
-// ones.
-func (s *Service) ListTypes(ctx context.Context, ownerID string) ([]Type, error) {
-	return s.store.ListTypes(ctx, ownerID)
-}
-
-// CreateType creates a new account type owned by ownerID. Any authenticated
-// user may create their own types — there is no admin gate.
-func (s *Service) CreateType(ctx context.Context, ownerID, title, description string) (Type, error) {
-	if strings.TrimSpace(title) == "" {
-		return Type{}, ErrInvalidValue
-	}
-	return s.store.CreateType(ctx, ownerID, title, description)
-}
-
-// UpdateType changes ownerID's account type's title and description.
-func (s *Service) UpdateType(ctx context.Context, ownerID, id, title, description string) (Type, error) {
-	if strings.TrimSpace(title) == "" {
-		return Type{}, ErrInvalidValue
-	}
-	return s.store.UpdateType(ctx, ownerID, id, title, description)
-}
-
-// DisableType blocks a type from being (re)assigned to an account, without
-// affecting any account already carrying it. Reversible via EnableType.
-func (s *Service) DisableType(ctx context.Context, ownerID, id string) (Type, error) {
-	return s.store.SetTypeDisabled(ctx, ownerID, id, true)
-}
-
-// EnableType reverses DisableType.
-func (s *Service) EnableType(ctx context.Context, ownerID, id string) (Type, error) {
-	return s.store.SetTypeDisabled(ctx, ownerID, id, false)
-}
-
-// DeleteType deletes ownerID's account type, or ErrTypeInUse if a
-// non-deleted account still references it — regardless of whether it is
-// disabled.
-func (s *Service) DeleteType(ctx context.Context, ownerID, id string) error {
-	return s.store.DeleteType(ctx, ownerID, id)
-}
-
-// SeedDefaults seeds ownerID — a brand-new user — with DefaultTypeTitles.
-// It satisfies internal/auth's NewUserHook interface structurally, wired in
-// by package main via auth.WithNewUserHooks.
-func (s *Service) SeedDefaults(ctx context.Context, ownerID string) error {
-	return s.store.SeedDefaultTypes(ctx, ownerID)
+// ListInUseTypes returns the distinct, non-empty type labels present on
+// ownerID's own non-deleted accounts, sorted case-insensitively — for the
+// account form's autocomplete. A type has no existence apart from being
+// written on an account, so there is nothing to create, rename, or delete.
+func (s *Service) ListInUseTypes(ctx context.Context, ownerID string) ([]string, error) {
+	return s.store.ListInUseTypes(ctx, ownerID)
 }

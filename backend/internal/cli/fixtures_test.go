@@ -63,7 +63,7 @@ func TestSeedTestersCreatesAllThreeWithTester1Admin(t *testing.T) {
 	}
 }
 
-func TestSeedTestersSeedsStarterAccountTypesAndCategories(t *testing.T) {
+func TestSeedTestersSeedsStarterCategoriesAndTypedAccounts(t *testing.T) {
 	authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
@@ -76,19 +76,22 @@ func TestSeedTestersSeedsStarterAccountTypesAndCategories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	types, err := accountSvc.ListTypes(context.Background(), u.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(types) != len(account.DefaultTypeTitles) {
-		t.Fatalf("ListTypes = %d, want %d default types", len(types), len(account.DefaultTypeTitles))
-	}
 	cats, err := categorySvc.List(context.Background(), u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(cats) != len(category.DefaultNames) {
 		t.Fatalf("List categories = %d, want %d default categories", len(cats), len(category.DefaultNames))
+	}
+
+	// Account types are no longer seeded — each generated account just
+	// carries a free-text type label, so the user has at least one in use.
+	types, err := accountSvc.ListInUseTypes(context.Background(), u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(types) == 0 {
+		t.Fatalf("ListInUseTypes = %v, want the generated accounts to carry a type", types)
 	}
 }
 
@@ -148,9 +151,6 @@ func TestGenerateFixturesCreatesAccountsAndEntriesInRange(t *testing.T) {
 	ctx := context.Background()
 	const ownerID = "u1"
 
-	if err := accountSvc.SeedDefaults(ctx, ownerID); err != nil {
-		t.Fatal(err)
-	}
 	if err := categorySvc.SeedDefaults(ctx, ownerID); err != nil {
 		t.Fatal(err)
 	}
@@ -189,9 +189,6 @@ func TestGenerateFixturesCreatesTagsAndAttachesSome(t *testing.T) {
 	ctx := context.Background()
 	const ownerID = "u1"
 
-	if err := accountSvc.SeedDefaults(ctx, ownerID); err != nil {
-		t.Fatal(err)
-	}
 	if err := categorySvc.SeedDefaults(ctx, ownerID); err != nil {
 		t.Fatal(err)
 	}
@@ -238,9 +235,6 @@ func TestGenerateFixturesSetsFinancialInstitute(t *testing.T) {
 	ctx := context.Background()
 	const ownerID = "u1"
 
-	if err := accountSvc.SeedDefaults(ctx, ownerID); err != nil {
-		t.Fatal(err)
-	}
 	if err := categorySvc.SeedDefaults(ctx, ownerID); err != nil {
 		t.Fatal(err)
 	}
@@ -267,9 +261,6 @@ func TestGenerateFixturesIsDeterministic(t *testing.T) {
 	run := func() []string {
 		_, _, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
 		const ownerID = "u1"
-		if err := accountSvc.SeedDefaults(ctx, ownerID); err != nil {
-			t.Fatal(err)
-		}
 		if err := categorySvc.SeedDefaults(ctx, ownerID); err != nil {
 			t.Fatal(err)
 		}
@@ -397,9 +388,6 @@ func TestGenerateFixturesEntriesPerUserHitsTargetExactly(t *testing.T) {
 	const ownerID = "u1"
 	const target = 317 // deliberately not divisible by any likely account count
 
-	if err := accountSvc.SeedDefaults(ctx, ownerID); err != nil {
-		t.Fatal(err)
-	}
 	if err := categorySvc.SeedDefaults(ctx, ownerID); err != nil {
 		t.Fatal(err)
 	}

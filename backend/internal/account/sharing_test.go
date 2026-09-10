@@ -64,12 +64,8 @@ func newSharingFixture(t *testing.T) sharingFixture {
 	svc.SetUserLookup(users)
 
 	ctx := context.Background()
-	typ, err := svc.CreateType(ctx, "owner", "Checking", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := svc.Create(ctx, "owner", account.New{Title: "Joint", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
+	acc, err := svc.Create(ctx, "owner", account.New{Title: "Joint", Type: "Checking", Currency: "EUR", OpeningDate: opening})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +245,7 @@ func TestRealOwnerCannotSelfLeave(t *testing.T) {
 	}
 }
 
-func TestSharedOwnerHasFullAccountRightsExceptType(t *testing.T) {
+func TestSharedOwnerHasFullAccountRightsIncludingType(t *testing.T) {
 	f := newSharingFixture(t)
 	f.users.add("coowner@example.com", "u2", "Co-owner")
 	ctx := context.Background()
@@ -257,7 +253,7 @@ func TestSharedOwnerHasFullAccountRightsExceptType(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Full metadata edit (no type_id).
+	// Full metadata edit.
 	newTitle := "Renamed by co-owner"
 	if _, err := f.svc.Update(ctx, "u2", f.accID, account.Update{Title: &newTitle}); err != nil {
 		t.Fatalf("shared-owner Update: %v", err)
@@ -275,13 +271,13 @@ func TestSharedOwnerHasFullAccountRightsExceptType(t *testing.T) {
 		t.Fatalf("shared-owner InviteShare: %v", err)
 	}
 
-	// type_id reassignment is real-owner-only.
-	otherType, err := f.svc.CreateType(ctx, f.ownerID, "Savings", "")
+	// type is now an ordinary owner-tier field a shared owner can change.
+	got, err := f.svc.Update(ctx, "u2", f.accID, account.Update{Type: ptr("Savings")})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("shared-owner changing type: %v", err)
 	}
-	if _, err := f.svc.Update(ctx, "u2", f.accID, account.Update{TypeID: &otherType.ID}); !errors.Is(err, account.ErrForbidden) {
-		t.Fatalf("shared-owner reassigning type_id: err = %v, want ErrForbidden", err)
+	if got.Type != "Savings" {
+		t.Fatalf("Type = %q, want Savings", got.Type)
 	}
 
 	// Real owner can still delete the account.

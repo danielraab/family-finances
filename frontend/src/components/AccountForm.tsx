@@ -1,13 +1,26 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { compact } from "../lib/compact";
 import { IconColorPicker } from "./IconColorPicker";
 
-type AccountType = components["schemas"]["AccountType"];
 type AccountCreate = components["schemas"]["AccountCreate"];
 type Account = components["schemas"]["Account"];
+
+/**
+ * Starter labels offered as `type` autocomplete suggestions for every
+ * visitor — English only, matching the former backend seed set. Merged
+ * with the visitor's own in-use values from `GET /api/account-types`.
+ */
+const DEFAULT_ACCOUNT_TYPES = [
+  "Checking",
+  "Savings",
+  "Cash",
+  "Credit Card",
+  "Loan",
+  "Investment",
+];
 
 /** Feature-detects Intl.supportedValuesOf, absent from older engines. */
 function listCurrencies(): string[] {
@@ -29,7 +42,7 @@ export type AccountFormValues = {
   description: string;
   icon: string;
   color: string;
-  type_id: string;
+  type: string;
   currency: string;
   financial_institute: string;
   opening_date: string;
@@ -41,7 +54,7 @@ export const emptyAccountForm: AccountFormValues = {
   description: "",
   icon: "",
   color: "",
-  type_id: "",
+  type: "",
   currency: "",
   financial_institute: "",
   opening_date: "",
@@ -51,21 +64,9 @@ export const emptyAccountForm: AccountFormValues = {
 const inputClass =
   "rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
 
-function validate(
-  values: AccountFormValues,
-  types: AccountType[],
-  typeLocked: boolean,
-): string | null {
+function validate(values: AccountFormValues): string | null {
   if (values.title.trim() === "") return "title";
-  // A locked type field isn't submitted at all (see handleSubmit), and the
-  // caller's own account-types list has no business validating a value
-  // that belongs to a different user's (the real owner's) lookup anyway.
-  if (!typeLocked) {
-    if (values.type_id === "") return "type_id";
-    if (types.find((type) => type.id === values.type_id)?.disabled) {
-      return "type_id";
-    }
-  }
+  if (values.type.trim() === "") return "type";
   if (!/^[A-Z]{3}$/.test(values.currency)) return "currency";
   if (values.opening_date === "") return "opening_date";
   if (values.closing_date !== "" && values.closing_date < values.opening_date) {
@@ -81,32 +82,25 @@ export function AccountForm({
   submitting,
   onSubmit,
   serverError,
-  typeLocked,
 }: {
   initial: AccountFormValues;
   submitLabel: string;
   submitting: boolean;
   onSubmit: (values: AccountCreate) => void;
   serverError: string | null;
-  /**
-   * When true, the type field renders read-only and type_id is omitted
-   * from the submitted body entirely — a shared owner editing someone
-   * else's account may not reassign type_id even to its own current
-   * value (the backend rejects the field's mere presence). Default false.
-   */
-  typeLocked?: boolean | undefined;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
-  const [types, setTypes] = useState<AccountType[]>([]);
+  const [typeSuggestions, setTypeSuggestions] = useState<string[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [currencies] = useState(listCurrencies);
   const [invalidField, setInvalidField] = useState<string | null>(null);
+  const typeListId = useId();
 
   useEffect(() => {
     Promise.all([api.GET("/api/account-types"), api.GET("/api/accounts")]).then(
       ([typesRes, accountsRes]) => {
-        if (typesRes.data) setTypes(typesRes.data);
+        if (typesRes.data) setTypeSuggestions(typesRes.data);
         if (accountsRes.data) setAccounts(accountsRes.data);
       },
     );
@@ -125,11 +119,11 @@ export function AccountForm({
       .includes(values.financial_institute.trim().toLowerCase()),
   );
 
-  // The account's current type may have been disabled since it was
-  // assigned — still shown (as a non-selectable option) so the form
-  // doesn't look like it lost the account's data, but it must be swapped
-  // for a live type before the form validates.
-  const currentType = types.find((type) => type.id === values.type_id);
+  // Default labels first, then any distinct in-use values not already in
+  // that list — deduped by exact string match.
+  const typeOptions = Array.from(
+    new Set([...DEFAULT_ACCOUNT_TYPES, ...typeSuggestions]),
+  );
 
   function set<K extends keyof AccountFormValues>(
     key: K,
@@ -140,18 +134,12 @@ export function AccountForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const invalid = validate(values, types, typeLocked ?? false);
+    const invalid = validate(values);
     setInvalidField(invalid);
     if (invalid) return;
-    // type_id is asserted in below rather than included in this literal:
-    // AccountCreate requires it, but a locked field must be omitted from
-    // the request body entirely (the backend rejects a shared owner's
-    // request merely for including type_id, even unchanged) — so it's
-    // assigned separately, conditionally, after construction. JSON.
-    // stringify drops the key when left undefined, so an omitted
-    // assignment here really does omit it on the wire.
-    const body = {
+    const body: AccountCreate = {
       title: values.title.trim(),
+      type: values.type.trim(),
       currency: values.currency,
       opening_date: values.opening_date,
       // Always sent: "" leaves the field unset on create and clears it on
@@ -163,10 +151,7 @@ export function AccountForm({
         financial_institute: values.financial_institute.trim() || undefined,
         closing_date: values.closing_date || undefined,
       }),
-    } as AccountCreate;
-    if (!typeLocked) {
-      body.type_id = values.type_id;
-    }
+    };
     onSubmit(body);
   }
 
@@ -204,59 +189,26 @@ export function AccountForm({
         }}
       />
 
-      <div className="flex flex-col gap-1.5 text-sm font-medium">
-        <label htmlFor="account-type-field">{t("accounts.form.type")}</label>
-        {typeLocked ? (
-          <>
-            <input
-              id="account-type-field"
-              value={t("accounts.form.typeLockedValue")}
-              disabled
-              className={`${inputClass} opacity-60`}
-            />
-            <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
-              {t("accounts.form.typeLockedHint")}
-            </span>
-          </>
-        ) : (
-          <>
-            <select
-              id="account-type-field"
-              value={values.type_id}
-              onChange={(event) => set("type_id", event.target.value)}
-              className={inputClass}
-              required
-            >
-              <option value="" disabled>
-                {t("accounts.form.typePlaceholder")}
-              </option>
-              {currentType?.disabled && (
-                <option value={currentType.id} disabled>
-                  {currentType.title} ({t("accounts.form.typeDisabledOption")})
-                </option>
-              )}
-              {types
-                .filter((type) => !type.disabled)
-                .map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.title}
-                  </option>
-                ))}
-            </select>
-            {invalidField === "type_id" ? (
-              <span className="text-xs font-normal text-red-600 dark:text-red-400">
-                {t("accounts.form.typeRequired")}
-              </span>
-            ) : (
-              currentType?.disabled && (
-                <span className="text-xs font-normal text-red-600 dark:text-red-400">
-                  {t("accounts.form.typeDisabledHint")}
-                </span>
-              )
-            )}
-          </>
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
+        {t("accounts.form.type")}
+        <input
+          value={values.type}
+          onChange={(event) => set("type", event.target.value)}
+          className={inputClass}
+          list={typeListId}
+          required
+        />
+        <datalist id={typeListId}>
+          {typeOptions.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
+        {invalidField === "type" && (
+          <span className="text-xs font-normal text-red-600 dark:text-red-400">
+            {t("accounts.form.typeRequired")}
+          </span>
         )}
-      </div>
+      </label>
 
       <div className="flex flex-col gap-4 sm:flex-row">
         <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">

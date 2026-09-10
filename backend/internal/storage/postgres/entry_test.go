@@ -35,13 +35,9 @@ func newEntryFixture(t *testing.T) entryFixture {
 	entryStore := NewEntryStore(pool)
 
 	owner := mustUser(t, authStore, "entryowner@example.com")
-	typ, err := accStore.CreateType(ctx, owner.ID, "Checking-entry", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := accStore.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
+		Title: "Main", Type: "Checking", Currency: "EUR", OpeningDate: opening,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +107,7 @@ func TestPGEntryUpdateMovesAccount(t *testing.T) {
 
 	opening, _ := account.ParseDate("2024-01-01")
 	acc2, err := f.accounts.Create(ctx, f.owner, account.New{
-		Title: "Savings", TypeID: mustType(t, f.accounts, f.owner), Currency: "EUR", OpeningDate: opening,
+		Title: "Savings", Type: mustType(t, f.accounts, f.owner), Currency: "EUR", OpeningDate: opening,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -142,13 +138,12 @@ func TestPGEntryUpdateMovesAccount(t *testing.T) {
 	}
 }
 
-func mustType(t *testing.T, accStore *AccountStore, owner string) string {
+// mustType returns a plain free-text account type label. The store/owner
+// params are kept so existing call sites need no change now that a type is
+// just text on the account.
+func mustType(t *testing.T, _ *AccountStore, _ string) string {
 	t.Helper()
-	typ, err := accStore.CreateType(context.Background(), owner, "Savings-entry-move", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return typ.ID
+	return "Savings"
 }
 
 func TestPGEntryTransactionWithoutCategoryViolatesCheck(t *testing.T) {
@@ -346,7 +341,7 @@ func TestPGEntrySumGroupsByAccountAndExcludesBalanceAdjustments(t *testing.T) {
 
 	opening, _ := account.ParseDate("2024-01-01")
 	acc2, err := f.accounts.Create(ctx, f.owner, account.New{
-		Title: "Savings-sum", TypeID: mustType(t, f.accounts, f.owner), Currency: "USD", OpeningDate: opening,
+		Title: "Savings-sum", Type: mustType(t, f.accounts, f.owner), Currency: "USD", OpeningDate: opening,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -632,13 +627,9 @@ func TestPGEntryMovingAcrossAccountsRecomputesBothAccountsAdjustments(t *testing
 	f := newEntryFixture(t)
 	ctx := context.Background()
 
-	typ, err := f.accounts.CreateType(ctx, f.owner, "Savings-entry", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	opening, _ := account.ParseDate("2024-01-01")
 	acc2, err := f.accounts.Create(ctx, f.owner, account.New{
-		Title: "Second", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
+		Title: "Second", Type: "Checking", Currency: "EUR", OpeningDate: opening,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -750,13 +741,9 @@ func TestPGEntryMigration0018BackfillPreservesBalances(t *testing.T) {
 	accStore := NewAccountStore(pool)
 	catStore := NewCategoryStore(pool)
 	owner := mustUser(t, authStore, "legacy@example.com")
-	typ, err := accStore.CreateType(ctx, owner.ID, "Checking-legacy", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := accStore.Create(ctx, owner.ID, account.New{
-		Title: "Legacy", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
+		Title: "Legacy", Type: "Checking", Currency: "EUR", OpeningDate: opening,
 	})
 	if err != nil {
 		t.Fatal(err)

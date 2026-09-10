@@ -24,7 +24,7 @@ func NewAccountStore(pool *pgxpool.Pool) *AccountStore { return &AccountStore{po
 // caller's Permission/Shared/OwnerName in hand from a preceding Get and
 // copy it onto the returned row themselves (see account.Service.Update).
 const accountCols = `id::text, owner_id::text, title, COALESCE(description, ''),
-	COALESCE(icon, ''), COALESCE(color, ''), type_id::text,
+	COALESCE(icon, ''), COALESCE(color, ''), type,
 	currency, COALESCE(financial_institute, ''), opening_date, closing_date, disabled,
 	created_at, updated_at`
 
@@ -47,7 +47,7 @@ func scanAccount(row pgx.Row) (account.Account, error) {
 	var opening time.Time
 	var closing *time.Time
 	err := row.Scan(&acc.ID, &acc.OwnerID, &acc.Title, &acc.Description,
-		&acc.Icon, &acc.Color, &acc.TypeID,
+		&acc.Icon, &acc.Color, &acc.Type,
 		&acc.Currency, &acc.FinancialInstitute, &opening, &closing, &acc.Disabled,
 		&acc.CreatedAt, &acc.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -70,7 +70,7 @@ func scanAccountView(row pgx.Row) (account.Account, error) {
 	var closing *time.Time
 	var permission string
 	err := row.Scan(&acc.ID, &acc.OwnerID, &acc.Title, &acc.Description,
-		&acc.Icon, &acc.Color, &acc.TypeID,
+		&acc.Icon, &acc.Color, &acc.Type,
 		&acc.Currency, &acc.FinancialInstitute, &opening, &closing, &acc.Disabled,
 		&acc.CreatedAt, &acc.UpdatedAt, &permission, &acc.Shared, &acc.OwnerName)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -95,10 +95,10 @@ func (s *AccountStore) Create(ctx context.Context, ownerID string, in account.Ne
 		closing = &t
 	}
 	acc, err := scanAccount(s.pool.QueryRow(ctx, `
-		INSERT INTO accounts (owner_id, title, description, icon, color, type_id, currency, financial_institute, opening_date, closing_date)
+		INSERT INTO accounts (owner_id, title, description, icon, color, type, currency, financial_institute, opening_date, closing_date)
 		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), $6, $7, NULLIF($8, ''), $9, $10)
 		RETURNING `+accountCols,
-		ownerID, in.Title, in.Description, in.Icon, in.Color, in.TypeID, in.Currency, in.FinancialInstitute,
+		ownerID, in.Title, in.Description, in.Icon, in.Color, in.Type, in.Currency, in.FinancialInstitute,
 		in.OpeningDate.Time, closing,
 	))
 	if isForeignKeyViolation(err) {
@@ -155,7 +155,7 @@ func (s *AccountStore) Update(ctx context.Context, id string, upd account.Update
 		UPDATE accounts SET
 			title               = COALESCE($2, title),
 			description         = COALESCE($3, description),
-			type_id             = COALESCE($4, type_id),
+			type                = COALESCE($4, type),
 			currency            = COALESCE($5, currency),
 			financial_institute = COALESCE($6, financial_institute),
 			opening_date        = COALESCE($7, opening_date),
@@ -165,7 +165,7 @@ func (s *AccountStore) Update(ctx context.Context, id string, upd account.Update
 			updated_at          = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING `+accountCols,
-		id, upd.Title, upd.Description, upd.TypeID, upd.Currency,
+		id, upd.Title, upd.Description, upd.Type, upd.Currency,
 		upd.FinancialInstitute, opening, upd.ClosingDate.Set, closing,
 		upd.Icon, upd.Color,
 	))
@@ -340,20 +340,17 @@ func (s *AccountStore) DeleteShare(ctx context.Context, accountID, userID string
 
 // --- account types ---------------------------------------------------
 
-const accountTypeCols = `id::text, title, COALESCE(description, ''), disabled, created_at`
-
-func scanType(row pgx.Row) (account.Type, error) {
-	var t account.Type
-	err := row.Scan(&t.ID, &t.Title, &t.Description, &t.Disabled, &t.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return account.Type{}, account.ErrNotFound
-	}
-	return t, err
-}
-
-func (s *AccountStore) ListTypes(ctx context.Context, ownerID string) ([]account.Type, error) {
-	rows, err := s.pool.Query(ctx,
-		`SELECT `+accountTypeCols+` FROM account_types WHERE owner_id = $1 ORDER BY title`,
+// ListInUseTypes returns the distinct, non-empty type labels on ownerID's
+// own non-deleted accounts, sorted case-insensitively ascending — for the
+// account form's autocomplete. A type has no row of its own; it exists
+// only as text written on an account.
+func (s *AccountStore) ListInUseTypes(ctx context.Context, ownerID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT type FROM (
+			SELECT DISTINCT type FROM accounts
+			WHERE owner_id = $1 AND deleted_at IS NULL AND btrim(type) <> ''
+		) t
+		ORDER BY lower(type), type`,
 		ownerID,
 	)
 	if err != nil {
@@ -361,78 +358,13 @@ func (s *AccountStore) ListTypes(ctx context.Context, ownerID string) ([]account
 	}
 	defer rows.Close()
 
-	var out []account.Type
+	var out []string
 	for rows.Next() {
-		t, err := scanType(rows)
-		if err != nil {
+		var t string
+		if err := rows.Scan(&t); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
 	}
 	return out, rows.Err()
-}
-
-func (s *AccountStore) GetType(ctx context.Context, ownerID, id string) (account.Type, error) {
-	return scanType(s.pool.QueryRow(ctx,
-		`SELECT `+accountTypeCols+` FROM account_types WHERE id = $1 AND owner_id = $2`,
-		id, ownerID,
-	))
-}
-
-func (s *AccountStore) CreateType(ctx context.Context, ownerID, title, description string) (account.Type, error) {
-	t, err := scanType(s.pool.QueryRow(ctx,
-		`INSERT INTO account_types (owner_id, title, description) VALUES ($1, $2, NULLIF($3, '')) RETURNING `+accountTypeCols,
-		ownerID, title, description,
-	))
-	if isForeignKeyViolation(err) {
-		return account.Type{}, account.ErrInvalidValue
-	}
-	return t, err
-}
-
-func (s *AccountStore) UpdateType(ctx context.Context, ownerID, id, title, description string) (account.Type, error) {
-	return scanType(s.pool.QueryRow(ctx,
-		`UPDATE account_types SET title = $3, description = NULLIF($4, '') WHERE id = $1 AND owner_id = $2 RETURNING `+accountTypeCols,
-		id, ownerID, title, description,
-	))
-}
-
-func (s *AccountStore) SetTypeDisabled(ctx context.Context, ownerID, id string, disabled bool) (account.Type, error) {
-	return scanType(s.pool.QueryRow(ctx,
-		`UPDATE account_types SET disabled = $3 WHERE id = $1 AND owner_id = $2 RETURNING `+accountTypeCols,
-		id, ownerID, disabled,
-	))
-}
-
-func (s *AccountStore) DeleteType(ctx context.Context, ownerID, id string) error {
-	var exists bool
-	if err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM account_types WHERE id = $1 AND owner_id = $2)`, id, ownerID,
-	).Scan(&exists); err != nil {
-		return err
-	}
-	if !exists {
-		return account.ErrNotFound
-	}
-	tag, err := s.pool.Exec(ctx, `
-		DELETE FROM account_types
-		WHERE id = $1 AND owner_id = $2 AND NOT EXISTS (
-			SELECT 1 FROM accounts WHERE type_id = $1 AND deleted_at IS NULL
-		)`, id, ownerID,
-	)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return account.ErrTypeInUse
-	}
-	return nil
-}
-
-func (s *AccountStore) SeedDefaultTypes(ctx context.Context, ownerID string) error {
-	_, err := s.pool.Exec(ctx,
-		`INSERT INTO account_types (owner_id, title) SELECT $1, unnest($2::text[])`,
-		ownerID, account.DefaultTypeTitles,
-	)
-	return err
 }

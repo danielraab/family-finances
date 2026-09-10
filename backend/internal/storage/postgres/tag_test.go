@@ -194,13 +194,9 @@ func TestPGTagEntryCountReflectsAttachedAndDeletedEntries(t *testing.T) {
 	tagStore := NewTagStore(pool)
 
 	owner := mustUser(t, authStore, "tagowner11@example.com")
-	typ, err := accStore.CreateType(ctx, owner.ID, "Checking-tagcount", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := accStore.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
+		Title: "Main", Type: "Checking", Currency: "EUR", OpeningDate: opening,
 	})
 	if err != nil {
 		t.Fatal(err)

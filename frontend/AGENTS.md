@@ -50,9 +50,9 @@ git-ignored. Build-script allow-listing lives in `pnpm-workspace.yaml`
   Router devtools render only in dev.
 - `src/routes/index.tsx` → `/`. `src/routes/login.tsx` → `/login`.
   `src/routes/settings.tsx` (+ `settings.index.tsx`, `settings.invitations.tsx`,
-  `settings.users.tsx`, `settings.account-types.tsx`, `settings.tags.tsx`) →
-  `/settings`, `/settings/invitations`, `/settings/users`,
-  `/settings/account-types`, and `/settings/tags`
+  `settings.users.tsx`, `settings.tags.tsx`) →
+  `/settings`, `/settings/invitations`, `/settings/users`, and
+  `/settings/tags`
   — see "Settings" below. `src/routes/categories.tsx` → `/categories` — a
   single self-contained route (no nested children — everything happens on
   one page via dialogs) doing its own auth gate rather than splitting into
@@ -143,8 +143,8 @@ that check is informational only and never blocks merging.
 `/settings` is the first route that requires authentication: `settings.tsx`
 (the layout route) redirects an anonymous `useAuth` to `/login`, renders
 nothing while `loading`, and otherwise renders the tab nav (Common, My
-Invitations, Account Types, and Tags for everyone; Users only when
-`user.is_admin`) plus `<Outlet/>`.
+Invitations, and Tags for everyone; Users only when `user.is_admin`) plus
+`<Outlet/>`.
 
 - `settings.index.tsx` (`/settings`, Common tab) — language/timezone/default
   currency. Each field calls `PUT /api/settings` with only itself on change
@@ -173,34 +173,23 @@ Invitations, Account Types, and Tags for everyone; Users only when
   the `401`. The invitation row rendering (status, inviter line, Revoke
   action) is shared with `settings.invitations.tsx` via
   `src/components/InviteList.tsx`.
-- `settings.account-types.tsx` (`/settings/account-types`, open to every
-  authenticated visitor — not admin-gated; the backend scopes everything
-  to the caller). Lists the caller's own account types
-  (`GET /api/account-types`, title/description/Active-or-Disabled status),
-  and can create (`POST`), edit title/description (`PATCH`),
-  disable/enable (`POST .../disable` / `.../enable`), and delete
-  (`DELETE`) one, each state-changing action behind the same
-  `@headlessui/react` `Dialog` confirmation pattern as the Users tab. A
-  `409` on delete (the type is still assigned to an account) surfaces as
-  an inline error rather than updating the list. `AccountForm.tsx`'s type
-  dropdown only offers non-disabled types for a new selection; if the
-  account being edited currently holds a type that's since been disabled,
-  that type still renders as a non-selectable option (so the form doesn't
-  look like it lost data) and the field stays invalid until a different,
-  live type is chosen. A brand-new user already has a starter set of types
-  (and, on `/categories`, a starter set of categories) seeded on the
-  backend at signup — see `backend/AGENTS.md`'s "Account types" section.
+  There is no Account Types settings tab: an account's type is a free-text
+  label on the account itself (`AccountForm.tsx`'s type field is a text
+  input with a `<datalist>` combining a fixed `DEFAULT_ACCOUNT_TYPES`
+  constant and the visitor's own in-use values from
+  `GET /api/account-types`, which now returns a `string[]`). See
+  `backend/AGENTS.md`'s "Account types" section.
 - `settings.tags.tsx` (`/settings/tags`, open to every authenticated
   visitor — not admin-gated). Lists the caller's own tags
   (`GET /api/tags`, name/entry-count/Active-or-Disabled status), and can
   create (`POST`), rename (`PATCH`), disable/enable
-  (`POST .../disable` / `.../enable`), and delete (`DELETE`) one. Unlike
-  the Account Types tab, disable/enable fire directly on click with no
-  confirmation dialog — cheaply reversible, mirroring `/categories`'s
-  pattern rather than the Users tab's uniform-confirmation one; only
-  delete is confirmed via the same `@headlessui/react` `Dialog` pattern,
-  since it detaches the tag from every entry that currently carries it.
-  `DELETE /api/tags/{id}` always succeeds (`204`) — unlike account types,
+  (`POST .../disable` / `.../enable`), and delete (`DELETE`) one.
+  Disable/enable fire directly on click with no confirmation dialog —
+  cheaply reversible, mirroring `/categories`'s pattern rather than the
+  Users tab's uniform-confirmation one; only delete is confirmed via the
+  same `@headlessui/react` `Dialog` pattern, since it detaches the tag
+  from every entry that currently carries it.
+  `DELETE /api/tags/{id}` always succeeds (`204`) — unlike categories,
   there is no in-use block to surface as an inline error. The entry
   form's tag autocomplete (`TagInput.tsx`, called from `entries.new.tsx`
   and `entries.$entryId.edit.tsx`) is passed `tags.filter((t) =>
@@ -223,7 +212,7 @@ it works the same on a phone as on a desktop:
 
 - Create (name + parent picker, defaulting to root) and rename go through
   `POST`/`PATCH /api/categories`, the same inline-form-plus-table shape as
-  the Account Types settings tab.
+  the Tags settings tab.
 - ▲/▼ buttons call `POST /api/categories/{id}/move-up` / `/move-down`,
   disabled at either end of a sibling group; the page re-fetches the whole
   tree after a move rather than patching sort orders locally, kept simple.
@@ -238,9 +227,8 @@ it works the same on a phone as on a desktop:
   delete).
 - Delete is disabled client-side (greyed, with a hint) whenever the node
   has any child in the already-fetched tree; whether it's referenced by an
-  entry isn't known client-side, so — mirroring
-  `settings.account-types.tsx`'s reactive-delete-error decision — the
-  button stays enabled for a childless node and a `409` from
+  entry isn't known client-side, so — a reactive-delete-error decision —
+  the button stays enabled for a childless node and a `409` from
   `DELETE /api/categories/{id}` (still in use by an entry) surfaces as an
   inline error instead of removing the row, behind the same
   `@headlessui/react` `Dialog` confirmation pattern as everywhere else in
@@ -249,10 +237,9 @@ it works the same on a phone as on a desktop:
   `entries.$entryId.edit.tsx`) excludes disabled categories from new
   selections; on the edit page, a category disabled since the entry was
   categorized still renders as the current, selected-but-non-selectable
-  option (mirroring `AccountForm.tsx`'s disabled-account-type handling) —
-  but unlike a disabled account type, it does **not** block saving an
-  otherwise-untouched category, matching the backend's "only a category
-  explicitly supplied is validated" rule.
+  option; it does **not** block saving an otherwise-untouched category,
+  matching the backend's "only a category explicitly supplied is
+  validated" rule.
 
 ## Accounts and sharing
 
@@ -267,11 +254,9 @@ reads `account.permission`/`account.shared` straight off that response.
   disable/enable, and delete actions only when `permission === "owner"`; a
   Share link to `/accounts/{id}/sharing` is always shown, at every tier.
 - `src/routes/accounts.$accountId.edit.tsx` redirects to the detail page for
-  any non-owner tier, and renders `AccountForm`'s type field read-only
-  (`typeLocked`) when the visitor holds `owner` only via a share
-  (`shared === true`) rather than being the real owner — a shared owner may
-  edit everything else but not reassign `type_id`, and the field is omitted
-  from the request body entirely rather than resubmitted unchanged.
+  any non-owner tier. Every field, `type` included, is editable by any
+  `owner`-tier visitor (real owner or shared) — `type` is plain text on
+  the account now, with no shared-owner carve-out.
 - `src/routes/accounts.$accountId.sharing.tsx` is the one page a share is
   managed from: it always lists the real owner as a fixed first row, then
   every share. At `owner` tier it also renders the invite-by-email form

@@ -3,31 +3,25 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 
 export type Account = components["schemas"]["Account"];
-export type AccountType = components["schemas"]["AccountType"];
 
 /**
- * Fetches the visitor's own accounts and account types, then their live
- * balances (one request per account, keyed off the first fetch) — shared by
- * every page that shows an account list with balances (`/accounts`, `/home`).
+ * Fetches the visitor's own accounts, then their live balances (one request
+ * per account, keyed off the first fetch) — shared by every page that shows
+ * an account list with balances (`/accounts`, `/home`).
  */
 export function useAccountsWithBalances(): {
   accounts: Account[] | null;
-  types: AccountType[];
   balances: Record<string, number>;
 } {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
-  const [types, setTypes] = useState<AccountType[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.GET("/api/accounts"), api.GET("/api/account-types")]).then(
-      ([accountsRes, typesRes]) => {
-        if (cancelled) return;
-        setAccounts(accountsRes.data ?? []);
-        setTypes(typesRes.data ?? []);
-      },
-    );
+    api.GET("/api/accounts").then((accountsRes) => {
+      if (cancelled) return;
+      setAccounts(accountsRes.data ?? []);
+    });
     return () => {
       cancelled = true;
     };
@@ -53,5 +47,5 @@ export function useAccountsWithBalances(): {
     };
   }, [accounts]);
 
-  return { accounts, types, balances };
+  return { accounts, balances };
 }

@@ -1,6 +1,7 @@
 // Package account owns bookkeeping accounts — each belonging to exactly one
 // real owner, shareable with other users at one of four permission tiers
-// (see Permission) — and the per-owner account_types lookup they reference.
+// (see Permission). An account's type is a plain required text label on the
+// account itself, only trimmed of surrounding whitespace on write.
 // It follows the repo's four-file shape (account.go, store.go, service.go,
 // handler.go). It imports internal/auth only for auth.UserFromContext and
 // internal/settings only for settings.ValidateCurrency — never their Store
@@ -109,7 +110,7 @@ type Account struct {
 	Description        string     `json:"description,omitempty"`
 	Icon               string     `json:"icon,omitempty"`
 	Color              string     `json:"color,omitempty"`
-	TypeID             string     `json:"type_id"`
+	Type               string     `json:"type"`
 	Currency           string     `json:"currency"`
 	FinancialInstitute string     `json:"financial_institute,omitempty"`
 	OpeningDate        Date       `json:"opening_date"`
@@ -139,10 +140,10 @@ const (
 	// PermissionEntryAdmin additionally grants editing/deleting any entry
 	// on the account, not only ones that user created.
 	PermissionEntryAdmin Permission = "entry_admin"
-	// PermissionOwner additionally grants editing the account's own
-	// metadata (all fields except TypeID — see Service.Update), disabling/
-	// enabling/soft-deleting the account, and managing shares. Identical in
-	// capability to the real owner, whether held via OwnerID or a share.
+	// PermissionOwner additionally grants editing all of the account's own
+	// metadata, disabling/enabling/soft-deleting the account, and managing
+	// shares. Identical in capability to the real owner, whether held via
+	// OwnerID or a share.
 	PermissionOwner Permission = "owner"
 )
 
@@ -214,39 +215,13 @@ type ShareResult struct {
 	InviteAllowed bool
 }
 
-// Type is one row of the account_types lookup, private to the user who
-// owns it. Disabled blocks it from being (re)assigned to an account — see
-// Service.resolveAssignableType — without affecting any account already
-// carrying it.
-type Type struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description,omitempty"`
-	Disabled    bool      `json:"disabled"`
-	CreatedAt   time.Time `json:"created_at"`
-	OwnerID     string    `json:"-"`
-}
-
-// DefaultTypeTitles is the starter set of account types seeded for every
-// new user (Service.SeedDefaults, invoked as an internal/auth.NewUserHook)
-// — the same set regardless of the user's language, since a seeded type is
-// immediately theirs to rename like any other.
-var DefaultTypeTitles = []string{
-	"Checking",
-	"Savings",
-	"Cash",
-	"Credit Card",
-	"Loan",
-	"Investment",
-}
-
 // New is the input to creating an account.
 type New struct {
 	Title              string
 	Description        string
 	Icon               string
 	Color              string
-	TypeID             string
+	Type               string
 	Currency           string
 	FinancialInstitute string
 	OpeningDate        Date
@@ -261,7 +236,7 @@ type Update struct {
 	Description        *string
 	Icon               *string
 	Color              *string
-	TypeID             *string
+	Type               *string
 	Currency           *string
 	FinancialInstitute *string
 	OpeningDate        *Date
@@ -274,7 +249,7 @@ func validateNew(in New) error {
 	if strings.TrimSpace(in.Title) == "" {
 		return ErrInvalidValue
 	}
-	if strings.TrimSpace(in.TypeID) == "" {
+	if strings.TrimSpace(in.Type) == "" {
 		return ErrInvalidValue
 	}
 	if err := settings.ValidateCurrency(in.Currency); err != nil {
@@ -296,7 +271,7 @@ func validateUpdate(current Account, upd Update) error {
 	if upd.Title != nil && strings.TrimSpace(*upd.Title) == "" {
 		return ErrInvalidValue
 	}
-	if upd.TypeID != nil && strings.TrimSpace(*upd.TypeID) == "" {
+	if upd.Type != nil && strings.TrimSpace(*upd.Type) == "" {
 		return ErrInvalidValue
 	}
 	if upd.Currency != nil {

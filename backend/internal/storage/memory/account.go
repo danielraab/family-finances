@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,7 +24,6 @@ type AccountStore struct {
 	mu       sync.Mutex
 	accounts map[string]account.Account
 	shares   map[string]account.AccountShare // key: shareKey(accountID, userID)
-	types    map[string]account.Type
 	seq      int
 }
 
@@ -32,7 +32,6 @@ func NewAccountStore() *AccountStore {
 	return &AccountStore{
 		accounts: map[string]account.Account{},
 		shares:   map[string]account.AccountShare{},
-		types:    map[string]account.Type{},
 	}
 }
 
@@ -67,7 +66,7 @@ func (s *AccountStore) Create(_ context.Context, ownerID string, in account.New)
 		Description:        in.Description,
 		Icon:               in.Icon,
 		Color:              in.Color,
-		TypeID:             in.TypeID,
+		Type:               in.Type,
 		Currency:           in.Currency,
 		FinancialInstitute: in.FinancialInstitute,
 		OpeningDate:        in.OpeningDate,
@@ -130,8 +129,8 @@ func (s *AccountStore) Update(_ context.Context, id string, upd account.Update) 
 	if upd.Color != nil {
 		acc.Color = *upd.Color
 	}
-	if upd.TypeID != nil {
-		acc.TypeID = *upd.TypeID
+	if upd.Type != nil {
+		acc.Type = *upd.Type
 	}
 	if upd.Currency != nil {
 		acc.Currency = *upd.Currency
@@ -281,91 +280,30 @@ func (s *AccountStore) DeleteShare(_ context.Context, accountID, userID string) 
 
 // --- account types -------------------------------------------------------
 
-func (s *AccountStore) ListTypes(_ context.Context, ownerID string) ([]account.Type, error) {
+// ListInUseTypes returns the distinct, non-empty, trimmed type labels on
+// ownerID's own non-deleted accounts, sorted case-insensitively.
+func (s *AccountStore) ListInUseTypes(_ context.Context, ownerID string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []account.Type
-	for _, t := range s.types {
-		if t.OwnerID == ownerID {
-			out = append(out, t)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
-	return out, nil
-}
-
-func (s *AccountStore) GetType(_ context.Context, ownerID, id string) (account.Type, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.types[id]
-	if !ok || t.OwnerID != ownerID {
-		return account.Type{}, account.ErrNotFound
-	}
-	return t, nil
-}
-
-func (s *AccountStore) CreateType(_ context.Context, ownerID, title, description string) (account.Type, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t := account.Type{
-		ID:          s.nextID("atype"),
-		OwnerID:     ownerID,
-		Title:       title,
-		Description: description,
-		CreatedAt:   time.Now().UTC(),
-	}
-	s.types[t.ID] = t
-	return t, nil
-}
-
-func (s *AccountStore) UpdateType(_ context.Context, ownerID, id, title, description string) (account.Type, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.types[id]
-	if !ok || t.OwnerID != ownerID {
-		return account.Type{}, account.ErrNotFound
-	}
-	t.Title = title
-	t.Description = description
-	s.types[id] = t
-	return t, nil
-}
-
-func (s *AccountStore) SetTypeDisabled(_ context.Context, ownerID, id string, disabled bool) (account.Type, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.types[id]
-	if !ok || t.OwnerID != ownerID {
-		return account.Type{}, account.ErrNotFound
-	}
-	t.Disabled = disabled
-	s.types[id] = t
-	return t, nil
-}
-
-func (s *AccountStore) DeleteType(_ context.Context, ownerID, id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.types[id]
-	if !ok || t.OwnerID != ownerID {
-		return account.ErrNotFound
-	}
+	seen := map[string]bool{}
+	var out []string
 	for _, acc := range s.accounts {
-		if acc.TypeID == id && acc.DeletedAt == nil {
-			return account.ErrTypeInUse
+		if acc.OwnerID != ownerID || acc.DeletedAt != nil {
+			continue
 		}
+		t := strings.TrimSpace(acc.Type)
+		if t == "" || seen[t] {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
 	}
-	delete(s.types, id)
-	return nil
-}
-
-func (s *AccountStore) SeedDefaultTypes(_ context.Context, ownerID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now().UTC()
-	for _, title := range account.DefaultTypeTitles {
-		t := account.Type{ID: s.nextID("atype"), OwnerID: ownerID, Title: title, CreatedAt: now}
-		s.types[t.ID] = t
-	}
-	return nil
+	sort.Slice(out, func(i, j int) bool {
+		li, lj := strings.ToLower(out[i]), strings.ToLower(out[j])
+		if li != lj {
+			return li < lj
+		}
+		return out[i] < out[j] // stable tiebreak for values differing only in case
+	})
+	return out, nil
 }

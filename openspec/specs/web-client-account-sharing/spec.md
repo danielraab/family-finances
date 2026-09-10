@@ -98,8 +98,8 @@ currently unavailable, with no such affordance.
 
 An owner-tier visitor's permission editor on a share row SHALL apply
 immediately on selection (`PATCH /api/accounts/{id}/shares/{userId}`),
-mirroring the account-types settings tab's direct-apply pattern for a
-reversible change. Revoking a share, and leaving a shared account
+the direct-apply pattern used elsewhere for a cheaply reversible change.
+Revoking a share, and leaving a shared account
 (self-leave), SHALL each require an explicit confirmation step — the same
 `@headlessui/react` `Dialog` pattern used throughout `/settings` — before
 the request is sent.

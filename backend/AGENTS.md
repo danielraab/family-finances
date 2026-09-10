@@ -281,43 +281,30 @@ resolved one from `GET /api/settings`) has to be the one on `/me`.
 
 ## Account types
 
-`internal/account`'s `account_types` lookup (`title`, optional
-`description`, `disabled`) is **per-user, self-managed** — every
-`Store`/`Service` method for types takes an explicit `ownerID`, mirroring
-`internal/category`'s ownership scoping. `GET /api/account-types` returns
-only the caller's own types; create/update/delete/disable/enable require
-only authentication, no `is_admin` gate. A type belonging to a different
-owner behaves as if it does not exist (`ErrNotFound`, `404` — or
-`ErrInvalidValue` when referenced as another user's account's `type_id`),
-never `403`. `disabled` is a reversible flag
-(`POST /api/account-types/{id}/disable` / `/enable`, mirroring
-`Account.Disable`/`Enable`) that blocks a type from being *newly*
-(re)assigned without touching any account already carrying it: an
-account's `type_id` may never resolve to a disabled type after a
-create/update, which for `PATCH` means the *effective* `type_id` (the
-request's value, or the account's current one if the request doesn't
-touch it) is what's checked — so an account whose current type has since
-been disabled rejects every edit, whatever else it changes, until that
-same request also supplies a `type_id` for a different, live type
-(`account.ErrTypeDisabled`, `422`). Deleting a type is unchanged from
-before this flag existed: hard delete, rejected (`409` `ErrTypeInUse`) if
-any non-deleted account still references it, disabled or not — disable is
-the reversible off-ramp, delete stays the one-way cleanup for a type
-nothing uses anymore.
+An account's type is a **plain required `text` column on `accounts`**
+(`accounts.type`, migration `0021_account_type_text.sql`) — not a separate
+entity. `internal/account`'s domain/service/store only trims it of
+surrounding whitespace before storing; it is never case-folded or checked
+against a list. A blank (or whitespace-only) `type` on
+`POST /api/accounts` / `PATCH /api/accounts/{id}` is `ErrInvalidValue`
+(`400`), the same mapping a blank `title` gets. A shared `owner`-tier
+caller may change `type` like any other account field.
 
-A brand-new user is seeded with a fixed starter set (`account.DefaultTypeTitles`
-— Checking, Savings, Cash, Credit Card, Loan, Investment) via
-`Service.SeedDefaults`, which structurally satisfies `internal/auth`'s
-`NewUserHook` interface; `internal/category`'s `Service.SeedDefaults` does
-the same for a starter set of root categories (`category.DefaultCategories`
-— name plus a default `icon` and `color` token each; `category.DefaultNames`
-is a derived name-only slice kept for existing callers/tests).
-Neither `internal/account` nor `internal/category` is imported by
-`internal/auth` — `main.go` wires both services in via
-`auth.WithNewUserHooks(accountSvc, categorySvc)`, called once,
-right after a brand-new user account is created (never on sign-in to an
-existing one). A hook's error is logged, not surfaced — signup never fails
-because a starter dataset couldn't be seeded.
+`GET /api/account-types` is repurposed to a read-only autocomplete source:
+it returns a `[]string` of the caller's own distinct, non-empty, trimmed
+`type` values across their non-deleted accounts, sorted case-insensitively
+(ties broken by raw value). `Store.ListInUseTypes(ctx, ownerID)` backs it
+(`SELECT DISTINCT type … ORDER BY lower(type), type` in Postgres). There is
+no create/update/delete/disable/enable endpoint, no `account_types` table,
+no `Type` struct, no seeding hook, and no `ErrTypeInUse`/`ErrTypeDisabled`
+sentinel anymore.
+
+The former default titles (Checking, Savings, Cash, Credit Card, Loan,
+Investment) now live only in the frontend (`DEFAULT_ACCOUNT_TYPES` in
+`AccountForm.tsx`), merged with the `GET /api/account-types` response as the
+type field's `<datalist>` suggestions. `main.go` wires only
+`categorySvc` into `auth.WithNewUserHooks(...)`; a brand-new user gets
+seeded starter categories but no account types.
 
 ## Categories
 
@@ -329,13 +316,12 @@ caller>` (`Store` methods take an explicit `ownerID` parameter, mirroring
 category endpoint. `parent_id` self-references form the tree, no depth
 limit; a self/descendant reparent is rejected (`ErrCycle`, `422`).
 
-- **`disabled`** (reversible, mirroring `account_types.disabled`): toggled
-  via `POST /api/categories/{id}/disable` / `/enable`. It blocks the
-  category from being **newly** selected on an entry (`internal/entry`'s
+- **`disabled`** (reversible): toggled via
+  `POST /api/categories/{id}/disable` / `/enable`. It blocks the category
+  from being **newly** selected on an entry (`internal/entry`'s
   `CategoryLookup.Usable` checks it) without touching any entry or child
-  category already referencing it — and unlike a disabled account type,
-  it does *not* force reselection on an unrelated edit: an update that
-  doesn't touch `category_id` never re-checks the entry's current category.
+  category already referencing it — an update that doesn't touch
+  `category_id` never re-checks the entry's current category.
 - **Soft delete** (`deleted_at`, one-way, no undelete) replaces what used to
   be a hard delete: `DELETE /api/categories/{id}` is rejected (`409`
   `ErrInUse`) while the category has a non-deleted child or is referenced
@@ -372,7 +358,7 @@ supplies `category_id`) — and `Subtree(ctx, ownerID, categoryID)
 `internal/tag`'s per-user `tags` lookup is a flat list, not admin-managed —
 every operation is scoped to `owner_id = <authenticated caller>`, and a tag
 belonging to a different owner reads as `ErrNotFound` (`404`), never `403`.
-Unlike categories/account types, `DELETE /api/tags/{id}` is **unconditional**
+Unlike categories, `DELETE /api/tags/{id}` is **unconditional**
 — always `204`, detaching the tag from every entry it was attached to via
 `entry_tags.tag_id`'s `ON DELETE CASCADE` — there is no in-use block and
 never has been.
@@ -426,9 +412,8 @@ check uses) from an account's real owner to another user.
   account not existing); a real but insufficient tier is `ErrForbidden`
   (`403`).
 - **A shared `owner`-tier grant has full parity with the real owner**,
-  including disabling/deleting the account and managing other shares — with
-  one exception: it cannot change `type_id` (`ErrForbidden` if the update
-  body even includes the field, whether or not the value actually changes).
+  including disabling/deleting the account, changing every metadata field
+  (`type` included), and managing other shares.
 - **`GET`/`POST /api/accounts/{id}/shares`,
   `PATCH`/`DELETE /api/accounts/{id}/shares/{userId}`,
   `POST /api/accounts/{id}/shares/leave`** — list requires any tier; invite/
@@ -555,11 +540,12 @@ list, an invalid address, or a duplicate before touching the database).
   the bootstrap admin through the ordinary zero-users-means-admin path.
 - Creating each user this way bypasses `auth.Service.resolveIdentity`
   entirely, so `internal/auth`'s `NewUserHook`s (see "Account types" above)
-  never fire — `internal/cli` already imports `internal/account` and
-  `internal/category` directly (the same way `main.go`'s builders do), so
-  `Seed` calls each user's `SeedDefaults` itself instead of relying on that
-  indirection, which exists only so `internal/auth` — which cannot import
-  either package — can still notify them.
+  never fire — `internal/cli` already imports `internal/category` directly
+  (the same way `main.go`'s builder does), so `Seed` calls each user's
+  `categorySvc.SeedDefaults` itself instead of relying on that indirection,
+  which exists only so `internal/auth` — which cannot import `internal/
+  category` — can still notify it. (Account types are no longer seeded: a
+  type is just a text label written on each generated account.)
 - `auth.Service.IssueSession(ctx, userID)` mints a session directly,
   without a sign-in flow — added for this command, never exposed over
   HTTP. It reuses the same TTL-driven expiry every other session gets, so
@@ -568,19 +554,19 @@ list, an invalid address, or a duplicate before touching the database).
   whose `ExpiresAt` is already in the past).
 - Fixture shape (`internal/cli/fixtures.go`): a fixed pool of tags
   (`tagNamePool`) created once per user; 2-4 accounts per user (random
-  seeded type + currency + a random `financial_institute` from
-  `financialInstitutePool`), 15-60 transaction entries per account (random
+  `type` label from `fixtureAccountTypes` + currency + a random
+  `financial_institute` from `financialInstitutePool`), 15-60 transaction
+  entries per account (random
   seeded category, amount sign/magnitude keyed to category — `Salary`
   positive, everything else negative — and 0-2 random tags from that
   user's pool) — or exactly `--entries N` of them, spread across the
   accounts, when that flag is given. A single fixed-seed `math/rand/v2`
   generator drives the whole run, so a given argument set produces the
-  same fixture every time;
-  types/categories are sorted locally before being indexed by the RNG,
-  since a `Store` is only contracted to return "every type/category," not
-  in a particular order — tags don't need this, since they're created
-  directly from `tagNamePool`'s own fixed order rather than read back via
-  `List`.
+  same fixture every time; categories are sorted locally before being
+  indexed by the RNG, since a `Store` is only contracted to return "every
+  category," not in a particular order — the account-type labels
+  (`fixtureAccountTypes`) and tags don't need this, being fixed local
+  slices in a stable order rather than read back via `List`.
 
 ## Serving the frontend
 

@@ -27,8 +27,8 @@ tags:
       decimal places).
   - name: accounts
     description: >-
-      Bookkeeping accounts, each owned by exactly one user, and the
-      admin-managed account_types lookup they reference.
+      Bookkeeping accounts, each owned by exactly one user. An account's
+      type is a free-text label stored on the account itself.
   - name: categories
     description: The caller's own tree-structured category lookup.
   - name: tags
@@ -471,7 +471,7 @@ paths:
     post:
       operationId: postAccounts
       summary: Create an account
-      description: 422 when type_id names a disabled account type.
+      description: 422 when `type` is empty or only whitespace.
       tags: [accounts]
       requestBody:
         required: true
@@ -518,12 +518,8 @@ paths:
       operationId: patchAccount
       summary: Update an account
       description: >-
-        422 when the account's effective type_id — the value in this
-        request if present, otherwise its current one — names a disabled
-        account type. An account whose current type has since been
-        disabled therefore rejects every update, whatever else it changes,
-        until the same request also supplies a type_id for a different,
-        non-disabled type.
+        422 when `type` is present but empty or only whitespace. A shared
+        `owner`-tier caller may change `type` like any other field.
       tags: [accounts]
       parameters:
         - $ref: "#/components/parameters/AccountId"
@@ -770,144 +766,25 @@ paths:
   /api/account-types:
     get:
       operationId: getAccountTypes
-      summary: List the caller's own account types
+      summary: List the caller's distinct in-use account type labels
+      description: >-
+        The distinct, non-empty `type` values on the caller's own
+        non-deleted accounts, trimmed, compared verbatim (case-sensitive),
+        sorted case-insensitively ascending. For client autocomplete only;
+        there is no endpoint to create, rename, disable, or delete a type
+        — a type exists by being written on an account.
       tags: [accounts]
       responses:
         "200":
-          description: Every account type the caller owns.
+          description: The caller's distinct in-use type labels.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/AccountType"
+                  type: string
         "401":
           $ref: "#/components/responses/Unauthorized"
-    post:
-      operationId: postAccountTypes
-      summary: Create an account type, owned by the caller
-      tags: [accounts]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AccountTypeWrite"
-      responses:
-        "201":
-          description: The created account type.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AccountType"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  /api/account-types/{id}:
-    patch:
-      operationId: patchAccountType
-      summary: Update the caller's own account type's title and description
-      tags: [accounts]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AccountTypeWrite"
-      responses:
-        "200":
-          description: The updated account type.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AccountType"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    delete:
-      operationId: deleteAccountType
-      summary: Delete the caller's own account type
-      description: >-
-        409 if a non-deleted account still references it (disabled or not)
-        — deletion is never cascaded.
-      tags: [accounts]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: The account type is deleted.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
-
-  /api/account-types/{id}/disable:
-    post:
-      operationId: postAccountTypeDisable
-      summary: Disable the caller's own account type
-      description: >-
-        Reversible via enable. Blocks the type from being (re)assigned to
-        an account — including on an existing account's next edit, if its
-        current type is this one — without affecting any account already
-        carrying it.
-      tags: [accounts]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The account type, now disabled.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AccountType"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/account-types/{id}/enable:
-    post:
-      operationId: postAccountTypeEnable
-      summary: Re-enable the caller's own disabled account type
-      tags: [accounts]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The account type, now enabled.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AccountType"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
 
   /api/categories:
     get:
@@ -2024,7 +1901,7 @@ components:
       required:
         - id
         - title
-        - type_id
+        - type
         - currency
         - opening_date
         - disabled
@@ -2053,8 +1930,12 @@ components:
             Optional opaque presentation token naming a client colour.
             Stored and echoed verbatim; never interpreted by the backend.
             Absent when unset.
-        type_id:
+        type:
           type: string
+          description: >-
+            Free-text label (e.g. "Checking"). Trimmed of surrounding
+            whitespace on write; otherwise stored verbatim, not case-folded
+            or checked against any list. Never empty.
         currency:
           type: string
           description: ISO-4217 shape (three uppercase letters), not a canonical list.
@@ -2099,7 +1980,7 @@ components:
 
     AccountCreate:
       type: object
-      required: [title, type_id, currency, opening_date]
+      required: [title, type, currency, opening_date]
       properties:
         title:
           type: string
@@ -2113,8 +1994,9 @@ components:
           type: string
           pattern: ^[a-z0-9-]{1,40}$
           description: Optional opaque client colour token; not interpreted by the backend.
-        type_id:
+        type:
           type: string
+          description: Free-text label; trimmed on write, never empty.
         currency:
           type: string
         financial_institute:
@@ -2145,8 +2027,12 @@ components:
           description: >-
             Optional opaque client colour token. An empty string clears it;
             omitting the field leaves it unchanged.
-        type_id:
+        type:
           type: string
+          description: >-
+            Free-text label; trimmed on write. When present it must be
+            non-empty after trimming. Omitting the field leaves it
+            unchanged.
         currency:
           type: string
         financial_institute:
@@ -2160,34 +2046,6 @@ components:
           nullable: true
           description: Explicit null clears it (re-opening the account).
 
-    AccountType:
-      type: object
-      required: [id, title, disabled, created_at]
-      properties:
-        id:
-          type: string
-        title:
-          type: string
-        description:
-          type: string
-        disabled:
-          type: boolean
-          description: >-
-            Blocks this type from being (re)assigned to an account without
-            affecting any account already carrying it.
-        created_at:
-          type: string
-          format: date-time
-
-    AccountTypeWrite:
-      type: object
-      required: [title]
-      properties:
-        title:
-          type: string
-        description:
-          type: string
-
     AccountPermission:
       type: string
       enum: [view, append, entry_admin, owner]
@@ -2195,8 +2053,8 @@ components:
         Four tiers, each a strict superset of the one before it: view
         (read entries and balance), append (+ create entries, edit/delete
         only ones created by the same user), entry_admin (+ edit/delete any
-        entry on the account), owner (+ edit account metadata except
-        type_id, disable/enable/soft-delete the account, manage shares).
+        entry on the account), owner (+ edit account metadata,
+        disable/enable/soft-delete the account, manage shares).
 
     AccountShare:
       type: object

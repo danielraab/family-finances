@@ -13,13 +13,9 @@ func TestPGAccountIconColorRoundTripAndClear(t *testing.T) {
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "iconacc@example.com")
 
-	typ, err := store.CreateType(ctx, owner.ID, "Checking", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
+		Title: "Main", Type: "Checking", Currency: "EUR", OpeningDate: opening,
 		Icon: "wallet", Color: "blue",
 	})
 	if err != nil {

@@ -29,12 +29,8 @@ func newSharingHandler(t *testing.T) (http.Handler, *account.Service, *fakeUsers
 
 func mustAccount(t *testing.T, svc *account.Service, ownerID string) account.Account {
 	t.Helper()
-	typ, err := svc.CreateType(t.Context(), ownerID, "Checking", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := svc.Create(t.Context(), ownerID, account.New{Title: "Joint", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
+	acc, err := svc.Create(t.Context(), ownerID, account.New{Title: "Joint", Type: "Checking", Currency: "EUR", OpeningDate: opening})
 	if err != nil {
 		t.Fatal(err)
 	}

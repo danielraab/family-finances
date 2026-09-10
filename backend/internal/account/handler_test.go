@@ -29,6 +29,19 @@ func conforms(t *testing.T, method, target string, rec *httptest.ResponseRecorde
 	openapicheck.AssertResponse(t, method, target, rec.Code, rec.Header(), rec.Body.Bytes())
 }
 
+// mustCreate makes an account owned by ownerID with the given free-text type.
+func mustCreate(t *testing.T, svc *account.Service, ownerID, title, typ string) account.Account {
+	t.Helper()
+	opening, _ := account.ParseDate("2024-01-01")
+	acc, err := svc.Create(t.Context(), ownerID, account.New{
+		Title: title, Type: typ, Currency: "EUR", OpeningDate: opening,
+	})
+	if err != nil {
+		t.Fatalf("create account: %v", err)
+	}
+	return acc
+}
+
 func TestHandlerListRequiresAuth(t *testing.T) {
 	h, _ := newHandler(t)
 	rec := httptest.NewRecorder()
@@ -39,14 +52,10 @@ func TestHandlerListRequiresAuth(t *testing.T) {
 }
 
 func TestHandlerCreateAndGet(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, err := svc.CreateType(t.Context(), "u1", "Checking", "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	h, _ := newHandler(t)
 	user := auth.User{ID: "u1"}
 
-	body := `{"title":"Main","type_id":"` + typ.ID + `","currency":"EUR","opening_date":"2024-01-01"}`
+	body := `{"title":"Main","type":"Checking","currency":"EUR","opening_date":"2024-01-01"}`
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/accounts", strings.NewReader(body)), user))
 	if rec.Code != http.StatusCreated {
@@ -57,6 +66,9 @@ func TestHandlerCreateAndGet(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
+	if created.Type != "Checking" {
+		t.Fatalf("Type = %q, want Checking", created.Type)
+	}
 
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/accounts/"+created.ID, nil), user))
@@ -66,14 +78,41 @@ func TestHandlerCreateAndGet(t *testing.T) {
 	conforms(t, "GET", "/api/accounts/"+created.ID, rec)
 }
 
-func TestHandlerCrossOwnerGetIsNotFound(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
-	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
-	if err != nil {
+func TestHandlerCreateTrimsType(t *testing.T) {
+	h, _ := newHandler(t)
+	user := auth.User{ID: "u1"}
+
+	body := `{"title":"Main","type":"  Checking  ","currency":"EUR","opening_date":"2024-01-01"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/accounts", strings.NewReader(body)), user))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST status = %d, body = %s", rec.Code, rec.Body)
+	}
+	var created account.Account
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
+	if created.Type != "Checking" {
+		t.Fatalf("Type = %q, want the trimmed %q", created.Type, "Checking")
+	}
+}
+
+func TestHandlerCreateBlankTypeRejected(t *testing.T) {
+	h, _ := newHandler(t)
+	user := auth.User{ID: "u1"}
+
+	body := `{"title":"Main","type":"   ","currency":"EUR","opening_date":"2024-01-01"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/accounts", strings.NewReader(body)), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "POST", "/api/accounts", rec)
+}
+
+func TestHandlerCrossOwnerGetIsNotFound(t *testing.T) {
+	h, svc := newHandler(t)
+	acc := mustCreate(t, svc, "u1", "X", "Checking")
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/accounts/"+acc.ID, nil), auth.User{ID: "u2"}))
@@ -85,12 +124,7 @@ func TestHandlerCrossOwnerGetIsNotFound(t *testing.T) {
 
 func TestHandlerDisableEnable(t *testing.T) {
 	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
-	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
-	if err != nil {
-		t.Fatal(err)
-	}
+	acc := mustCreate(t, svc, "u1", "X", "Checking")
 	user := auth.User{ID: "u1"}
 
 	rec := httptest.NewRecorder()
@@ -117,12 +151,7 @@ func TestHandlerDisableEnable(t *testing.T) {
 
 func TestHandlerSoftDelete(t *testing.T) {
 	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
-	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
-	if err != nil {
-		t.Fatal(err)
-	}
+	acc := mustCreate(t, svc, "u1", "X", "Checking")
 	user := auth.User{ID: "u1"}
 
 	rec := httptest.NewRecorder()
@@ -140,195 +169,86 @@ func TestHandlerSoftDelete(t *testing.T) {
 	conforms(t, "GET", "/api/accounts", rec)
 }
 
-func TestHandlerAccountTypesAnyAuthenticatedUserCanCreateAndList(t *testing.T) {
-	h, _ := newHandler(t)
-	user := auth.User{ID: "u1"}
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types", strings.NewReader(`{"title":"Savings"}`)), user))
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create status = %d, body = %s", rec.Code, rec.Body)
-	}
-	conforms(t, "POST", "/api/account-types", rec)
-
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/account-types", nil), user))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("list status = %d", rec.Code)
-	}
-	conforms(t, "GET", "/api/account-types", rec)
-}
-
 func TestHandlerAccountTypesRequireAuth(t *testing.T) {
 	h, _ := newHandler(t)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/account-types", strings.NewReader(`{"title":"Savings"}`)))
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/account-types", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
 	}
 }
 
-func TestHandlerAccountTypesListOnlyOwnedByCaller(t *testing.T) {
+func TestHandlerAccountTypesListDistinctInUseValues(t *testing.T) {
 	h, svc := newHandler(t)
-	if _, err := svc.CreateType(t.Context(), "u1", "Checking", ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.CreateType(t.Context(), "u2", "Savings", ""); err != nil {
-		t.Fatal(err)
-	}
+	mustCreate(t, svc, "u1", "A", "Savings")
+	mustCreate(t, svc, "u1", "B", "Checking")
+	mustCreate(t, svc, "u1", "C", "Checking") // duplicate collapses
+	mustCreate(t, svc, "u2", "D", "Brokerage")
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/account-types", nil), auth.User{ID: "u1"}))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list status = %d", rec.Code)
 	}
-	var types []account.Type
+	var types []string
 	if err := json.Unmarshal(rec.Body.Bytes(), &types); err != nil {
 		t.Fatal(err)
 	}
-	if len(types) != 1 || types[0].Title != "Checking" {
-		t.Fatalf("types = %+v, want only u1's Checking type", types)
+	if want := []string{"Checking", "Savings"}; !equalStrings(types, want) {
+		t.Fatalf("types = %v, want %v (sorted, deduped, caller-scoped)", types, want)
 	}
 	conforms(t, "GET", "/api/account-types", rec)
 }
 
-func TestHandlerCrossOwnerAccountTypeUpdateIsNotFound(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
-
+func TestHandlerAccountTypesEmptyForUserWithNoAccounts(t *testing.T) {
+	h, _ := newHandler(t)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/account-types/"+typ.ID, strings.NewReader(`{"title":"Renamed"}`)), auth.User{ID: "u2"}))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", rec.Code)
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/account-types", nil), auth.User{ID: "u1"}))
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("list = %d %s, want 200 []", rec.Code, rec.Body.String())
 	}
-	conforms(t, "PATCH", "/api/account-types/"+typ.ID, rec)
+	conforms(t, "GET", "/api/account-types", rec)
 }
 
-func TestHandlerCreateAccountWithAnotherOwnersTypeRejected(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u2", "Checking", "")
+func TestHandlerAccountTypeWritesAreGone(t *testing.T) {
+	h, _ := newHandler(t)
 	user := auth.User{ID: "u1"}
-
-	body := `{"title":"Main","type_id":"` + typ.ID + `","currency":"EUR","opening_date":"2024-01-01"}`
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/accounts", strings.NewReader(body)), user))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
+	for _, tc := range []struct{ method, target string }{
+		{"POST", "/api/account-types"},
+		{"PATCH", "/api/account-types/x"},
+		{"DELETE", "/api/account-types/x"},
+		{"POST", "/api/account-types/x/disable"},
+		{"POST", "/api/account-types/x/enable"},
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, withUser(httptest.NewRequest(tc.method, tc.target, strings.NewReader(`{}`)), user))
+		if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s %s: status = %d, want the route to no longer exist (404/405)", tc.method, tc.target, rec.Code)
+		}
 	}
-	conforms(t, "POST", "/api/accounts", rec)
-}
-
-func TestHandlerDeleteInUseAccountTypeConflict(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
-	opening, _ := account.ParseDate("2024-01-01")
-	if _, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening}); err != nil {
-		t.Fatal(err)
-	}
-
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("DELETE", "/api/account-types/"+typ.ID, nil), auth.User{ID: "u1"}))
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", rec.Code)
-	}
-	conforms(t, "DELETE", "/api/account-types/"+typ.ID, rec)
-}
-
-func TestHandlerAccountTypeDisableEnable(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
-	user := auth.User{ID: "u1"}
-
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types/"+typ.ID+"/disable", nil), user))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("disable status = %d, body = %s", rec.Code, rec.Body)
-	}
-	var got account.Type
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if !got.Disabled {
-		t.Fatalf("Disabled = false after disable")
-	}
-	conforms(t, "POST", "/api/account-types/"+typ.ID+"/disable", rec)
-
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types/"+typ.ID+"/enable", nil), user))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("enable status = %d", rec.Code)
-	}
-	conforms(t, "POST", "/api/account-types/"+typ.ID+"/enable", rec)
-}
-
-func TestHandlerAccountTypeDisableCrossOwnerIsNotFound(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
-
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/account-types/"+typ.ID+"/disable", nil), auth.User{ID: "u2"}))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", rec.Code)
-	}
-	conforms(t, "POST", "/api/account-types/"+typ.ID+"/disable", rec)
-}
-
-func TestHandlerCreateAccountWithDisabledTypeRejected(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
-	if _, err := svc.DisableType(t.Context(), "u1", typ.ID); err != nil {
-		t.Fatal(err)
-	}
-	user := auth.User{ID: "u1"}
-
-	body := `{"title":"Main","type_id":"` + typ.ID + `","currency":"EUR","opening_date":"2024-01-01"}`
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/accounts", strings.NewReader(body)), user))
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want 422, body = %s", rec.Code, rec.Body)
-	}
-	conforms(t, "POST", "/api/accounts", rec)
-}
-
-func TestHandlerUpdateAccountWithNowDisabledTypeRejectedUntilReselected(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
-	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := svc.Create(t.Context(), "u1", account.New{Title: "X", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.DisableType(t.Context(), "u1", typ.ID); err != nil {
-		t.Fatal(err)
-	}
-	user := auth.User{ID: "u1"}
-
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/accounts/"+acc.ID, strings.NewReader(`{"financial_institute":"Some Bank"}`)), user))
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want 422, body = %s", rec.Code, rec.Body)
-	}
-	conforms(t, "PATCH", "/api/accounts/"+acc.ID, rec)
-
-	liveType, _ := svc.CreateType(t.Context(), "u1", "Savings", "")
-	rec = httptest.NewRecorder()
-	body := `{"financial_institute":"Some Bank","type_id":"` + liveType.ID + `"}`
-	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/accounts/"+acc.ID, strings.NewReader(body)), user))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body)
-	}
-	conforms(t, "PATCH", "/api/accounts/"+acc.ID, rec)
 }
 
 func TestHandlerClosingBeforeOpeningRejected(t *testing.T) {
-	h, svc := newHandler(t)
-	typ, _ := svc.CreateType(t.Context(), "u1", "Checking", "")
+	h, _ := newHandler(t)
 	user := auth.User{ID: "u1"}
 
-	body := `{"title":"X","type_id":"` + typ.ID + `","currency":"EUR","opening_date":"2024-06-01","closing_date":"2024-01-01"}`
+	body := `{"title":"X","type":"Checking","currency":"EUR","opening_date":"2024-06-01","closing_date":"2024-01-01"}`
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/accounts", strings.NewReader(body)), user))
 	conforms(t, "POST", "/api/accounts", rec)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
 	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

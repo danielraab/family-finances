@@ -268,16 +268,26 @@ and fetches nothing itself — the same convention as the existing
 
 ### Requirement: Creating and editing an account
 
-`/accounts/new` SHALL offer a form for `title`, `description`, `type_id`
-(populated from `GET /api/account-types`), `currency`, `financial_institute`,
-`opening_date`, and `closing_date`, submitting `POST /api/accounts` on
-success and navigating to the new account's details page.
-`/accounts/{id}/edit` SHALL offer the same fields pre-populated from
-`GET /api/accounts/{id}`, submitting `PATCH /api/accounts/{id}` (or
-equivalent update) on save. Both forms SHALL validate client-side to the
-same shape the backend enforces (currency as three letters, closing date
-not before opening date) and surface the backend's validation error when a
+`/accounts/new` SHALL offer a form for `title`, `description`, `type`,
+`currency`, `financial_institute`, `opening_date`, and `closing_date`,
+submitting `POST /api/accounts` on success and navigating to the new
+account's details page. `/accounts/{id}/edit` SHALL offer the same fields
+pre-populated from `GET /api/accounts/{id}`, submitting
+`PATCH /api/accounts/{id}` (or equivalent update) on save. Both forms SHALL
+validate client-side to the same shape the backend enforces (`type`
+non-empty after trimming, currency as three letters, closing date not
+before opening date) and surface the backend's validation error when a
 submission is rejected.
+
+The `type` field SHALL be a required free-text input, and SHALL offer
+suggestions combining a fixed client-side list of default labels
+(Checking, Savings, Cash, Credit Card, Loan, Investment — English only,
+not translated) with the distinct in-use `type` values on the visitor's
+own accounts fetched from `GET /api/account-types`, deduplicated by exact
+string match. Typing a value that matches no suggestion SHALL remain valid
+and submittable. The form SHALL NOT fetch or render a managed list of
+account types, offer a disabled/enabled distinction, or force reselection
+of a previously chosen type.
 
 The `financial_institute` field SHALL remain free text, and SHALL offer
 suggestions drawn from the distinct, non-empty `financial_institute` values
@@ -293,9 +303,29 @@ no suggestion SHALL remain valid and submittable, unchanged from today.
 #### Scenario: Creating an account
 
 - **WHEN** an authenticated visitor submits the create form with valid
-  fields
+  fields, including a non-empty `type`
 - **THEN** `POST /api/accounts` is called and, on success, the visitor is
   taken to the new account's details page
+
+#### Scenario: The type field offers default labels and in-use values
+
+- **WHEN** an authenticated visitor focuses the `type` field on the create
+  or edit form
+- **THEN** the default labels are offered as suggestions, together with any
+  distinct `type` values already used on the visitor's own accounts, with
+  duplicates collapsed
+
+#### Scenario: A new type name is still accepted
+
+- **WHEN** an authenticated visitor types a `type` value that matches none
+  of the suggestions and submits the form
+- **THEN** the account is created (or updated) with that value
+
+#### Scenario: A blank type blocks submission
+
+- **WHEN** an authenticated visitor clears the `type` field and submits
+  either form
+- **THEN** the form shows a validation error and does not submit
 
 #### Scenario: Invalid closing date is caught before submission
 
@@ -474,10 +504,9 @@ offered only to a visitor with `owner`-tier permission on the account (the
 real owner or a shared owner) — every other tier's detail page SHALL omit
 the edit link, the disable/enable action, and the delete action entirely. A
 visitor with a lower tier who navigates directly to `/accounts/{id}/edit`
-SHALL be redirected to the account's detail page. Within the edit form, the
-`type_id` field SHALL render read-only whenever the visitor is a shared
-owner rather than the real owner, per `accounts`' `type_id` restriction;
-every other field SHALL remain editable.
+SHALL be redirected to the account's detail page. Within the edit form,
+every field — `type` included — SHALL be editable by any `owner`-tier
+visitor, whether the real owner or a shared owner.
 
 #### Scenario: A view or append visitor sees no edit affordance
 
@@ -491,8 +520,8 @@ every other field SHALL remain editable.
   `/accounts/{id}/edit`
 - **THEN** the client redirects them to the account's detail page
 
-#### Scenario: A shared owner's edit form locks the type field
+#### Scenario: A shared owner can edit every field including type
 
 - **WHEN** a shared `owner`-tier visitor opens `/accounts/{id}/edit`
-- **THEN** every field is editable except `type_id`, which renders
-  read-only
+- **THEN** every field, `type` included, is editable, and saving a changed
+  `type` succeeds

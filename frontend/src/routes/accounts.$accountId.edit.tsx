@@ -23,7 +23,6 @@ function EditAccount() {
 
   const [values, setValues] = useState<AccountFormValues | null>(null);
   const [disabled, setDisabled] = useState(false);
-  const [typeLocked, setTypeLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<ConfirmKind | null>(null);
@@ -46,16 +45,12 @@ function EditAccount() {
           return;
         }
         setDisabled(data.disabled);
-        // type_id stays real-owner-only even for a shared owner — see
-        // accounts' design.md. shared is true exactly when the viewer
-        // isn't the real owner.
-        setTypeLocked(data.shared);
         setValues({
           title: data.title,
           description: data.description ?? "",
           icon: data.icon ?? "",
           color: data.color ?? "",
-          type_id: data.type_id,
+          type: data.type,
           currency: data.currency,
           financial_institute: data.financial_institute ?? "",
           opening_date: data.opening_date,
@@ -107,7 +102,6 @@ function EditAccount() {
         submitLabel={t("accounts.form.save")}
         submitting={submitting}
         serverError={error}
-        typeLocked={typeLocked}
         onSubmit={async (body) => {
           setSubmitting(true);
           setError(null);

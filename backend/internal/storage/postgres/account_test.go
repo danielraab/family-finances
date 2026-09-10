@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"at.draab/familyfinances/internal/account"
@@ -27,22 +26,26 @@ func mustUser(t *testing.T, authStore *AuthStore, email string) auth.User {
 	return u
 }
 
+// mustAccount creates an account owned by ownerID with a plain free-text type.
+func mustAccount(t *testing.T, store *AccountStore, ownerID, title, typ string) account.Account {
+	t.Helper()
+	opening, _ := account.ParseDate("2024-01-01")
+	acc, err := store.Create(context.Background(), ownerID, account.New{
+		Title: title, Type: typ, Currency: "EUR", OpeningDate: opening,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	return acc
+}
+
 func TestPGAccountCreateGetList(t *testing.T) {
 	store, authStore := newAccountStore(t)
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner@example.com")
 
-	typ, err := store.CreateType(ctx, owner.ID, "Checking", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The store persists Type verbatim; trimming is the service's job.
+	acc := mustAccount(t, store, owner.ID, "Main", "Checking")
 	if acc.OwnerID != owner.ID || acc.Currency != "EUR" {
 		t.Fatalf("acc = %+v", acc)
 	}
@@ -51,7 +54,7 @@ func TestPGAccountCreateGetList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ID != acc.ID || got.Permission != account.PermissionOwner {
+	if got.ID != acc.ID || got.Permission != account.PermissionOwner || got.Type != "Checking" {
 		t.Fatalf("Get = %+v", got)
 	}
 
@@ -70,14 +73,7 @@ func TestPGAccountCrossOwnerHasNoPermission(t *testing.T) {
 	owner := mustUser(t, authStore, "owner2@example.com")
 	other := mustUser(t, authStore, "other2@example.com")
 
-	typ, _ := store.CreateType(ctx, owner.ID, "Checking2", "")
-	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	acc := mustAccount(t, store, owner.ID, "Main", "Checking")
 
 	// Store.Get itself never returns ErrNotFound just because the caller
 	// lacks permission — it always returns the row, with Permission empty;
@@ -92,17 +88,18 @@ func TestPGAccountCrossOwnerHasNoPermission(t *testing.T) {
 	}
 }
 
-func TestPGAccountCreateWithUnknownTypeIsInvalid(t *testing.T) {
+func TestPGAccountUpdateChangesType(t *testing.T) {
 	store, authStore := newAccountStore(t)
 	ctx := context.Background()
-	owner := mustUser(t, authStore, "owner3@example.com")
+	owner := mustUser(t, authStore, "owner-type@example.com")
 
-	opening, _ := account.ParseDate("2024-01-01")
-	_, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: "00000000-0000-0000-0000-000000000000", Currency: "EUR", OpeningDate: opening,
-	})
-	if !errors.Is(err, account.ErrInvalidValue) {
-		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	acc := mustAccount(t, store, owner.ID, "Main", "Checking")
+	got, err := store.Update(ctx, acc.ID, account.Update{Type: strptr("Savings")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != "Savings" {
+		t.Fatalf("Type = %q, want Savings", got.Type)
 	}
 }
 
@@ -111,11 +108,10 @@ func TestPGAccountUpdateClosingDateClear(t *testing.T) {
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner4@example.com")
 
-	typ, _ := store.CreateType(ctx, owner.ID, "Checking4", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	closing, _ := account.ParseDate("2024-06-01")
 	acc, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening, ClosingDate: &closing,
+		Title: "Main", Type: "Checking", Currency: "EUR", OpeningDate: opening, ClosingDate: &closing,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -137,14 +133,7 @@ func TestPGAccountSoftDeleteExcludesFromListing(t *testing.T) {
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner5@example.com")
 
-	typ, _ := store.CreateType(ctx, owner.ID, "Checking5", "")
-	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	acc := mustAccount(t, store, owner.ID, "Main", "Checking")
 	if err := store.SoftDelete(ctx, acc.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -162,14 +151,7 @@ func TestPGAccountDisableEnable(t *testing.T) {
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner6@example.com")
 
-	typ, _ := store.CreateType(ctx, owner.ID, "Checking6", "")
-	opening, _ := account.ParseDate("2024-01-01")
-	acc, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	acc := mustAccount(t, store, owner.ID, "Main", "Checking")
 
 	got, err := store.SetDisabled(ctx, acc.ID, true)
 	if err != nil || !got.Disabled {
@@ -181,135 +163,42 @@ func TestPGAccountDisableEnable(t *testing.T) {
 	}
 }
 
-func TestPGAccountTypeDeleteInUseConflict(t *testing.T) {
+func TestPGListInUseTypes(t *testing.T) {
 	store, authStore := newAccountStore(t)
 	ctx := context.Background()
-	owner := mustUser(t, authStore, "owner7@example.com")
+	owner := mustUser(t, authStore, "types-owner@example.com")
+	other := mustUser(t, authStore, "types-other@example.com")
 
-	typ, _ := store.CreateType(ctx, owner.ID, "Checking7", "")
-	opening, _ := account.ParseDate("2024-01-01")
-	if _, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Main", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
-	}); err != nil {
+	mustAccount(t, store, owner.ID, "A", "Savings")
+	mustAccount(t, store, owner.ID, "B", "Checking")
+	mustAccount(t, store, owner.ID, "C", "Checking") // exact duplicate collapses
+	gone := mustAccount(t, store, owner.ID, "D", "Loan")
+	if err := store.SoftDelete(ctx, gone.ID); err != nil {
 		t.Fatal(err)
 	}
+	mustAccount(t, store, other.ID, "E", "Brokerage") // another owner's — excluded
 
-	if err := store.DeleteType(ctx, owner.ID, typ.ID); !errors.Is(err, account.ErrTypeInUse) {
-		t.Fatalf("err = %v, want ErrTypeInUse", err)
-	}
-}
-
-func TestPGAccountTypeSameTitleAllowedAcrossOwners(t *testing.T) {
-	store, authStore := newAccountStore(t)
-	ctx := context.Background()
-	owner1 := mustUser(t, authStore, "owner8a@example.com")
-	owner2 := mustUser(t, authStore, "owner8b@example.com")
-
-	if _, err := store.CreateType(ctx, owner1.ID, "Savings-dup", ""); err != nil {
-		t.Fatal(err)
-	}
-	// No instance-wide uniqueness anymore: a second owner (or the same one)
-	// can use the same title.
-	if _, err := store.CreateType(ctx, owner2.ID, "Savings-dup", ""); err != nil {
-		t.Fatalf("second owner's CreateType with the same title: %v", err)
-	}
-}
-
-func TestPGAccountTypeCrossOwnerNotFound(t *testing.T) {
-	store, authStore := newAccountStore(t)
-	ctx := context.Background()
-	owner := mustUser(t, authStore, "owner8c@example.com")
-	other := mustUser(t, authStore, "owner8d@example.com")
-
-	typ, err := store.CreateType(ctx, owner.ID, "Checking8c", "")
+	got, err := store.ListInUseTypes(ctx, owner.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.GetType(ctx, other.ID, typ.ID); !errors.Is(err, account.ErrNotFound) {
-		t.Fatalf("cross-owner GetType err = %v, want ErrNotFound", err)
+	want := []string{"Checking", "Savings"} // sorted, deduped, no deleted, no other owner
+	if len(got) != len(want) {
+		t.Fatalf("ListInUseTypes = %v, want %v", got, want)
 	}
-	if _, err := store.UpdateType(ctx, other.ID, typ.ID, "Hijacked", ""); !errors.Is(err, account.ErrNotFound) {
-		t.Fatalf("cross-owner UpdateType err = %v, want ErrNotFound", err)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ListInUseTypes = %v, want %v", got, want)
+		}
 	}
 
-	types, err := store.ListTypes(ctx, owner.ID)
+	empty, err := store.ListInUseTypes(ctx, "00000000-0000-0000-0000-000000000000")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(types) != 1 {
-		t.Fatalf("ListTypes(owner) = %+v, want exactly the one type owner created", types)
+	if len(empty) != 0 {
+		t.Fatalf("ListInUseTypes for a user with no accounts = %v, want empty", empty)
 	}
 }
 
-func TestPGAccountTypeTitleDescriptionRoundTrip(t *testing.T) {
-	store, authStore := newAccountStore(t)
-	ctx := context.Background()
-	owner := mustUser(t, authStore, "owner9@example.com")
-
-	typ, err := store.CreateType(ctx, owner.ID, "Checking8", "A day-to-day account")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if typ.Title != "Checking8" || typ.Description != "A day-to-day account" || typ.Disabled {
-		t.Fatalf("typ = %+v", typ)
-	}
-
-	got, err := store.GetType(ctx, owner.ID, typ.ID)
-	if err != nil || got.Title != "Checking8" {
-		t.Fatalf("GetType = %+v, err = %v", got, err)
-	}
-
-	updated, err := store.UpdateType(ctx, owner.ID, typ.ID, "Checking8 Renamed", "Updated description")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if updated.Title != "Checking8 Renamed" || updated.Description != "Updated description" {
-		t.Fatalf("updated = %+v", updated)
-	}
-}
-
-func TestPGAccountTypeDisableEnable(t *testing.T) {
-	store, authStore := newAccountStore(t)
-	ctx := context.Background()
-	owner := mustUser(t, authStore, "owner10@example.com")
-
-	typ, err := store.CreateType(ctx, owner.ID, "Checking9", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	disabled, err := store.SetTypeDisabled(ctx, owner.ID, typ.ID, true)
-	if err != nil || !disabled.Disabled {
-		t.Fatalf("SetTypeDisabled true: got=%+v err=%v", disabled, err)
-	}
-
-	enabled, err := store.SetTypeDisabled(ctx, owner.ID, typ.ID, false)
-	if err != nil || enabled.Disabled {
-		t.Fatalf("SetTypeDisabled false: got=%+v err=%v", enabled, err)
-	}
-}
-
-func TestPGAccountTypeGetUnknownIsNotFound(t *testing.T) {
-	store, authStore := newAccountStore(t)
-	owner := mustUser(t, authStore, "owner11@example.com")
-	if _, err := store.GetType(context.Background(), owner.ID, "00000000-0000-0000-0000-000000000000"); !errors.Is(err, account.ErrNotFound) {
-		t.Fatalf("err = %v, want ErrNotFound", err)
-	}
-}
-
-func TestPGAccountTypeSeedDefaults(t *testing.T) {
-	store, authStore := newAccountStore(t)
-	ctx := context.Background()
-	owner := mustUser(t, authStore, "owner12@example.com")
-
-	if err := store.SeedDefaultTypes(ctx, owner.ID); err != nil {
-		t.Fatalf("SeedDefaultTypes: %v", err)
-	}
-	got, err := store.ListTypes(ctx, owner.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != len(account.DefaultTypeTitles) {
-		t.Fatalf("ListTypes after SeedDefaultTypes = %+v, want %d types", got, len(account.DefaultTypeTitles))
-	}
-}
+func strptr(s string) *string { return &s }

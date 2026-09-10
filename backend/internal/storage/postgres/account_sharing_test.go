@@ -14,13 +14,9 @@ func TestPGAccountShareCreateListResolvesRealNames(t *testing.T) {
 	owner := mustUser(t, authStore, "shareowner@example.com")
 	member := mustUser(t, authStore, "sharemember@example.com")
 
-	typ, err := store.CreateType(ctx, owner.ID, "Checking-share", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Joint", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
+		Title: "Joint", Type: "Checking-share", Currency: "EUR", OpeningDate: opening,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -72,10 +68,9 @@ func TestPGAccountShareUpsertUpdatesPermissionInPlace(t *testing.T) {
 	owner := mustUser(t, authStore, "shareowner2@example.com")
 	member := mustUser(t, authStore, "sharemember2@example.com")
 
-	typ, _ := store.CreateType(ctx, owner.ID, "Checking-share2", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Joint2", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
+		Title: "Joint2", Type: "Checking-share2", Currency: "EUR", OpeningDate: opening,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -103,10 +98,9 @@ func TestPGAccountShareDeleteAndListVisibility(t *testing.T) {
 	owner := mustUser(t, authStore, "shareowner3@example.com")
 	member := mustUser(t, authStore, "sharemember3@example.com")
 
-	typ, _ := store.CreateType(ctx, owner.ID, "Checking-share3", "")
 	opening, _ := account.ParseDate("2024-01-01")
 	acc, err := store.Create(ctx, owner.ID, account.New{
-		Title: "Joint3", TypeID: typ.ID, Currency: "EUR", OpeningDate: opening,
+		Title: "Joint3", Type: "Checking-share3", Currency: "EUR", OpeningDate: opening,
 	})
 	if err != nil {
 		t.Fatal(err)

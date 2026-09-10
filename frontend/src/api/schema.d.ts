@@ -9,69 +9,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the caller's own account types */
+        /**
+         * List the caller's distinct in-use account type labels
+         * @description The distinct, non-empty `type` values on the caller's own non-deleted accounts, trimmed, compared verbatim (case-sensitive), sorted case-insensitively ascending. For client autocomplete only; there is no endpoint to create, rename, disable, or delete a type — a type exists by being written on an account.
+         */
         get: operations["getAccountTypes"];
         put?: never;
-        /** Create an account type, owned by the caller */
-        post: operations["postAccountTypes"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/account-types/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         post?: never;
-        /**
-         * Delete the caller's own account type
-         * @description 409 if a non-deleted account still references it (disabled or not) — deletion is never cascaded.
-         */
-        delete: operations["deleteAccountType"];
-        options?: never;
-        head?: never;
-        /** Update the caller's own account type's title and description */
-        patch: operations["patchAccountType"];
-        trace?: never;
-    };
-    "/api/account-types/{id}/disable": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Disable the caller's own account type
-         * @description Reversible via enable. Blocks the type from being (re)assigned to an account — including on an existing account's next edit, if its current type is this one — without affecting any account already carrying it.
-         */
-        post: operations["postAccountTypeDisable"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/account-types/{id}/enable": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Re-enable the caller's own disabled account type */
-        post: operations["postAccountTypeEnable"];
         delete?: never;
         options?: never;
         head?: never;
@@ -90,7 +34,7 @@ export interface paths {
         put?: never;
         /**
          * Create an account
-         * @description 422 when type_id names a disabled account type.
+         * @description 422 when `type` is empty or only whitespace.
          */
         post: operations["postAccounts"];
         delete?: never;
@@ -122,7 +66,7 @@ export interface paths {
         head?: never;
         /**
          * Update an account
-         * @description 422 when the account's effective type_id — the value in this request if present, otherwise its current one — names a disabled account type. An account whose current type has since been disabled therefore rejects every update, whatever else it changes, until the same request also supplies a type_id for a different, non-disabled type.
+         * @description 422 when `type` is present but empty or only whitespace. A shared `owner`-tier caller may change `type` like any other field.
          */
         patch: operations["patchAccount"];
         trace?: never;
@@ -855,7 +799,8 @@ export interface components {
             /** @description True when the caller is not this account's real owner (i.e. they hold a share). Always false for the real owner, even when they have shared the account with others. */
             shared: boolean;
             title: string;
-            type_id: string;
+            /** @description Free-text label (e.g. "Checking"). Trimmed of surrounding whitespace on write; otherwise stored verbatim, not case-folded or checked against any list. Never empty. */
+            type: string;
             /** Format: date-time */
             updated_at: string;
         };
@@ -872,10 +817,11 @@ export interface components {
             /** Format: date */
             opening_date: string;
             title: string;
-            type_id: string;
+            /** @description Free-text label; trimmed on write, never empty. */
+            type: string;
         };
         /**
-         * @description Four tiers, each a strict superset of the one before it: view (read entries and balance), append (+ create entries, edit/delete only ones created by the same user), entry_admin (+ edit/delete any entry on the account), owner (+ edit account metadata except type_id, disable/enable/soft-delete the account, manage shares).
+         * @description Four tiers, each a strict superset of the one before it: view (read entries and balance), append (+ create entries, edit/delete only ones created by the same user), entry_admin (+ edit/delete any entry on the account), owner (+ edit account metadata, disable/enable/soft-delete the account, manage shares).
          * @enum {string}
          */
         AccountPermission: "view" | "append" | "entry_admin" | "owner";
@@ -905,19 +851,6 @@ export interface components {
         AccountSharePermissionUpdate: {
             permission: components["schemas"]["AccountPermission"];
         };
-        AccountType: {
-            /** Format: date-time */
-            created_at: string;
-            description?: string;
-            /** @description Blocks this type from being (re)assigned to an account without affecting any account already carrying it. */
-            disabled: boolean;
-            id: string;
-            title: string;
-        };
-        AccountTypeWrite: {
-            description?: string;
-            title: string;
-        };
         AccountUpdate: {
             /**
              * Format: date
@@ -934,7 +867,8 @@ export interface components {
             /** Format: date */
             opening_date?: string;
             title?: string;
-            type_id?: string;
+            /** @description Free-text label; trimmed on write. When present it must be non-empty after trimming. Omitting the field leaves it unchanged. */
+            type?: string;
         };
         AdminUser: {
             /** Format: date-time */
@@ -1239,142 +1173,16 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Every account type the caller owns. */
+            /** @description The caller's distinct in-use type labels. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccountType"][];
+                    "application/json": string[];
                 };
             };
             401: components["responses"]["Unauthorized"];
-        };
-    };
-    postAccountTypes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AccountTypeWrite"];
-            };
-        };
-        responses: {
-            /** @description The created account type. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccountType"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    deleteAccountType: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The account type is deleted. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    patchAccountType: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AccountTypeWrite"];
-            };
-        };
-        responses: {
-            /** @description The updated account type. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccountType"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    postAccountTypeDisable: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The account type, now disabled. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccountType"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    postAccountTypeEnable: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The account type, now enabled. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccountType"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
         };
     };
     getAccounts: {

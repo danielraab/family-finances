@@ -83,7 +83,6 @@
       "common": "Common",
       "myInvitations": "My Invitations",
       "users": "Users",
-      "accountTypes": "Account Types",
       "tags": "Tags"
     },
     "common": {
@@ -145,39 +144,6 @@
       "heading": "Invitations you've sent",
       "noInvites": "You haven't invited anyone yet."
     },
-    "accountTypes": {
-      "heading": "Account types",
-      "empty": "No account types yet. Create one to get started.",
-      "titleLabel": "Title",
-      "descriptionLabel": "Description",
-      "create": "Add type",
-      "creating": "Adding…",
-      "createError": "Couldn't create the account type — please try again.",
-      "columnTitle": "Title",
-      "columnDescription": "Description",
-      "columnStatus": "Status",
-      "statusActive": "Active",
-      "statusDisabled": "Disabled",
-      "edit": "Edit",
-      "editTitle": "Edit account type",
-      "editError": "Couldn't save — please try again.",
-      "save": "Save",
-      "saving": "Saving…",
-      "cancel": "Cancel",
-      "disable": "Disable",
-      "enable": "Enable",
-      "delete": "Delete",
-      "deleteError": "Couldn't delete \"{{title}}\" — it's still assigned to at least one account.",
-      "confirm": {
-        "disableTitle": "Disable \"{{title}}\"?",
-        "disableBody": "It can no longer be assigned to a new or edited account. Accounts already using it are unaffected, and this can be reversed at any time.",
-        "enableTitle": "Enable \"{{title}}\"?",
-        "enableBody": "It can be assigned to accounts again.",
-        "deleteTitle": "Delete \"{{title}}\"?",
-        "deleteBody": "This is only possible while no account uses this type. This cannot be undone here.",
-        "confirmAction": "Confirm"
-      }
-    },
     "tags": {
       "heading": "Tags",
       "empty": "No tags yet. Create one to get started.",
@@ -221,10 +187,7 @@
       "titleRequired": "Title is required.",
       "description": "Description",
       "type": "Type",
-      "typePlaceholder": "Select a type…",
       "typeRequired": "Type is required.",
-      "typeDisabledOption": "disabled",
-      "typeDisabledHint": "This type is disabled — choose another to save.",
       "currency": "Currency",
       "currencyPlaceholder": "Select a currency…",
       "currencyInvalid": "Currency must be three uppercase letters (e.g. EUR).",
@@ -234,9 +197,7 @@
       "closingDateInvalid": "Closing date can't be before the opening date.",
       "create": "Create account",
       "save": "Save changes",
-      "saveError": "Couldn't save — please check the form and try again.",
-      "typeLockedValue": "Managed by the account owner",
-      "typeLockedHint": "Only the account's real owner can change its type."
+      "saveError": "Couldn't save — please check the form and try again."
     },
     "new": {
       "title": "New account"
