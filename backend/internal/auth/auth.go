@@ -13,8 +13,10 @@ package auth
 import (
 	"errors"
 	"net/mail"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // IdentityKind is how a person proves who they are: an email address they
@@ -181,6 +183,57 @@ func ValidateEmail(s string) error {
 		return ErrInvalidEmail
 	}
 	return nil
+}
+
+// displayNameRE bounds an acceptable display name: at most 150 characters,
+// each a Unicode letter, a space, '.', '\”, or '-'. Anchored, so
+// ValidateDisplayName rejects a string with any other character. The empty
+// string matches — it means "no name".
+var displayNameRE = regexp.MustCompile(`^[\p{L} .'-]{0,150}$`)
+
+// NormalizeDisplayName trims surrounding whitespace from a display name so it
+// stores and compares canonically, mirroring NormalizeEmail.
+func NormalizeDisplayName(s string) string {
+	return strings.TrimSpace(s)
+}
+
+// ValidateDisplayName reports whether s (already normalized by the caller) is
+// an acceptable self-service display name. The empty string is valid and
+// clears the name; any character outside [\p{L} .'-], or more than 150
+// characters, is ErrInvalidDisplayName.
+func ValidateDisplayName(s string) error {
+	if !displayNameRE.MatchString(s) {
+		return ErrInvalidDisplayName
+	}
+	return nil
+}
+
+// SanitizeDisplayName coerces a provider-supplied name into the shape
+// ValidateDisplayName accepts: it trims, drops every rune outside
+// [\p{L} .'-], collapses the runs of whitespace that dropping leaves behind
+// to single spaces, and truncates to 150 runes. Used only for OIDC `name`
+// claims, which routinely carry commas, parentheses, and digits the
+// self-service field forbids.
+func SanitizeDisplayName(s string) string {
+	var b strings.Builder
+	lastSpace := false
+	for _, r := range strings.TrimSpace(s) {
+		switch {
+		case unicode.IsLetter(r), r == '.', r == '\'', r == '-':
+			b.WriteRune(r)
+			lastSpace = false
+		case unicode.IsSpace(r):
+			if !lastSpace {
+				b.WriteByte(' ')
+				lastSpace = true
+			}
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	if rs := []rune(out); len(rs) > 150 {
+		out = strings.TrimSpace(string(rs[:150]))
+	}
+	return out
 }
 
 // DomainAllowed reports whether email's domain passes an allow-list. An empty

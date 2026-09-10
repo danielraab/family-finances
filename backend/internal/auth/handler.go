@@ -50,6 +50,7 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("GET /api/auth/oidc/callback", h.oidcCallback)
 	h.mux.HandleFunc("GET /api/auth/config", h.config)
 	h.mux.HandleFunc("GET /api/auth/me", h.me)
+	h.mux.HandleFunc("PATCH /api/auth/me", h.patchMe)
 	h.mux.HandleFunc("POST /api/auth/logout", h.logout)
 	h.mux.HandleFunc("POST /api/auth/invites", h.createInvite)
 	h.mux.HandleFunc("GET /api/auth/invites", h.listInvites)
@@ -171,6 +172,34 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, meResponse{
 		User:     user,
 		Language: h.svc.UserLanguage(r.Context(), user.ID),
+	})
+}
+
+// patchMe updates the authenticated user's profile — today just the display
+// name. The body is validated in the service; an invalid value maps to 400
+// via ErrInvalidDisplayName. The response mirrors me so the client can replace
+// its whole user record.
+func (h *Handler) patchMe(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	var body struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		h.renderError(w, r, ErrInvalidDisplayName)
+		return
+	}
+	updated, err := h.svc.SetDisplayName(r.Context(), user.ID, body.DisplayName)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, meResponse{
+		User:     updated,
+		Language: h.svc.UserLanguage(r.Context(), updated.ID),
 	})
 }
 

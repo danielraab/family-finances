@@ -43,6 +43,9 @@ type OIDCClaims struct {
 	Subject       string
 	Email         string
 	EmailVerified bool
+	// Name is the provider's `name` claim, used to (re-)populate the user's
+	// display name on every OIDC sign-in — see CompleteOIDC. May be empty.
+	Name string
 }
 
 // LanguageLookup resolves an authenticated user's raw, unresolved language
@@ -296,6 +299,17 @@ func (s *Service) CompleteOIDC(ctx context.Context, state, code, currentUserID s
 	if err := checkAccountUsable(user); err != nil {
 		return User{}, "", "", err
 	}
+	// The provider is authoritative on the display name: on every OIDC
+	// sign-in re-sync it from the sanitized `name` claim, overriding any
+	// value (including one the user set via PATCH /api/auth/me). A claim that
+	// is absent or sanitizes to empty leaves the current name untouched.
+	if name := SanitizeDisplayName(claims.Name); name != "" && name != user.DisplayName {
+		if updated, err := s.store.SetUserDisplayName(ctx, user.ID, &name); err != nil {
+			slog.Warn("auth: could not sync display name from OIDC", "user_id", user.ID, "error", err)
+		} else {
+			user = updated
+		}
+	}
 	tok, err := s.issueSessionToken(ctx, user, sc)
 	if err != nil {
 		return User{}, "", "", err
@@ -503,6 +517,20 @@ func (s *Service) UserLanguage(ctx context.Context, userID string) *string {
 		return nil
 	}
 	return v
+}
+
+// SetDisplayName sets the authenticated user's own display name. raw is
+// trimmed and validated (ErrInvalidDisplayName on a bad value); a value that
+// trims to empty clears the name. Returns the updated user.
+func (s *Service) SetDisplayName(ctx context.Context, userID, raw string) (User, error) {
+	name := NormalizeDisplayName(raw)
+	if err := ValidateDisplayName(name); err != nil {
+		return User{}, err
+	}
+	if name == "" {
+		return s.store.SetUserDisplayName(ctx, userID, nil)
+	}
+	return s.store.SetUserDisplayName(ctx, userID, &name)
 }
 
 // --- admin: users and invitations -----------------------------------------

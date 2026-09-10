@@ -76,6 +76,12 @@ func (a *AuthStore) SetUserAdmin(ctx context.Context, email string, isAdmin bool
 	return nil
 }
 
+func (a *AuthStore) SetUserDisplayName(ctx context.Context, id string, name *string) (auth.User, error) {
+	return scanUser(a.pool.QueryRow(ctx,
+		`UPDATE users SET display_name = NULLIF($2, '') WHERE id = $1 AND deleted_at IS NULL RETURNING `+userCols,
+		id, name))
+}
+
 func (a *AuthStore) ListAdminEmails(ctx context.Context) ([]string, error) {
 	rows, err := a.pool.Query(ctx, `SELECT email FROM users WHERE is_admin ORDER BY email`)
 	if err != nil {

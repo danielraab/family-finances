@@ -103,6 +103,22 @@ func (a *AuthStore) SetUserAdmin(_ context.Context, email string, isAdmin bool) 
 	return auth.ErrNotFound
 }
 
+func (a *AuthStore) SetUserDisplayName(_ context.Context, id string, name *string) (auth.User, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	u, ok := a.users[id]
+	if !ok || u.DeletedAt != nil {
+		return auth.User{}, auth.ErrNotFound
+	}
+	if name == nil {
+		u.DisplayName = ""
+	} else {
+		u.DisplayName = *name
+	}
+	a.users[id] = u
+	return u, nil
+}
+
 func (a *AuthStore) ListAdminEmails(context.Context) ([]string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

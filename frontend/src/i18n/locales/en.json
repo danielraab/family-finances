@@ -80,12 +80,14 @@
   "settings": {
     "title": "Settings",
     "tabs": {
-      "common": "Common",
+      "profile": "Profile",
       "myInvitations": "My Invitations",
       "users": "Users",
       "tags": "Tags"
     },
-    "common": {
+    "profile": {
+      "name": "Full name",
+      "nameError": "Couldn't save that name — letters, spaces, periods, hyphens and apostrophes only.",
       "language": "Display language",
       "languageOption": {
         "en": "English",

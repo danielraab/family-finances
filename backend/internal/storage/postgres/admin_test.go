@@ -76,6 +76,64 @@ func TestPGSetUserDisabledUnknownUser(t *testing.T) {
 	}
 }
 
+func TestPGSetUserDisplayName(t *testing.T) {
+	store, _ := newAuthStore(t)
+	ctx := context.Background()
+
+	u, _, err := store.CreateUserWithIdentity(ctx, auth.NewUser{Email: "name@example.com"}, emailIdentity("name@example.com"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	name := "Jane O'Brien-Doe"
+	got, err := store.SetUserDisplayName(ctx, u.ID, &name)
+	if err != nil {
+		t.Fatalf("SetUserDisplayName: %v", err)
+	}
+	if got.DisplayName != name {
+		t.Fatalf("DisplayName = %q, want %q", got.DisplayName, name)
+	}
+
+	// Clearing with nil returns an empty name and persists NULL.
+	got, err = store.SetUserDisplayName(ctx, u.ID, nil)
+	if err != nil {
+		t.Fatalf("SetUserDisplayName(nil): %v", err)
+	}
+	if got.DisplayName != "" {
+		t.Fatalf("DisplayName after clear = %q, want empty", got.DisplayName)
+	}
+	if reread, err := store.UserByID(ctx, u.ID); err != nil || reread.DisplayName != "" {
+		t.Fatalf("UserByID after clear = %+v, %v", reread, err)
+	}
+
+	// An empty string clears too.
+	empty := ""
+	if got, err := store.SetUserDisplayName(ctx, u.ID, &empty); err != nil || got.DisplayName != "" {
+		t.Fatalf("SetUserDisplayName(\"\") = %+v, %v", got, err)
+	}
+}
+
+func TestPGSetUserDisplayNameMissing(t *testing.T) {
+	store, _ := newAuthStore(t)
+	ctx := context.Background()
+	name := "Nobody"
+
+	if _, err := store.SetUserDisplayName(ctx, "00000000-0000-0000-0000-000000000000", &name); err != auth.ErrNotFound {
+		t.Fatalf("unknown id err = %v, want ErrNotFound", err)
+	}
+
+	u, _, err := store.CreateUserWithIdentity(ctx, auth.NewUser{Email: "gone@example.com"}, emailIdentity("gone@example.com"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SoftDeleteUser(ctx, u.ID, time.Now()); err != nil {
+		t.Fatalf("SoftDeleteUser: %v", err)
+	}
+	if _, err := store.SetUserDisplayName(ctx, u.ID, &name); err != auth.ErrNotFound {
+		t.Fatalf("soft-deleted err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestPGListInvitesIncludesInviter(t *testing.T) {
 	store, _ := newAuthStore(t)
 	ctx := context.Background()

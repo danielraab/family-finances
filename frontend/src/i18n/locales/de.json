@@ -80,12 +80,14 @@
   "settings": {
     "title": "Einstellungen",
     "tabs": {
-      "common": "Allgemein",
+      "profile": "Profil",
       "myInvitations": "Meine Einladungen",
       "users": "Benutzer",
       "tags": "Tags"
     },
-    "common": {
+    "profile": {
+      "name": "Vollständiger Name",
+      "nameError": "Name konnte nicht gespeichert werden — nur Buchstaben, Leerzeichen, Punkte, Bindestriche und Apostrophe.",
       "language": "Anzeigesprache",
       "languageOption": {
         "en": "Englisch",

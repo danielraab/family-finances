@@ -100,6 +100,7 @@ func (c *Client) VerifyIDToken(ctx context.Context, rawIDToken, nonce string) (a
 	var claims struct {
 		Email         string `json:"email"`
 		EmailVerified bool   `json:"email_verified"`
+		Name          string `json:"name"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		return auth.OIDCClaims{}, fmt.Errorf("oidcauth: reading claims: %w", err)
@@ -110,5 +111,6 @@ func (c *Client) VerifyIDToken(ctx context.Context, rawIDToken, nonce string) (a
 		Subject:       idToken.Subject,
 		Email:         claims.Email,
 		EmailVerified: claims.EmailVerified,
+		Name:          claims.Name,
 	}, nil
 }

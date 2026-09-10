@@ -112,6 +112,32 @@ paths:
                 $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Unauthorized"
+    patch:
+      operationId: patchAuthMe
+      summary: Update the authenticated user's profile
+      description: >-
+        Sets the current user's display name. The submitted value is trimmed of
+        surrounding whitespace; the trimmed value must match
+        `^[\p{L} .'-]{0,150}$` (Unicode letters, spaces, `.`, `'`, `-`; at most
+        150 characters). An empty string is accepted and clears the name.
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: The updated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /api/auth/logout:
     post:
@@ -1821,6 +1847,19 @@ components:
         status:
           type: string
           enum: [ok]
+
+    ProfileUpdate:
+      type: object
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
+          maxLength: 150
+          description: >-
+            The user's full name. Trimmed of surrounding whitespace before it
+            is stored; the trimmed value must match `^[\p{L} .'-]{0,150}$`
+            (Unicode letters, spaces, `.`, `'`, `-`). An empty string is
+            accepted and clears the name.
 
     EmailStartRequest:
       type: object

@@ -29,6 +29,7 @@ func init() {
 	registerErrStatus(auth.ErrIdentityConflict, http.StatusConflict)
 	registerErrStatus(auth.ErrEmailInUse, http.StatusConflict)
 	registerErrStatus(auth.ErrInvalidEmail, http.StatusBadRequest)
+	registerErrStatus(auth.ErrInvalidDisplayName, http.StatusBadRequest)
 	registerErrStatus(auth.ErrOIDCNotConfigured, http.StatusNotFound)
 	registerErrStatus(auth.ErrEmailRequired, http.StatusBadRequest)
 	registerErrStatus(auth.ErrAccountDisabled, http.StatusForbidden)

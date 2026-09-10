@@ -328,7 +328,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update the authenticated user's profile
+         * @description Sets the current user's display name. The submitted value is trimmed of surrounding whitespace; the trimmed value must match `^[\p{L} .'-]{0,150}$` (Unicode letters, spaces, `.`, `'`, `-`; at most 150 characters). An empty string is accepted and clears the name.
+         */
+        patch: operations["patchAuthMe"];
         trace?: never;
     };
     "/api/auth/users": {
@@ -1053,6 +1057,10 @@ export interface components {
             label: string;
             start_path: string;
         };
+        ProfileUpdate: {
+            /** @description The user's full name. Trimmed of surrounding whitespace before it is stored; the trimmed value must match `^[\p{L} .'-]{0,150}$` (Unicode letters, spaces, `.`, `'`, `-`). An empty string is accepted and clears the name. */
+            display_name: string;
+        };
         StatusOk: {
             /** @enum {string} */
             status: "ok";
@@ -1754,6 +1762,32 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    patchAuthMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };

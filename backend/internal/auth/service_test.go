@@ -570,6 +570,53 @@ func TestExplicitLinkWhileAuthenticated(t *testing.T) {
 	}
 }
 
+func TestOIDCSyncsDisplayNameFromNameClaim(t *testing.T) {
+	p := baseParams()
+	oidc := &stubOIDC{claims: auth.OIDCClaims{
+		Issuer: "https://idp.example", Subject: "sub-name", Email: "n@example.com",
+		EmailVerified: true, Name: "Doe, Jane (Dr.)",
+	}}
+	svc, store, _, _ := newSvc(t, p, withOIDC(oidc))
+
+	completeOIDC := func(t *testing.T) auth.User {
+		t.Helper()
+		redirect, err := svc.StartOIDC(context.Background(), "")
+		if err != nil {
+			t.Fatalf("StartOIDC: %v", err)
+		}
+		state := redirect[strings.Index(redirect, "state=")+len("state="):]
+		u, _, _, err := svc.CompleteOIDC(context.Background(), state, "code", "", auth.SessionContext{})
+		if err != nil {
+			t.Fatalf("CompleteOIDC: %v", err)
+		}
+		return u
+	}
+
+	// First sign-in: the claim is sanitized (comma/parens stripped) and stored.
+	u := completeOIDC(t)
+	if u.DisplayName != "Doe Jane Dr." {
+		t.Fatalf("display_name = %q, want %q", u.DisplayName, "Doe Jane Dr.")
+	}
+
+	// The user renames themselves; the next OIDC sign-in overrides it again.
+	if _, err := svc.SetDisplayName(context.Background(), u.ID, "My Own Name"); err != nil {
+		t.Fatalf("SetDisplayName: %v", err)
+	}
+	oidc.claims.Name = "Jane Q. Public"
+	if u = completeOIDC(t); u.DisplayName != "Jane Q. Public" {
+		t.Fatalf("after re-sync display_name = %q, want %q", u.DisplayName, "Jane Q. Public")
+	}
+
+	// An absent (empty) name claim leaves the stored value untouched.
+	oidc.claims.Name = ""
+	if u = completeOIDC(t); u.DisplayName != "Jane Q. Public" {
+		t.Fatalf("empty claim changed display_name to %q", u.DisplayName)
+	}
+	if reread, err := store.UserByID(context.Background(), u.ID); err != nil || reread.DisplayName != "Jane Q. Public" {
+		t.Fatalf("stored display_name = %q, %v", reread.DisplayName, err)
+	}
+}
+
 func TestOIDCStateMismatchRejected(t *testing.T) {
 	p := baseParams()
 	oidc := &stubOIDC{claims: auth.OIDCClaims{Issuer: "x", Subject: "s"}}

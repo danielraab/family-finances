@@ -40,7 +40,7 @@ function SettingsLayout() {
   }
 
   const tabs = [
-    { to: "/settings" as const, label: t("settings.tabs.common") },
+    { to: "/settings" as const, label: t("settings.tabs.profile") },
     {
       to: "/settings/invitations" as const,
       label: t("settings.tabs.myInvitations"),

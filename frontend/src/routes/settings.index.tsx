@@ -3,10 +3,11 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
+import { useAuth } from "../components/AuthProvider";
 import i18n from "../i18n";
 
 export const Route = createFileRoute("/settings/")({
-  component: CommonSettingsTab,
+  component: ProfileSettingsTab,
 });
 
 type UserSettings = components["schemas"]["UserSettings"];
@@ -58,17 +59,44 @@ function SettingField({
 }
 
 /**
- * The Common tab: display language, timezone, default currency. Each field
- * saves immediately on change (PUT /api/settings with only that field), no
- * separate save button — mirrors ThemeSwitch's click-applies-immediately
- * interaction. A failed save reverts the field to its last-known-good value.
+ * The Profile tab: full name, then display language, timezone, default
+ * currency and displayed decimal places. Each field saves immediately (the
+ * name on blur via PATCH /api/auth/me, the rest on change via PUT /api/settings
+ * with only that field), no separate save button — mirrors ThemeSwitch's
+ * click-applies-immediately interaction. A failed save reverts the field to
+ * its last-known-good value.
  */
-function CommonSettingsTab() {
+function ProfileSettingsTab() {
   const { t } = useTranslation();
+  const { user, setUser } = useAuth();
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [timezones] = useState(listTimezones);
   const [currencyDraft, setCurrencyDraft] = useState("");
   const [errorField, setErrorField] = useState<keyof UserSettings | null>(null);
+  const savedName = user?.display_name ?? "";
+  const [nameDraft, setNameDraft] = useState(savedName);
+  const [nameError, setNameError] = useState(false);
+
+  // Keep the field in step with the shared user record (initial resolve, or a
+  // successful save pushing a new value back through the context).
+  useEffect(() => {
+    setNameDraft(savedName);
+  }, [savedName]);
+
+  async function saveName() {
+    const next = nameDraft.trim();
+    if (next === savedName) return;
+    setNameError(false);
+    const { data, response } = await api.PATCH("/api/auth/me", {
+      body: { display_name: next },
+    });
+    if (!response.ok || !data) {
+      setNameDraft(savedName);
+      setNameError(true);
+      return;
+    }
+    setUser(data);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -111,10 +139,27 @@ function CommonSettingsTab() {
   return (
     <div className="flex flex-col gap-6">
       <SettingField
+        id="settings-name"
+        label={t("settings.profile.name")}
+        error={nameError ? t("settings.profile.nameError") : null}
+      >
+        <input
+          id="settings-name"
+          value={nameDraft}
+          maxLength={150}
+          onChange={(event) => setNameDraft(event.target.value)}
+          onBlur={() => {
+            void saveName();
+          }}
+          className={inputClass}
+        />
+      </SettingField>
+
+      <SettingField
         id="settings-language"
-        label={t("settings.common.language")}
+        label={t("settings.profile.language")}
         error={
-          errorField === "language" ? t("settings.common.saveError") : null
+          errorField === "language" ? t("settings.profile.saveError") : null
         }
       >
         <select
@@ -127,7 +172,7 @@ function CommonSettingsTab() {
         >
           {LANGUAGES.map((lang) => (
             <option key={lang} value={lang}>
-              {t(`settings.common.languageOption.${lang}`)}
+              {t(`settings.profile.languageOption.${lang}`)}
             </option>
           ))}
         </select>
@@ -135,9 +180,9 @@ function CommonSettingsTab() {
 
       <SettingField
         id="settings-timezone"
-        label={t("settings.common.timezone")}
+        label={t("settings.profile.timezone")}
         error={
-          errorField === "timezone" ? t("settings.common.saveError") : null
+          errorField === "timezone" ? t("settings.profile.saveError") : null
         }
       >
         <select
@@ -159,10 +204,10 @@ function CommonSettingsTab() {
 
       <SettingField
         id="settings-default-currency"
-        label={t("settings.common.defaultCurrency")}
+        label={t("settings.profile.defaultCurrency")}
         error={
           errorField === "default_currency"
-            ? t("settings.common.saveError")
+            ? t("settings.profile.saveError")
             : null
         }
       >
@@ -189,10 +234,10 @@ function CommonSettingsTab() {
 
       <SettingField
         id="settings-displayed-decimal-places"
-        label={t("settings.common.displayedDecimalPlaces")}
+        label={t("settings.profile.displayedDecimalPlaces")}
         error={
           errorField === "displayed_decimal_places"
-            ? t("settings.common.saveError")
+            ? t("settings.profile.saveError")
             : null
         }
       >

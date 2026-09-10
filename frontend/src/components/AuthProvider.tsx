@@ -17,6 +17,12 @@ export type AuthStatus = "loading" | "anonymous" | "authenticated";
 type AuthContextValue = {
   status: AuthStatus;
   user: User | null;
+  /**
+   * Replace the cached user record — e.g. after the profile form saves a new
+   * display name via `PATCH /api/auth/me`, so the sidebar updates without a
+   * reload or a refetch.
+   */
+  setUser: (user: User) => void;
   /** Revoke the session and drop to the anonymous state, no page reload. */
   logout: () => Promise<void>;
 };
@@ -78,7 +84,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  return <AuthContext value={{ status, user, logout }}>{children}</AuthContext>;
+  return (
+    <AuthContext value={{ status, user, setUser, logout }}>
+      {children}
+    </AuthContext>
+  );
 }
 
 /** Read the auth context. Throws if used outside `<AuthProvider>`. */

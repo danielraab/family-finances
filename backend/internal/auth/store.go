@@ -33,6 +33,9 @@ var (
 	ErrEmailInUse = errors.New("provider did not verify this email address, and it already belongs to another account")
 	// ErrInvalidEmail: the address is syntactically invalid.
 	ErrInvalidEmail = errors.New("invalid email address")
+	// ErrInvalidDisplayName: the submitted display name is longer than 150
+	// characters or contains a character outside [\p{L} .'-].
+	ErrInvalidDisplayName = errors.New("invalid display name")
 	// ErrOIDCNotConfigured: an OIDC route was hit but no provider is set.
 	ErrOIDCNotConfigured = errors.New("oidc is not configured")
 	// ErrEmailRequired: an OIDC sign-in returned no email, so no account can
@@ -53,8 +56,9 @@ var (
 var Sentinels = []error{
 	ErrNotFound, ErrSignupDisabled, ErrDomainNotAllowed, ErrTokenInvalid,
 	ErrTokenExpired, ErrTokenConsumed, ErrInviteInvalid, ErrIdentityConflict,
-	ErrEmailInUse, ErrInvalidEmail, ErrOIDCNotConfigured, ErrEmailRequired,
-	ErrAccountDisabled, ErrInviteRevokeForbidden, ErrInviteNotRevoked,
+	ErrEmailInUse, ErrInvalidEmail, ErrInvalidDisplayName, ErrOIDCNotConfigured,
+	ErrEmailRequired, ErrAccountDisabled, ErrInviteRevokeForbidden,
+	ErrInviteNotRevoked,
 }
 
 // NewUser is the input to account creation.
@@ -82,6 +86,11 @@ type Store interface {
 	// SetUserAdmin sets is_admin on the user with this email, returning
 	// ErrNotFound if there is none.
 	SetUserAdmin(ctx context.Context, email string, isAdmin bool) error
+	// SetUserDisplayName sets display_name on the user with this id and
+	// returns the updated user. A nil name clears it (stored NULL); a non-nil
+	// pointer stores that exact (already-trimmed) string. ErrNotFound if there
+	// is no such user or it is soft-deleted.
+	SetUserDisplayName(ctx context.Context, id string, name *string) (User, error)
 	// ListAdminEmails returns the email of every user with is_admin = true,
 	// sorted.
 	ListAdminEmails(ctx context.Context) ([]string, error)

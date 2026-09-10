@@ -200,6 +200,61 @@ func TestHandlerMe(t *testing.T) {
 	conforms(t, "GET", "/api/auth/me", rec)
 }
 
+func TestHandlerPatchMe(t *testing.T) {
+	hr := newHarness(t)
+	user, _ := signInEmail(t, hr.svc, hr.mailer, "patch@example.com")
+
+	patch := func(t *testing.T, u *auth.User, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		return hr.do(t, httptest.NewRequest("PATCH", "/api/auth/me", strings.NewReader(body)), u)
+	}
+
+	// No session → 401.
+	anon := patch(t, nil, `{"display_name":"Jane Doe"}`)
+	if anon.Code != http.StatusUnauthorized {
+		t.Fatalf("anon status = %d, want 401", anon.Code)
+	}
+	conforms(t, "PATCH", "/api/auth/me", anon)
+
+	// Happy path: trims and returns the updated user with a language field.
+	rec := patch(t, &user, `{"display_name":"  Jane O'Brien-Doe  "}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", rec.Code, rec.Body)
+	}
+	var got struct {
+		DisplayName string  `json:"display_name"`
+		Language    *string `json:"language"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.DisplayName != "Jane O'Brien-Doe" {
+		t.Fatalf("display_name = %q, want %q", got.DisplayName, "Jane O'Brien-Doe")
+	}
+	conforms(t, "PATCH", "/api/auth/me", rec)
+
+	// Empty string clears the name (omitted from JSON via omitempty).
+	rec = patch(t, &user, `{"display_name":"   "}`)
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "display_name") {
+		t.Fatalf("clear: status %d body %s", rec.Code, rec.Body)
+	}
+	conforms(t, "PATCH", "/api/auth/me", rec)
+
+	// Disallowed character → 400.
+	rec = patch(t, &user, `{"display_name":"Jane <b>Doe</b>"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid char status = %d, want 400", rec.Code)
+	}
+	conforms(t, "PATCH", "/api/auth/me", rec)
+
+	// Malformed body → 400.
+	rec = patch(t, &user, `not json`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("malformed status = %d, want 400", rec.Code)
+	}
+	conforms(t, "PATCH", "/api/auth/me", rec)
+}
+
 func TestHandlerLogout(t *testing.T) {
 	hr := newHarness(t)
 	user, tok := signInEmail(t, hr.svc, hr.mailer, "logmeout@example.com")
