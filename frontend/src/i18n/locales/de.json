@@ -365,7 +365,6 @@
     "actions": {
       "moveUp": "Nach oben",
       "moveDown": "Nach unten",
-      "moveTo": "Verschieben…",
       "edit": "Bearbeiten",
       "disable": "Deaktivieren",
       "enable": "Aktivieren",
@@ -375,24 +374,14 @@
     "edit": {
       "heading": "Kategorie bearbeiten",
       "nameLabel": "Name",
+      "parentLabel": "Übergeordnete Kategorie",
+      "parentRoot": "Keine (oberste Ebene)",
       "save": "Speichern",
       "saving": "Wird gespeichert…",
       "cancel": "Abbrechen",
       "error": "Speichern fehlgeschlagen — bitte versuche es erneut."
     },
-    "move": {
-      "heading": "„{{name}}“ verschieben",
-      "parentLabel": "Neue übergeordnete Kategorie",
-      "root": "Zur obersten Ebene machen",
-      "confirm": "Verschieben",
-      "moving": "Wird verschoben…",
-      "error": "Verschieben an diese Stelle nicht möglich."
-    },
     "confirm": {
-      "disableTitle": "„{{name}}“ deaktivieren?",
-      "disableBody": "Sie kann dann nicht mehr für neue oder bearbeitete Buchungen ausgewählt werden. Buchungen, die sie bereits verwenden, sind davon nicht betroffen, und dies kann jederzeit rückgängig gemacht werden.",
-      "enableTitle": "„{{name}}“ aktivieren?",
-      "enableBody": "Sie kann wieder für Buchungen ausgewählt werden.",
       "deleteTitle": "„{{name}}“ löschen?",
       "deleteBody": "Dies ist nur möglich, solange sie keine Unterkategorien hat und keine Buchung sie verwendet. Dies kann hier nicht rückgängig gemacht werden.",
       "cancel": "Abbrechen",

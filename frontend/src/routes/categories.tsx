@@ -24,7 +24,6 @@ export const Route = createFileRoute("/categories")({
 });
 
 type Category = components["schemas"]["Category"];
-type ConfirmKind = "disable" | "enable" | "delete";
 
 const inputClass =
   "rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
@@ -51,13 +50,12 @@ function subtreeIds(categories: Category[], id: string): Set<string> {
 }
 
 /**
- * The /categories management page: the caller's own tree, editable
- * entirely through buttons (edit name/icon/colour, disable/enable, ▲/▼
- * reorder, a "Move to…" reparent picker, delete) — no drag gestures, so it
- * works the same
- * on a phone as on a desktop. See web-client-categories's spec and
- * design.md for why reordering/reparenting are dedicated actions rather
- * than drag-and-drop.
+ * The /categories management page: the caller's own tree. The inline node
+ * row carries only ▲/▼ sibling reorder and Edit; everything else scoped to
+ * a single category — rename, icon/colour, reparent (a parent picker
+ * applied on Save), disable/enable (immediate), and delete (confirmed) —
+ * lives in the edit dialog. No drag gestures, so it works the same on a
+ * phone as on a desktop. See web-client-categories's spec and design.md.
  */
 function CategoriesPage() {
   const { status } = useAuth();
@@ -82,21 +80,15 @@ function CategoriesPage() {
 
   const [editing, setEditing] = useState<Category | null>(null);
   const [editName, setEditName] = useState("");
+  const [editParentId, setEditParentId] = useState("");
   const [editIcon, setEditIcon] = useState("");
   const [editColor, setEditColor] = useState("");
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  const [moving, setMoving] = useState<Category | null>(null);
-  const [moveParentId, setMoveParentId] = useState("");
-  const [movingSubmitting, setMovingSubmitting] = useState(false);
-  const [moveError, setMoveError] = useState<string | null>(null);
-
-  const [confirming, setConfirming] = useState<{
-    kind: ConfirmKind;
-    target: Category;
-  } | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState<Category | null>(
+    null,
+  );
 
   async function refresh() {
     const { data, response } = await api.GET("/api/categories");
@@ -121,6 +113,14 @@ function CategoriesPage() {
 
   const tree = buildCategoryTree(categories ?? []);
   const parentOptions = flattenCategoryTree(categories ?? []);
+  const editParentOptions = editing
+    ? parentOptions.filter(
+        (o) => !subtreeIds(categories ?? [], editing.id).has(o.id),
+      )
+    : [];
+  const editingHasChildren =
+    editing !== null &&
+    (categories ?? []).some((c) => c.parent_id === editing.id);
 
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -149,6 +149,7 @@ function CategoriesPage() {
   function openEdit(cat: Category) {
     setEditing(cat);
     setEditName(cat.name);
+    setEditParentId(cat.parent_id ?? "");
     setEditIcon(cat.icon ?? "");
     setEditColor(cat.color ?? "");
     setEditError(null);
@@ -159,43 +160,39 @@ function CategoriesPage() {
     if (!editing) return;
     setSaving(true);
     setEditError(null);
-    const { data, response } = await api.PATCH("/api/categories/{id}", {
+    const { response } = await api.PATCH("/api/categories/{id}", {
       params: { path: { id: editing.id } },
-      body: { name: editName.trim(), icon: editIcon, color: editColor },
+      body: {
+        name: editName.trim(),
+        icon: editIcon,
+        color: editColor,
+        parent_id: editParentId || null,
+      },
     });
     setSaving(false);
-    if (!response.ok || !data) {
+    if (!response.ok) {
       setEditError(t("categories.edit.error"));
       return;
     }
-    setCategories(
-      (prev) => prev?.map((c) => (c.id === data.id ? data : c)) ?? null,
-    );
+    // A reparent shifts sibling order under the new parent — re-fetch the
+    // whole tree rather than patch it locally.
+    await refresh();
     setEditing(null);
   }
 
-  function openMove(cat: Category) {
-    setMoving(cat);
-    setMoveParentId(cat.parent_id ?? "");
-    setMoveError(null);
-  }
-
-  async function onConfirmMove(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!moving) return;
-    setMovingSubmitting(true);
-    setMoveError(null);
-    const { response } = await api.PATCH("/api/categories/{id}", {
-      params: { path: { id: moving.id } },
-      body: { parent_id: moveParentId || null },
-    });
-    setMovingSubmitting(false);
-    if (!response.ok) {
-      setMoveError(t("categories.move.error"));
-      return;
+  async function toggleDisabled(cat: Category) {
+    const { data } = await api.POST(
+      cat.disabled
+        ? "/api/categories/{id}/enable"
+        : "/api/categories/{id}/disable",
+      { params: { path: { id: cat.id } } },
+    );
+    if (data) {
+      setCategories(
+        (prev) => prev?.map((c) => (c.id === data.id ? data : c)) ?? null,
+      );
+      setEditing((cur) => (cur && cur.id === data.id ? data : cur));
     }
-    setMoving(null);
-    refresh();
   }
 
   async function moveUp(cat: Category) {
@@ -212,42 +209,21 @@ function CategoriesPage() {
     refresh();
   }
 
-  async function performConfirmed() {
-    if (!confirming) return;
-    const { kind, target } = confirming;
-    setConfirming(null);
-    setActionError(null);
-
-    if (kind === "disable" || kind === "enable") {
-      const { data } = await api.POST(
-        kind === "disable"
-          ? "/api/categories/{id}/disable"
-          : "/api/categories/{id}/enable",
-        { params: { path: { id: target.id } } },
-      );
-      if (data) {
-        setCategories(
-          (prev) => prev?.map((c) => (c.id === data.id ? data : c)) ?? null,
-        );
-      }
-      return;
-    }
-
+  async function performDelete() {
+    if (!confirmingDelete) return;
+    const target = confirmingDelete;
+    setConfirmingDelete(null);
+    setEditError(null);
     const { response } = await api.DELETE("/api/categories/{id}", {
       params: { path: { id: target.id } },
     });
     if (response.ok) {
       setCategories((prev) => prev?.filter((c) => c.id !== target.id) ?? null);
+      setEditing(null);
     } else {
-      setActionError(t("categories.deleteError", { name: target.name }));
+      setEditError(t("categories.deleteError", { name: target.name }));
     }
   }
-
-  const moveOptions = moving
-    ? parentOptions.filter(
-        (o) => !subtreeIds(categories ?? [], moving.id).has(o.id),
-      )
-    : [];
 
   function renderNode(
     node: CategoryNode,
@@ -302,47 +278,10 @@ function CategoriesPage() {
             </button>
             <button
               type="button"
-              onClick={() => openMove(node)}
-              className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-            >
-              {t("categories.actions.moveTo")}
-            </button>
-            <button
-              type="button"
               onClick={() => openEdit(node)}
               className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             >
               {t("categories.actions.edit")}
-            </button>
-            {node.disabled ? (
-              <button
-                type="button"
-                onClick={() => setConfirming({ kind: "enable", target: node })}
-                className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-              >
-                {t("categories.actions.enable")}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirming({ kind: "disable", target: node })}
-                className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-              >
-                {t("categories.actions.disable")}
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={node.children.length > 0}
-              title={
-                node.children.length > 0
-                  ? t("categories.actions.deleteDisabledHint")
-                  : undefined
-              }
-              onClick={() => setConfirming({ kind: "delete", target: node })}
-              className="rounded-md px-2 py-1 text-xs font-medium text-red-600 underline underline-offset-2 hover:text-red-800 disabled:opacity-30 disabled:no-underline dark:text-red-400 dark:hover:text-red-300"
-            >
-              {t("categories.actions.delete")}
             </button>
           </div>
         </div>
@@ -409,9 +348,6 @@ function CategoriesPage() {
       {createError && (
         <p className="text-sm text-red-600 dark:text-red-400">{createError}</p>
       )}
-      {actionError && (
-        <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>
-      )}
       {loadError && (
         <p className="text-sm text-red-600 dark:text-red-400">
           {t("categories.loadError")}
@@ -452,6 +388,21 @@ function CategoriesPage() {
                     className={inputClass}
                   />
                 </label>
+                <label className="flex flex-col gap-1.5 text-sm font-medium">
+                  {t("categories.edit.parentLabel")}
+                  <select
+                    value={editParentId}
+                    onChange={(e) => setEditParentId(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">{t("categories.edit.parentRoot")}</option>
+                    {editParentOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <IconColorPicker
                   value={{ icon: editIcon, color: editColor }}
                   onChange={(next) => {
@@ -464,6 +415,30 @@ function CategoriesPage() {
                     {editError}
                   </p>
                 )}
+                <div className="flex flex-wrap items-center gap-2 border-t border-black/10 pt-3 dark:border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => toggleDisabled(editing)}
+                    className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  >
+                    {editing.disabled
+                      ? t("categories.actions.enable")
+                      : t("categories.actions.disable")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={editingHasChildren}
+                    title={
+                      editingHasChildren
+                        ? t("categories.actions.deleteDisabledHint")
+                        : undefined
+                    }
+                    onClick={() => setConfirmingDelete(editing)}
+                    className="rounded-md px-2 py-1 text-xs font-medium text-red-600 underline underline-offset-2 hover:text-red-800 disabled:opacity-30 disabled:no-underline dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    {t("categories.actions.delete")}
+                  </button>
+                </div>
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
@@ -489,91 +464,34 @@ function CategoriesPage() {
       </Dialog>
 
       <Dialog
-        open={moving !== null}
-        onClose={() => setMoving(null)}
+        open={confirmingDelete !== null}
+        onClose={() => setConfirmingDelete(null)}
         className="relative z-50"
       >
         <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-            {moving && (
-              <form onSubmit={onConfirmMove} className="flex flex-col gap-4">
-                <DialogTitle className="text-base font-semibold">
-                  {t("categories.move.heading", { name: moving.name })}
-                </DialogTitle>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  {t("categories.move.parentLabel")}
-                  <select
-                    value={moveParentId}
-                    onChange={(e) => setMoveParentId(e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">{t("categories.move.root")}</option>
-                    {moveOptions.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {moveError && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {moveError}
-                  </p>
-                )}
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setMoving(null)}
-                    className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-                  >
-                    {t("categories.edit.cancel")}
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={movingSubmitting}
-                    className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                  >
-                    {movingSubmitting
-                      ? t("categories.move.moving")
-                      : t("categories.move.confirm")}
-                  </button>
-                </div>
-              </form>
-            )}
-          </DialogPanel>
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={confirming !== null}
-        onClose={() => setConfirming(null)}
-        className="relative z-50"
-      >
-        <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-            {confirming && (
+            {confirmingDelete && (
               <>
                 <DialogTitle className="text-base font-semibold">
-                  {t(`categories.confirm.${confirming.kind}Title`, {
-                    name: confirming.target.name,
+                  {t("categories.confirm.deleteTitle", {
+                    name: confirmingDelete.name,
                   })}
                 </DialogTitle>
                 <Description className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {t(`categories.confirm.${confirming.kind}Body`)}
+                  {t("categories.confirm.deleteBody")}
                 </Description>
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setConfirming(null)}
+                    onClick={() => setConfirmingDelete(null)}
                     className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
                   >
                     {t("categories.confirm.cancel")}
                   </button>
                   <button
                     type="button"
-                    onClick={performConfirmed}
+                    onClick={performDelete}
                     className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
                   >
                     {t("categories.confirm.confirmAction")}

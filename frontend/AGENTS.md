@@ -208,37 +208,39 @@ lists the caller's own tree (`GET /api/categories`, per-user now, see
 `sort_order`) — a separate helper from that file's older
 `flattenCategoryTree`, which the entry form's category `<select>` still
 uses. Editing is entirely button-driven, deliberately no drag-and-drop, so
-it works the same on a phone as on a desktop:
+it works the same on a phone as on a desktop. The inline node row carries
+only ▲/▼ reorder and **Edit**; every other per-category action lives in the
+edit dialog:
 
-- Create (name + parent picker, defaulting to root) and rename go through
-  `POST`/`PATCH /api/categories`, the same inline-form-plus-table shape as
-  the Tags settings tab.
+- Create (name + parent picker, defaulting to root) goes through
+  `POST /api/categories`, the same inline-form shape as the Tags settings
+  tab.
 - ▲/▼ buttons call `POST /api/categories/{id}/move-up` / `/move-down`,
   disabled at either end of a sibling group; the page re-fetches the whole
   tree after a move rather than patching sort orders locally, kept simple.
-- A "Move to…" dialog (not a menu item next to the row — the reparent target
-  needs its own picker) lists the tree via `flattenCategoryTree`, filtered
-  to exclude the category's own subtree client-side (`subtreeIds` in
-  `categories.tsx`) as a UX nicety; the backend's cycle check
-  (`ErrCycle`, `422`) is still the real guard, surfaced as an inline dialog
-  error.
-- Disable/enable call `POST /api/categories/{id}/disable` / `/enable`
-  directly (no confirmation dialog needed — cheaply reversible, unlike
-  delete).
+- The **edit dialog** holds name, the `IconColorPicker`, and a parent
+  picker (options from `flattenCategoryTree`, filtered to exclude the
+  category's own subtree via `subtreeIds` in `categories.tsx`). **Save**
+  sends one `PATCH /api/categories/{id}` with `name`, `icon`, `color`, and
+  `parent_id` together and then re-fetches the tree (a reparent shifts
+  sibling order under the new parent); the backend cycle check
+  (`ErrCycle`, `422`) is the real guard, surfaced as the same inline error
+  as any other save failure.
+- The edit dialog also has a Disable/Enable button — calls
+  `POST /api/categories/{id}/disable` / `/enable` **immediately, no
+  confirmation** (cheaply reversible), updating both the list and the open
+  dialog in place — and a Delete button, greyed with a hint whenever the
+  category has a child in the already-fetched tree. Delete is confirmed via
+  a nested `@headlessui/react` `Dialog`; on success the edit dialog closes
+  and the node leaves the tree, and a `409` (`DELETE /api/categories/{id}`
+  still in use by an entry — not knowable client-side) surfaces as an
+  inline error in the edit dialog instead of removing the row.
 - Each node shows its `entry_count` (from the `Category` response — direct
   entry references only, not rolled up from descendants; see
   `backend/AGENTS.md`'s "Categories" section, mirroring the Tags tab's
   per-tag count) as a non-interactive neutral chip beside the
   active/disabled status pill, labelled via the pluralised
   `categories.entryCount` i18n key.
-- Delete is disabled client-side (greyed, with a hint) whenever the node
-  has any child in the already-fetched tree; whether it's referenced by an
-  entry isn't known client-side, so — a reactive-delete-error decision —
-  the button stays enabled for a childless node and a `409` from
-  `DELETE /api/categories/{id}` (still in use by an entry) surfaces as an
-  inline error instead of removing the row, behind the same
-  `@headlessui/react` `Dialog` confirmation pattern as everywhere else in
-  this app.
 - The entry form's category picker (`entries.new.tsx` /
   `entries.$entryId.edit.tsx`) excludes disabled categories from new
   selections; on the edit page, a category disabled since the entry was

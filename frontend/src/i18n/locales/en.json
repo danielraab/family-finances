@@ -365,7 +365,6 @@
     "actions": {
       "moveUp": "Move up",
       "moveDown": "Move down",
-      "moveTo": "Move to…",
       "edit": "Edit",
       "disable": "Disable",
       "enable": "Enable",
@@ -375,24 +374,14 @@
     "edit": {
       "heading": "Edit category",
       "nameLabel": "Name",
+      "parentLabel": "Parent",
+      "parentRoot": "No parent (root category)",
       "save": "Save",
       "saving": "Saving…",
       "cancel": "Cancel",
       "error": "Couldn't save — please try again."
     },
-    "move": {
-      "heading": "Move \"{{name}}\"",
-      "parentLabel": "New parent",
-      "root": "Make root category",
-      "confirm": "Move",
-      "moving": "Moving…",
-      "error": "Couldn't move this category there."
-    },
     "confirm": {
-      "disableTitle": "Disable \"{{name}}\"?",
-      "disableBody": "It can no longer be selected on a new or edited entry. Entries already using it are unaffected, and this can be reversed at any time.",
-      "enableTitle": "Enable \"{{name}}\"?",
-      "enableBody": "It can be selected on entries again.",
       "deleteTitle": "Delete \"{{name}}\"?",
       "deleteBody": "This is only possible while it has no subcategories and no entry uses it. This cannot be undone here.",
       "cancel": "Cancel",
