@@ -13,7 +13,9 @@ function formatDate(iso: string, lang: string): string {
  * The invitation-row list shared by the admin Users tab and the My
  * Invitations tab: status (revoked takes precedence over accepted takes
  * precedence over pending/expires), an optional inviter line, and a Revoke
- * action for any not-yet-revoked row. Callers own fetching, the confirmation
+ * action for any still-pending row (not yet revoked and not yet accepted —
+ * an accepted invitation has nothing left to revoke). Callers own fetching,
+ * the confirmation
  * step, and the empty-state text (rendered by the caller when `invites` is
  * empty, so each tab can word it for its own context).
  */
@@ -71,7 +73,7 @@ export function InviteList({
             </span>
           </span>
           <div className="flex shrink-0 gap-2">
-            {!invite.revoked_at && (
+            {!invite.revoked_at && !invite.accepted_at && (
               <button
                 type="button"
                 onClick={() => onRevoke(invite)}
