@@ -275,12 +275,15 @@
     "title": "Buchungen",
     "create": "Neue Buchung",
     "notFound": "Diese Buchung existiert nicht oder gehört dir nicht.",
+    "notShared": "nicht geteilt",
     "loading": "Wird geladen…",
     "emptyAll": "Noch keine Buchungen.",
     "emptyFiltered": "Keine Buchungen entsprechen diesen Filtern.",
     "columns": {
       "date": "Datum",
       "title": "Titel",
+      "category": "Kategorie",
+      "tags": "Tags",
       "account": "Konto",
       "amount": "Betrag"
     },

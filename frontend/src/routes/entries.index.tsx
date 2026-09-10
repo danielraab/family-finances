@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
+import { CategoryLabel } from "../components/CategoryLabel";
 import {
   amountColorClass,
   formatAmount,
@@ -177,6 +178,8 @@ function EntriesListPage() {
   }
 
   const categoryOptions = flattenCategoryTree(categories);
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const tagById = new Map(tags.map((tg) => [tg.id, tg]));
   const accountCurrency = (accountId: string) =>
     accounts.find((a) => a.id === accountId)?.currency ?? "";
 
@@ -326,10 +329,16 @@ function EntriesListPage() {
                 </button>
               </th>
               <th className="px-3 py-2 font-medium">
+                {t("entries.columns.account")}
+              </th>
+              <th className="px-3 py-2 font-medium">
                 {t("entries.columns.title")}
               </th>
               <th className="px-3 py-2 font-medium">
-                {t("entries.columns.account")}
+                {t("entries.columns.category")}
+              </th>
+              <th className="px-3 py-2 font-medium">
+                {t("entries.columns.tags")}
               </th>
               <th className="px-3 py-2 text-right font-medium">
                 <button
@@ -352,9 +361,40 @@ function EntriesListPage() {
                 className="border-b border-black/5 last:border-0 dark:border-white/5"
               >
                 <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
-                  {new Date(entry.booking_timestamp).toLocaleString(
-                    i18n.resolvedLanguage,
-                  )}
+                  {(() => {
+                    const bookedAt = new Date(entry.booking_timestamp);
+                    const lang = i18n.resolvedLanguage ?? "en";
+                    return (
+                      <div className="flex flex-col leading-tight">
+                        <span className="whitespace-nowrap">
+                          {bookedAt.toLocaleDateString(lang, {
+                            weekday: "short",
+                            year: "numeric",
+                            month: "numeric",
+                            day: "numeric",
+                          })}
+                        </span>
+                        <span className="whitespace-nowrap text-xs">
+                          {bookedAt.toLocaleTimeString(lang, {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </td>
+                <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
+                  {(() => {
+                    const account = accounts.find(
+                      (a) => a.id === entry.account_id,
+                    );
+                    return account ? (
+                      <AccountLabel account={account} iconSize={16} />
+                    ) : (
+                      <span className="italic">{t("entries.notShared")}</span>
+                    );
+                  })()}
                 </td>
                 <td className="px-3 py-2">
                   <Link
@@ -374,13 +414,49 @@ function EntriesListPage() {
                 </td>
                 <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
                   {(() => {
-                    const account = accounts.find(
-                      (a) => a.id === entry.account_id,
-                    );
-                    return account ? (
-                      <AccountLabel account={account} iconSize={16} />
+                    if (!entry.category_id) {
+                      return <span aria-hidden>—</span>;
+                    }
+                    const category = categoryById.get(entry.category_id);
+                    return category ? (
+                      <CategoryLabel category={category} iconSize={16} />
                     ) : (
-                      entry.account_id
+                      <span className="italic">{t("entries.notShared")}</span>
+                    );
+                  })()}
+                </td>
+                <td className="px-3 py-2">
+                  {(() => {
+                    if (entry.tag_ids.length === 0) {
+                      return (
+                        <span
+                          aria-hidden
+                          className="text-zinc-500 dark:text-zinc-400"
+                        >
+                          —
+                        </span>
+                      );
+                    }
+                    const known = entry.tag_ids
+                      .map((tagId) => tagById.get(tagId))
+                      .filter((tag) => tag !== undefined);
+                    const hasUnknown = known.length < entry.tag_ids.length;
+                    return (
+                      <div className="flex flex-wrap gap-1">
+                        {known.map((tag) => (
+                          <span
+                            key={tag.id}
+                            className="rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium dark:bg-white/10"
+                          >
+                            {tag.name}
+                          </span>
+                        ))}
+                        {hasUnknown && (
+                          <span className="rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium italic text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
+                            {t("entries.notShared")}
+                          </span>
+                        )}
+                      </div>
                     );
                   })()}
                 </td>

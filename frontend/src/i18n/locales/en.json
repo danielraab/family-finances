@@ -275,12 +275,15 @@
     "title": "Entries",
     "create": "New entry",
     "notFound": "This entry doesn't exist, or isn't yours.",
+    "notShared": "not shared",
     "loading": "Loading…",
     "emptyAll": "No entries yet.",
     "emptyFiltered": "No entries match these filters.",
     "columns": {
       "date": "Date",
       "title": "Title",
+      "category": "Category",
+      "tags": "Tags",
       "account": "Account",
       "amount": "Amount"
     },
