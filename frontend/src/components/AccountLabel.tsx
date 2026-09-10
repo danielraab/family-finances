@@ -38,6 +38,11 @@ function SharedGlyph() {
  * account is shared (i.e. the viewer isn't its real owner) — never shown to
  * the real owner themselves, even when they've shared it with others. Used
  * everywhere an account is shown by name outside a native `<select>`.
+ *
+ * The shared badge sits inline next to the name when there's room, but wraps
+ * onto its own full-width line in tight containers (narrow cards, table
+ * cells) so the name and the owner name stay readable instead of both
+ * truncating to compete for one line.
  */
 export function AccountLabel({
   account,
@@ -47,19 +52,27 @@ export function AccountLabel({
   const { t } = useTranslation();
   return (
     <span
-      className={`inline-flex min-w-0 items-center gap-1.5 ${className ?? ""}`}
+      className={`inline-flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 ${
+        className ?? ""
+      }`}
     >
-      <EntityIcon icon={account.icon} color={account.color} size={iconSize} />
-      <span className="truncate">{account.title}</span>
+      <span className="inline-flex min-w-32 grow items-center gap-1.5">
+        <EntityIcon icon={account.icon} color={account.color} size={iconSize} />
+        <span className="min-w-0 truncate">{account.title}</span>
+      </span>
       {account.shared && (
         <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-black/[.06] px-1.5 py-0.5 text-xs font-normal text-zinc-500 dark:bg-white/[.08] dark:text-zinc-400"
+          className="inline-flex max-w-full min-w-0 shrink-0 items-center gap-1 rounded-full bg-black/[.06] px-1.5 py-0.5 text-xs font-normal text-zinc-500 dark:bg-white/[.08] dark:text-zinc-400"
           title={t("accounts.shared.badgeTitle", {
             owner: account.owner_name ?? "",
           })}
         >
-          <SharedGlyph />
-          {account.owner_name && <span>{account.owner_name}</span>}
+          <span className="shrink-0">
+            <SharedGlyph />
+          </span>
+          {account.owner_name && (
+            <span className="truncate">{account.owner_name}</span>
+          )}
         </span>
       )}
     </span>

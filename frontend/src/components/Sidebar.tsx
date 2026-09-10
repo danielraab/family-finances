@@ -181,7 +181,7 @@ export function Sidebar({
 
       <aside
         data-collapsed={effectiveCollapsed}
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-black/10 bg-white transition-transform duration-200 ease-out dark:border-white/10 dark:bg-black md:static md:inset-auto md:z-auto md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-black/10 bg-white transition-transform duration-200 ease-out dark:border-white/10 dark:bg-black md:sticky md:top-0 md:z-auto md:h-screen md:translate-x-0 md:self-start ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } ${effectiveCollapsed ? "md:w-16" : "md:w-60"} ${
           mounted ? "md:transition-[width,transform]" : ""
@@ -200,7 +200,7 @@ export function Sidebar({
           )}
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 px-2 py-2">
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
           {NAV.map((item) => {
             const active =
               pathname === item.to || pathname.startsWith(`${item.to}/`);

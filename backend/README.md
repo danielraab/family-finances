@@ -6,7 +6,8 @@ Go HTTP API for family-finances.
 
 ```bash
 docker compose --profile dev up -d   # from the repo root — PostgreSQL on localhost:5432
-export DATABASE_URL=postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
+#export DATABASE_URL=postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
+set -a && source .env && set +a
 go run .      # start the server (default port 8080, override with PORT)
 go test ./... # run tests (Postgres integration tests skip without DATABASE_URL)
 go build .    # production build
