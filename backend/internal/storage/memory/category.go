@@ -14,7 +14,9 @@ import (
 // default for domain and handler tests and for local runs without a
 // database. Safe for concurrent use. It has no visibility into entries, so
 // unlike the real backend it cannot reject deleting a category that is
-// still referenced by one — see category.ErrInUse's doc comment.
+// still referenced by one — see category.ErrInUse's doc comment — and it
+// always reports Category.EntryCount as 0, mirroring memory.TagStore's
+// equivalent gap.
 type CategoryStore struct {
 	mu   sync.Mutex
 	cats map[string]category.Category

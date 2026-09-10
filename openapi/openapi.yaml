@@ -2125,7 +2125,7 @@ components:
 
     Category:
       type: object
-      required: [id, name, sort_order, disabled, created_at]
+      required: [id, name, sort_order, disabled, created_at, entry_count]
       properties:
         id:
           type: string
@@ -2161,6 +2161,12 @@ components:
         created_at:
           type: string
           format: date-time
+        entry_count:
+          type: integer
+          description: >-
+            The number of the caller's own non-deleted entries directly
+            categorized under this category. Direct references only —
+            entries under a descendant category are not counted.
 
     CategoryWrite:
       type: object

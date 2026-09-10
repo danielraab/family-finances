@@ -225,6 +225,12 @@ it works the same on a phone as on a desktop:
 - Disable/enable call `POST /api/categories/{id}/disable` / `/enable`
   directly (no confirmation dialog needed — cheaply reversible, unlike
   delete).
+- Each node shows its `entry_count` (from the `Category` response — direct
+  entry references only, not rolled up from descendants; see
+  `backend/AGENTS.md`'s "Categories" section, mirroring the Tags tab's
+  per-tag count) as a non-interactive neutral chip beside the
+  active/disabled status pill, labelled via the pluralised
+  `categories.entryCount` i18n key.
 - Delete is disabled client-side (greyed, with a hint) whenever the node
   has any child in the already-fetched tree; whether it's referenced by an
   entry isn't known client-side, so — a reactive-delete-error decision —

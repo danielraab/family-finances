@@ -53,16 +53,22 @@ var DefaultNames = func() []string {
 // Category is one node in a category tree private to its owner. ParentID
 // is nil for a root category.
 type Category struct {
-	ID        string     `json:"id"`
-	ParentID  *string    `json:"parent_id,omitempty"`
-	Name      string     `json:"name"`
-	Icon      string     `json:"icon,omitempty"`
-	Color     string     `json:"color,omitempty"`
-	SortOrder int        `json:"sort_order"`
-	Disabled  bool       `json:"disabled"`
-	CreatedAt time.Time  `json:"created_at"`
-	OwnerID   string     `json:"-"`
-	DeletedAt *time.Time `json:"-"`
+	ID        string    `json:"id"`
+	ParentID  *string   `json:"parent_id,omitempty"`
+	Name      string    `json:"name"`
+	Icon      string    `json:"icon,omitempty"`
+	Color     string    `json:"color,omitempty"`
+	SortOrder int       `json:"sort_order"`
+	Disabled  bool      `json:"disabled"`
+	CreatedAt time.Time `json:"created_at"`
+	// EntryCount is the number of the owner's non-deleted entries directly
+	// categorized under this category — direct references only, not rolled
+	// up from descendant categories. Computed by the store, never persisted
+	// directly; storage/memory has no visibility into entries and always
+	// reports 0 (see its doc comment), mirroring tag.Tag.EntryCount.
+	EntryCount int        `json:"entry_count"`
+	OwnerID    string     `json:"-"`
+	DeletedAt  *time.Time `json:"-"`
 }
 
 // OptionalID distinguishes a JSON key that is absent (Set is false) from

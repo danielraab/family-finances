@@ -348,6 +348,8 @@
     "empty": "No categories yet. Create one to get started.",
     "loadError": "Couldn't load your categories — please try again.",
     "deleteError": "Couldn't delete \"{{name}}\" — it still has subcategories or entries referencing it.",
+    "entryCount_one": "{{count}} entry",
+    "entryCount_other": "{{count}} entries",
     "create": {
       "nameLabel": "Name",
       "parentLabel": "Parent",

@@ -277,6 +277,9 @@ function CategoriesPage() {
                 ? t("categories.status.disabled")
                 : t("categories.status.active")}
             </span>
+            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
+              {t("categories.entryCount", { count: node.entry_count })}
+            </span>
           </div>
           <div className="flex flex-wrap items-center gap-1">
             <button

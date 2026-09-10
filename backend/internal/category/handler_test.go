@@ -56,6 +56,28 @@ func TestHandlerAnyAuthenticatedUserCreatesAndListsOwnCategories(t *testing.T) {
 	}
 }
 
+func TestHandlerCreateReportsZeroEntryCount(t *testing.T) {
+	h, _ := newHandler()
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/categories", strings.NewReader(`{"name":"Groceries"}`)), user))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), `"entry_count":0`) {
+		t.Fatalf("body = %s, want entry_count 0", rec.Body)
+	}
+	conforms(t, "POST", "/api/categories", rec)
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/categories", nil), user))
+	if !strings.Contains(rec.Body.String(), `"entry_count":0`) {
+		t.Fatalf("list body = %s, want entry_count 0", rec.Body)
+	}
+	conforms(t, "GET", "/api/categories", rec)
+}
+
 func TestHandlerCrossOwnerAccessNotFound(t *testing.T) {
 	h, svc := newHandler()
 	c, err := svc.Create(t.Context(), "u1", category.New{Name: "Groceries"})

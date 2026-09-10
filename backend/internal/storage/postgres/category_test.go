@@ -5,7 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"at.draab/familyfinances/internal/account"
 	"at.draab/familyfinances/internal/category"
+	"at.draab/familyfinances/internal/entry"
 )
 
 func newCategoryStore(t *testing.T) (*CategoryStore, *AuthStore) {
@@ -262,4 +264,110 @@ func TestPGCategorySeedDefaults(t *testing.T) {
 			t.Fatalf("category %d name = %q, want %q (in order)", i, c.Name, category.DefaultNames[i])
 		}
 	}
+}
+
+// TestPGCategoryEntryCount verifies entry_count counts only the caller's
+// own non-deleted entries that directly reference the category — a
+// descendant category's entries never roll up to an ancestor.
+func TestPGCategoryEntryCount(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	authStore := NewAuthStore(pool)
+	accStore := NewAccountStore(pool)
+	catStore := NewCategoryStore(pool)
+	entryStore := NewEntryStore(pool)
+
+	owner := mustUser(t, authStore, "cat-entrycount@example.com")
+	other := mustUser(t, authStore, "cat-entrycount-other@example.com")
+
+	opening, _ := account.ParseDate("2024-01-01")
+	acc, err := accStore.Create(ctx, owner.ID, account.New{
+		Title: "Main", Type: "Checking", Currency: "EUR", OpeningDate: opening,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	parent, err := catStore.Create(ctx, owner.ID, category.New{Name: "Parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := catStore.Create(ctx, owner.ID, category.New{ParentID: &parent.ID, Name: "Child"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if parent.EntryCount != 0 {
+		t.Fatalf("fresh parent EntryCount = %d, want 0", parent.EntryCount)
+	}
+
+	bookedAt := at("2024-01-01T00:00:00Z")
+	mkEntry := func(title string, catID string) entry.Entry {
+		e, err := entryStore.Create(ctx, owner.ID, entry.New{
+			AccountID: acc.ID, Kind: entry.KindTransaction, Amount: ptrInt64(100),
+			BookingTimestamp: bookedAt, Title: title, CategoryID: &catID,
+		})
+		if err != nil {
+			t.Fatalf("create entry %q: %v", title, err)
+		}
+		return e
+	}
+
+	p1 := mkEntry("p1", parent.ID)
+	mkEntry("p2", parent.ID)
+	mkEntry("c1", child.ID)
+	mkEntry("c2", child.ID)
+	mkEntry("c3", child.ID)
+
+	assertCount := func(id string, want int) {
+		t.Helper()
+		got, err := catStore.Get(ctx, owner.ID, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.EntryCount != want {
+			t.Fatalf("category %s EntryCount = %d, want %d", got.Name, got.EntryCount, want)
+		}
+	}
+
+	assertCount(parent.ID, 2)
+	assertCount(child.ID, 3)
+
+	if err := entryStore.SoftDelete(ctx, p1.ID); err != nil {
+		t.Fatal(err)
+	}
+	assertCount(parent.ID, 1)
+	assertCount(child.ID, 3)
+
+	// List reports the same counts as Get.
+	list, err := catStore.List(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]int{}
+	for _, c := range list {
+		byID[c.ID] = c.EntryCount
+	}
+	if byID[parent.ID] != 1 || byID[child.ID] != 3 {
+		t.Fatalf("List counts = parent %d, child %d; want 1, 3", byID[parent.ID], byID[child.ID])
+	}
+
+	// Another user's identically-named category is independent and empty.
+	otherCat, err := catStore.Create(ctx, other.ID, category.New{Name: "Parent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCountOther := func() {
+		got, err := catStore.Get(ctx, other.ID, otherCat.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.EntryCount != 0 {
+			t.Fatalf("other user's category EntryCount = %d, want 0", got.EntryCount)
+		}
+	}
+	assertCountOther()
 }

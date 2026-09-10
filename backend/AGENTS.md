@@ -345,6 +345,15 @@ limit; a self/descendant reparent is rejected (`ErrCycle`, `422`).
   distinguishes absent (untouched) from `""` (clear) from a value (set);
   the Postgres stores use `CASE WHEN $n::text IS NULL THEN col ELSE
   NULLIF($n, '') END`. Account **types** and tags do **not** carry them.
+- **`entry_count`**: every `Category` response carries the number of the
+  owner's own non-deleted entries whose `category_id` is that category —
+  **direct references only**, never rolled up from descendant categories.
+  Computed by `internal/storage/postgres/category.go` as a correlated
+  subquery against `entries` (`… AND e.deleted_at IS NULL`) folded into
+  `categoryCols`, exactly as `tag.go` does for its own `entry_count` (see
+  the Tags section). `internal/storage/memory`'s `CategoryStore` has no
+  entry visibility, so `EntryCount` there always reads `0` — the same
+  accepted gap it already has for the delete in-use check.
 
 `internal/entry`'s `CategoryLookup` interface (`*category.Service` satisfies
 it structurally) is `Usable(ctx, ownerID, categoryID) (bool, error)` —

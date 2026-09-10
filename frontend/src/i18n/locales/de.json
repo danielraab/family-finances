@@ -348,6 +348,8 @@
     "empty": "Noch keine Kategorien. Erstelle eine, um loszulegen.",
     "loadError": "Kategorien konnten nicht geladen werden — bitte versuche es erneut.",
     "deleteError": "„{{name}}“ konnte nicht gelöscht werden — es gibt noch Unterkategorien oder Buchungen, die darauf verweisen.",
+    "entryCount_one": "{{count}} Buchung",
+    "entryCount_other": "{{count}} Buchungen",
     "create": {
       "nameLabel": "Name",
       "parentLabel": "Übergeordnete Kategorie",

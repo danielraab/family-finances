@@ -17,11 +17,14 @@ type CategoryStore struct {
 // NewCategoryStore returns a CategoryStore over pool.
 func NewCategoryStore(pool *pgxpool.Pool) *CategoryStore { return &CategoryStore{pool: pool} }
 
-const categoryCols = `id::text, parent_id::text, name, COALESCE(icon, ''), COALESCE(color, ''), sort_order, disabled, created_at`
+const categoryCols = `id::text, parent_id::text, name, COALESCE(icon, ''), COALESCE(color, ''), sort_order, disabled, created_at, (
+	SELECT count(*) FROM entries e
+	WHERE e.category_id = categories.id AND e.deleted_at IS NULL
+)`
 
 func scanCategory(row pgx.Row) (category.Category, error) {
 	var c category.Category
-	err := row.Scan(&c.ID, &c.ParentID, &c.Name, &c.Icon, &c.Color, &c.SortOrder, &c.Disabled, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.ParentID, &c.Name, &c.Icon, &c.Color, &c.SortOrder, &c.Disabled, &c.CreatedAt, &c.EntryCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return category.Category{}, category.ErrNotFound
 	}

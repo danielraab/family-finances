@@ -903,6 +903,8 @@ export interface components {
             created_at: string;
             /** @description Blocks the category from being newly selected on an entry; existing entries and child categories referencing it are unaffected. */
             disabled: boolean;
+            /** @description The number of the caller's own non-deleted entries directly categorized under this category. Direct references only — entries under a descendant category are not counted. */
+            entry_count: number;
             /** @description Optional opaque presentation token naming a client icon. Stored and echoed verbatim; never interpreted by the backend. Absent when unset. */
             icon?: string;
             id: string;

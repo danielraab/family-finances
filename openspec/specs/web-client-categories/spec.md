@@ -40,9 +40,11 @@ SHALL be redirected to `/login`.
 `/categories` SHALL fetch the caller's categories (`GET /api/categories`)
 and render them as a nested tree, each node's children ordered by
 `sort_order`. The page SHALL indicate a category's `disabled` status
-distinctly from an enabled one, and SHALL render at any viewport width down
-to a typical mobile screen without requiring horizontal scrolling or drag
-gestures for any control.
+distinctly from an enabled one, SHALL show each node's `entry_count` (the
+number of the caller's own entries directly categorized under it) as a
+distinct, non-interactive indicator on that node, and SHALL render at any
+viewport width down to a typical mobile screen without requiring horizontal
+scrolling or drag gestures for any control.
 
 #### Scenario: The tree reflects parent/child structure
 
@@ -55,6 +57,17 @@ gestures for any control.
 - **WHEN** a category in the tree has `disabled: true`
 - **THEN** it is shown with a visibly different status than an enabled
   category
+
+#### Scenario: Each node shows how many entries use it
+
+- **WHEN** a category is directly referenced by three of the caller's
+  entries
+- **THEN** that category's node shows `3`
+
+#### Scenario: A category with no entries still shows its count
+
+- **WHEN** a category has an `entry_count` of `0`
+- **THEN** its node shows `0` rather than omitting the indicator
 
 ### Requirement: Categories can only be created and edited from this page
 
