@@ -33,10 +33,12 @@ anonymous visitors also see.
 ### Requirement: Home dashboard shows a card per account with its balance
 
 `/home` SHALL, for an authenticated visitor, fetch and display a card for
-every account they own, each card showing at least its title, its
-`financial_institute` (when set), and its live balance (`GET
-/api/accounts/{id}/balance`, formatted at the visitor's
-`displayed_decimal_places`). Activating a card SHALL navigate to that
+every account they own or have any permission on, each card showing at
+least its title, its `financial_institute` (when set), and its live
+balance (`GET /api/accounts/{id}/balance`, formatted at the visitor's
+`displayed_decimal_places`). A card for an account the visitor does not
+really own SHALL additionally show a shared indicator and the real owner's
+name, per `web-client-accounts`. Activating a card SHALL navigate to that
 account's details page (`/accounts/{id}`).
 
 #### Scenario: Accounts render as cards with their balances
@@ -44,6 +46,13 @@ account's details page (`/accounts/{id}`).
 - **WHEN** an authenticated visitor with two accounts opens `/home`
 - **THEN** both accounts render as cards, each showing its title,
   financial institute, and current live balance
+
+#### Scenario: A shared account's card shows its real owner
+
+- **WHEN** an authenticated visitor has permission on an account they do
+  not really own
+- **THEN** its card on `/home` shows a shared indicator and the real
+  owner's name
 
 #### Scenario: Activating a card opens the account's details
 
@@ -75,16 +84,25 @@ the default/neutral text color when exactly zero, and green when positive.
 
 ### Requirement: Each card offers a button to add a new entry for that account
 
-Each account card on `/home` SHALL include a button that navigates to
+Each account card on `/home` for which the visitor holds at least `append`
+permission SHALL include a button that navigates to
 `/entries/new?account_id={id}`, preselecting that account for a new entry,
-mirroring the equivalent per-row action already on `/accounts`.
+mirroring the equivalent per-row action already on `/accounts`. A card for
+an account where the visitor holds only `view` permission SHALL NOT show
+this button.
 
 #### Scenario: Adding an entry from a card
 
-- **WHEN** an authenticated visitor activates the add-entry button on one
-  of their account cards
+- **WHEN** an authenticated visitor with `append`+ permission activates the
+  add-entry button on one of their account cards
 - **THEN** the client navigates to `/entries/new?account_id={id}` for that
   account, with the account preselected
+
+#### Scenario: A view-only card offers no add-entry button
+
+- **WHEN** an authenticated visitor with only `view` permission on a shared
+  account views its card on `/home`
+- **THEN** no add-entry button is shown on that card
 
 ### Requirement: Home dashboard empty state
 
@@ -101,8 +119,8 @@ empty card grid.
 ### Requirement: Home dashboard shows an all-accounts income/outcome bar chart with a year switcher
 
 `/home` SHALL, below the account-cards grid, display an income/outcome bar
-chart covering **every** account the visitor owns (disabled accounts
-included, matching the cards grid), fetched from
+chart covering **every** account the visitor owns or has any permission on
+(disabled accounts included, matching the cards grid), fetched from
 `GET /api/entries/flow-summary?unit=month&year={year}` with no
 `account_id` parameter. The chart SHALL show two bars — income and
 outcome — per calendar month of a selected year.
@@ -110,8 +128,8 @@ outcome — per calendar month of a selected year.
 The response groups its income and outcome totals per currency. `/home`
 SHALL render one bar chart per currency present in the response, stacked
 vertically, each headed by that currency's code, with currency codes
-ordered alphabetically. A visitor whose accounts all share one currency
-therefore sees exactly one chart.
+ordered alphabetically. A visitor whose accounts (owned and shared) all
+share one currency therefore sees exactly one chart.
 
 The section SHALL offer previous-year and next-year controls that refetch
 and redraw every per-currency chart for the newly selected year,
@@ -124,11 +142,17 @@ This chart is the shared `FlowChart` component also used on
 
 #### Scenario: Chart shows twelve months of the current year by default
 
-- **WHEN** an authenticated visitor with at least one account opens
-  `/home`
+- **WHEN** an authenticated visitor with at least one owned or shared
+  account opens `/home`
 - **THEN** below the account cards, a bar chart shows one income bar and
   one outcome bar for each month of the current year, aggregated across
   all their accounts
+
+#### Scenario: A shared account's entries contribute to the chart
+
+- **WHEN** an authenticated visitor has permission on a shared account with
+  entries in the selected year
+- **THEN** those entries' amounts are included in the year-overview chart
 
 #### Scenario: One chart per currency
 
@@ -158,6 +182,7 @@ This chart is the shared `FlowChart` component also used on
 
 #### Scenario: No chart in the empty state
 
-- **WHEN** an authenticated visitor with no accounts opens `/home`
+- **WHEN** an authenticated visitor with no owned or shared accounts opens
+  `/home`
 - **THEN** the empty-state text renders and no year-overview chart or year
   controls are shown

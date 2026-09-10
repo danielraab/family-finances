@@ -1,4 +1,16 @@
-## ADDED Requirements
+# account-sharing Specification
+
+## Purpose
+
+Sharing an account with other registered users: the four permission tiers
+(`view`, `append`, `entry_admin`, `owner`) and what each grants, the
+`account_shares` model, the share-management endpoints
+(`/api/accounts/{id}/shares`), the email-invite flow (including the
+unregistered-email/app-invite nudge), and revocation/self-leave semantics.
+See `accounts` for the account a share applies to and its real owner, and
+`account-entries` for how permission tiers gate entry reads/writes.
+
+## Requirements
 
 ### Requirement: Four permission tiers, each a strict superset of the one before it
 

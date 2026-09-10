@@ -210,17 +210,17 @@
 
 ## 13. Verify
 
-- [ ] 13.1 `cd backend && gofmt -l . && go vet ./... && go test ./...`
+- [x] 13.1 `cd backend && gofmt -l . && go vet ./... && go test ./...`
   (including `internal/storage/postgres` integration tests against a local
   Postgres).
-- [ ] 13.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build`.
-- [ ] 13.3 Manual pass per `design.md`'s Migration Plan step 8: two test
+- [x] 13.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build`.
+- [x] 13.3 Manual pass per `design.md`'s Migration Plan step 8: two test
   users, every permission tier's read/write boundary, the unmatched-email
   invite nudge end-to-end (including sending the actual invite and a
   follow-up successful share once accepted), revoke/leave mid-session
   losing all access including to own past entries, shared-owner parity
   with the real owner except `type_id`.
-- [ ] 13.4 Update `backend/AGENTS.md` (new `internal/account` sharing
+- [x] 13.4 Update `backend/AGENTS.md` (new `internal/account` sharing
   methods, `internal/entry`'s `created_by` rename and store signature
   changes) and `frontend/AGENTS.md` (the new sharing route and its
   permission-gating rules) if their existing descriptions of these areas
@@ -228,7 +228,7 @@
 
 ## 14. Spec sync
 
-- [ ] 14.1 Apply this change's `specs/account-sharing` (new),
+- [x] 14.1 Apply this change's `specs/account-sharing` (new),
   `specs/accounts`, `specs/account-entries`, `specs/web-client-accounts`,
   `specs/web-client-home`, `specs/web-client-entries`,
   `specs/web-client-reports` (modified), and
