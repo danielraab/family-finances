@@ -234,7 +234,9 @@
       "closingDateInvalid": "Closing date can't be before the opening date.",
       "create": "Create account",
       "save": "Save changes",
-      "saveError": "Couldn't save — please check the form and try again."
+      "saveError": "Couldn't save — please check the form and try again.",
+      "typeLockedValue": "Managed by the account owner",
+      "typeLockedHint": "Only the account's real owner can change its type."
     },
     "new": {
       "title": "New account"
@@ -268,6 +270,41 @@
         "deleteBody": "This removes it from your accounts list. This cannot be undone here.",
         "cancel": "Cancel",
         "confirmAction": "Confirm"
+      }
+    },
+    "share": "Share",
+    "shared": {
+      "badgeTitle": "Shared by {{owner}}"
+    },
+    "sharing": {
+      "title": "Share “{{account}}”",
+      "subtitle": "Everyone listed here can see the account's entries and balance; what else they can do depends on their permission.",
+      "realOwner": "Owner",
+      "unknownUser": "Unknown user",
+      "grantedBy": "Added by {{name}} on {{date}}",
+      "leave": "Leave",
+      "revoke": "Revoke",
+      "noShares": "Not shared with anyone yet.",
+      "inviteTitle": "Share with someone",
+      "email": "Email",
+      "permissionLabel": "Permission",
+      "inviteSubmit": "Share",
+      "inviteError": "Couldn't share this account — please check the form and try again.",
+      "unmatched": "No account is registered for {{email}}.",
+      "appInviteSent": "Invitation sent.",
+      "sendAppInvite": "Send them an invitation",
+      "inviteUnavailable": "Invitations are currently unavailable on this instance.",
+      "permission": {
+        "view": "View only",
+        "append": "Append",
+        "entry_admin": "Entry admin",
+        "owner": "Owner"
+      },
+      "confirm": {
+        "revokeTitle": "Revoke this share?",
+        "revokeBody": "{{name}} will immediately lose all access to this account, including to entries they created.",
+        "leaveTitle": "Leave this shared account?",
+        "leaveBody": "You'll immediately lose all access to this account, including to entries you created."
       }
     }
   },
@@ -342,7 +379,8 @@
       "confirmAccountChangeTitle": "Move this entry?",
       "confirmAccountChangeBody": "This entry will move to \"{{account}}\".",
       "confirmAccountChangeConfirm": "Move entry"
-    }
+    },
+    "createdBy": "Logged by {{name}}"
   },
   "categories": {
     "title": "Categories",

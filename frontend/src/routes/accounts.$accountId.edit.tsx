@@ -23,6 +23,7 @@ function EditAccount() {
 
   const [values, setValues] = useState<AccountFormValues | null>(null);
   const [disabled, setDisabled] = useState(false);
+  const [typeLocked, setTypeLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<ConfirmKind | null>(null);
@@ -32,8 +33,23 @@ function EditAccount() {
     api
       .GET("/api/accounts/{id}", { params: { path: { id: accountId } } })
       .then(({ data }) => {
-        if (cancelled || !data) return;
+        if (cancelled) return;
+        // A visitor below owner-tier permission has no business on this
+        // page at all — /accounts/{id} already hides the Edit link for
+        // them, this is defense in depth for a direct navigation.
+        if (!data || data.permission !== "owner") {
+          navigate({
+            to: "/accounts/$accountId",
+            params: { accountId },
+            replace: true,
+          });
+          return;
+        }
         setDisabled(data.disabled);
+        // type_id stays real-owner-only even for a shared owner — see
+        // accounts' design.md. shared is true exactly when the viewer
+        // isn't the real owner.
+        setTypeLocked(data.shared);
         setValues({
           title: data.title,
           description: data.description ?? "",
@@ -49,7 +65,7 @@ function EditAccount() {
     return () => {
       cancelled = true;
     };
-  }, [accountId]);
+  }, [accountId, navigate]);
 
   async function performConfirmed() {
     const kind = confirming;
@@ -91,6 +107,7 @@ function EditAccount() {
         submitLabel={t("accounts.form.save")}
         submitting={submitting}
         serverError={error}
+        typeLocked={typeLocked}
         onSubmit={async (body) => {
           setSubmitting(true);
           setError(null);

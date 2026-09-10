@@ -126,14 +126,25 @@ function AccountsOverview() {
                     : "…"}
                 </span>
               </Link>
-              <Link
-                to="/entries/new"
-                search={{ account_id: account.id }}
-                className="flex items-center gap-1.5 self-end rounded-md border border-black/10 px-2 py-1 text-sm text-zinc-500 transition-colors hover:bg-black/[.06] hover:text-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/[.08] dark:hover:text-zinc-100"
-              >
-                <PlusGlyph />
-                {t("entries.create")}
-              </Link>
+              <div className="flex items-center justify-end gap-2">
+                <Link
+                  to="/accounts/$accountId/sharing"
+                  params={{ accountId: account.id }}
+                  className="flex items-center gap-1.5 rounded-md border border-black/10 px-2 py-1 text-sm text-zinc-500 transition-colors hover:bg-black/[.06] hover:text-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/[.08] dark:hover:text-zinc-100"
+                >
+                  {t("accounts.share")}
+                </Link>
+                {account.permission !== "view" && (
+                  <Link
+                    to="/entries/new"
+                    search={{ account_id: account.id }}
+                    className="flex items-center gap-1.5 rounded-md border border-black/10 px-2 py-1 text-sm text-zinc-500 transition-colors hover:bg-black/[.06] hover:text-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/[.08] dark:hover:text-zinc-100"
+                  >
+                    <PlusGlyph />
+                    {t("entries.create")}
+                  </Link>
+                )}
+              </div>
             </div>
           ))}
         </div>
