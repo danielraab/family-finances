@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN pnpm build
 
 # ---- backend: embed the static export + API contract and compile ----
-FROM golang:1.26-alpine AS backend
+FROM golang:1.27-alpine AS backend
 WORKDIR /src/backend
 COPY backend/ ./
 # The API contract lives at repo-root openapi/; //go:embed cannot reach a
