@@ -407,9 +407,8 @@
       "to": "To"
     },
     "generate": "Generate report",
-    "selectOneHint": "Select a category or a tag, then generate the report.",
     "staleHint": "Filters have changed — click \"Generate report\" again to update the results below.",
-    "beforeGenerate": "Select a category or a tag above, then click \"Generate report\" to see the matching entries and their total.",
+    "beforeGenerate": "Optionally narrow by category, tag, account, or date above, then click \"Generate report\" to see the matching entries and their total.",
     "loading": "Loading…",
     "emptyFiltered": "No entries match this report's filters.",
     "sumsTitle": "Total",

@@ -1,36 +1,17 @@
-# web-client-reports Specification
+## REMOVED Requirements
 
-## Purpose
+### Requirement: Category and tag are an exclusive selection
 
-The authenticated `/reports` page: optionally filter by a category
-(optionally including its subcategories), a tag, an account, and a date
-range — any combination, or none — then explicitly generate a report
-showing the matching transaction entries and their sum per currency,
-without ever fetching automatically as filters change.
+**Reason**: The category and tag filters are now independent. Both may be
+set at once and are applied together as an AND filter, matching the
+backend's `/api/entries` and `/api/entries/summary` behavior, which has
+always accepted `category_id` and `tag_id` together.
 
-## Requirements
+**Migration**: None. Existing `/reports` URLs that carry only a
+`category_id` or only a `tag_id` continue to behave exactly as before; the
+change only permits URLs and control states that set both, or neither.
 
-### Requirement: Reports link in the sidebar
-
-The `Sidebar` navigation SHALL contain a "Reports" item, visible to an
-authenticated visitor, that navigates to `/reports` and is shown as active
-for `/reports` and every route nested under it.
-
-#### Scenario: Navigating to reports from the sidebar
-
-- **WHEN** an authenticated visitor activates "Reports" in the sidebar
-- **THEN** the client navigates to `/reports`
-
-### Requirement: The reports route requires authentication
-
-`/reports` SHALL be accessible only to an authenticated visitor. An
-anonymous visitor navigating to `/reports` SHALL be redirected to
-`/login`.
-
-#### Scenario: Anonymous visitor is redirected
-
-- **WHEN** an anonymous visitor navigates to `/reports`
-- **THEN** the client redirects them to `/login`
+## MODIFIED Requirements
 
 ### Requirement: A selected category offers an "include subcategories" checkbox
 
@@ -59,58 +40,6 @@ category is selected.
 - **WHEN** an authenticated visitor has both a category and a tag selected
   on `/reports`
 - **THEN** the "include subcategories" checkbox is shown
-
-### Requirement: Account and date-range filters narrow the report
-
-`/reports` SHALL offer an account filter and a `from`/`to` date-range
-filter, applied in addition to the category-or-tag selection, the same way
-`/entries`'s equivalent filters narrow its list. The account filter's
-choices SHALL include every non-deleted account the visitor owns or has
-any permission on (view and up), since reports are read-only.
-
-#### Scenario: Narrowing by account
-
-- **WHEN** an authenticated visitor sets an account filter alongside a
-  category or tag selection and generates the report
-- **THEN** only entries on that account are included in the results and
-  sum
-
-#### Scenario: Narrowing by date range
-
-- **WHEN** an authenticated visitor sets a `from`/`to` date range alongside
-  a category or tag selection and generates the report
-- **THEN** only entries whose `booking_timestamp` falls in that range are
-  included in the results and sum
-
-#### Scenario: A shared account appears in the account filter
-
-- **WHEN** an authenticated visitor has any permission (including `view`)
-  on an account they do not really own
-- **THEN** that account appears among the account filter's choices, and a
-  report narrowed to it includes its matching entries
-
-### Requirement: The report's filter state lives in the URL
-
-`/reports` SHALL represent its category-or-tag selection (including the
-subcategories checkbox), account, and date-range filters as typed URL
-search parameters, readable and writable through TanStack Router's
-search-param APIs. Changing a control SHALL update the URL immediately.
-Reloading a URL with search parameters SHALL restore the same filter
-selections without generating a report.
-
-#### Scenario: Changing a filter updates the URL without generating a report
-
-- **WHEN** an authenticated visitor changes the category, tag, account, or
-  date-range control
-- **THEN** the corresponding URL search parameter changes to match, and no
-  request is sent
-
-#### Scenario: A filtered view's controls survive a reload
-
-- **WHEN** an authenticated visitor sets filters, generates a report, then
-  reloads the page
-- **THEN** the same filter selections are shown in the controls, but the
-  report is not automatically regenerated
 
 ### Requirement: A report is only generated on explicit action
 

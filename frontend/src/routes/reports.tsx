@@ -203,23 +203,18 @@ function ReportsPage() {
   }
 
   function selectCategory(id: string) {
-    patchSearch({
-      category_id: id || undefined,
-      tag_id: undefined,
-      include_subcategories: undefined,
-    });
+    patchSearch(
+      id
+        ? { category_id: id }
+        : { category_id: undefined, include_subcategories: undefined },
+    );
   }
 
   function selectTag(id: string) {
-    patchSearch({
-      tag_id: id || undefined,
-      category_id: undefined,
-      include_subcategories: undefined,
-    });
+    patchSearch({ tag_id: id || undefined });
   }
 
   function generateReport() {
-    if (!search.category_id && !search.tag_id) return;
     setGeneratedFilter({
       categoryId: search.category_id,
       includeSubcategories: search.include_subcategories ?? true,
@@ -251,7 +246,6 @@ function ReportsPage() {
   const categoryOptions = flattenCategoryTree(categories);
   const accountCurrency = (accountId: string) =>
     accounts.find((a) => a.id === accountId)?.currency ?? "";
-  const canGenerate = Boolean(search.category_id || search.tag_id);
   const hasGenerated = generatedFilter !== null;
   const stale = generatedFilter !== null && isStale(generatedFilter, search);
 
@@ -351,10 +345,8 @@ function ReportsPage() {
 
         <button
           type="button"
-          disabled={!canGenerate}
           onClick={generateReport}
-          title={canGenerate ? undefined : t("reports.selectOneHint")}
-          className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+          className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
           {t("reports.generate")}
         </button>

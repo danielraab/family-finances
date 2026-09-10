@@ -407,9 +407,8 @@
       "to": "Bis"
     },
     "generate": "Auswertung erstellen",
-    "selectOneHint": "Wähle eine Kategorie oder einen Tag aus und erstelle dann die Auswertung.",
     "staleHint": "Die Filter haben sich geändert — klicke erneut auf \"Auswertung erstellen\", um die Ergebnisse unten zu aktualisieren.",
-    "beforeGenerate": "Wähle oben eine Kategorie oder einen Tag aus und klicke dann auf \"Auswertung erstellen\", um die passenden Buchungen und ihre Summe zu sehen.",
+    "beforeGenerate": "Grenze oben optional nach Kategorie, Tag, Konto oder Datum ein und klicke dann auf \"Auswertung erstellen\", um die passenden Buchungen und ihre Summe zu sehen.",
     "loading": "Lädt…",
     "emptyFiltered": "Keine Buchungen entsprechen den Filtern dieser Auswertung.",
     "sumsTitle": "Summe",
