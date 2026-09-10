@@ -346,21 +346,90 @@ limit; a self/descendant reparent is rejected (`ErrCycle`, `422`).
   the Postgres stores use `CASE WHEN $n::text IS NULL THEN col ELSE
   NULLIF($n, '') END`. Account **types** and tags do **not** carry them.
 - **`entry_count`**: every `Category` response carries the number of the
-  owner's own non-deleted entries whose `category_id` is that category —
-  **direct references only**, never rolled up from descendant categories.
-  Computed by `internal/storage/postgres/category.go` as a correlated
-  subquery against `entries` (`… AND e.deleted_at IS NULL`) folded into
-  `categoryCols`, exactly as `tag.go` does for its own `entry_count` (see
-  the Tags section). `internal/storage/memory`'s `CategoryStore` has no
-  entry visibility, so `EntryCount` there always reads `0` — the same
-  accepted gap it already has for the delete in-use check.
+  *viewing caller's own* non-deleted entries whose `category_id` is that
+  category — **direct references only**, never rolled up from descendant
+  categories, and scoped to the caller even when they're viewing a
+  category shared with them rather than one they own (see "Categories and
+  sharing" below). Computed by `internal/storage/postgres/category.go` as
+  a correlated subquery against `entries` (`… AND e.deleted_at IS NULL
+  AND e.created_by = $N`, `N` a positional param the caller — real owner
+  for the strictly-owner-scoped methods, the viewer for `GetForCaller`/
+  `List` — is always bound to) folded into `categoryCols(callerParam)`,
+  the parameterized form of what `tag.go` does unconditionally for its
+  own `entry_count` (see the Tags section — tags aren't shareable, so
+  they have no equivalent need). `internal/storage/memory`'s
+  `CategoryStore` has no entry visibility, so `EntryCount` there always
+  reads `0` — the same accepted gap it already has for the delete in-use
+  check.
 
 `internal/entry`'s `CategoryLookup` interface (`*category.Service` satisfies
-it structurally) is `Usable(ctx, ownerID, categoryID) (bool, error)` —
-exists, owned by `ownerID`, and not disabled, consulted only when a
-category is being newly set (creation, or an update that explicitly
-supplies `category_id`) — and `Subtree(ctx, ownerID, categoryID)
-([]string, error)`, scoped to that owner's own tree.
+it structurally) is `Usable(ctx, callerID, categoryID) (bool, error)` —
+exists, owned by `callerID` *or* shared with them at `append` tier, and not
+disabled, consulted only when a category is being newly set (creation, or
+an update that explicitly supplies `category_id`) — and
+`Subtree(ctx, callerID, categoryID) ([]string, error)`, which resolves a
+category filter to itself plus every descendant *within `callerID`'s own
+tree* for an owned category, or to itself alone (no cascade) for one
+visible only via a share. `entry` itself has no notion that sharing
+exists — both methods just mean "usable/resolvable by this caller" from
+its point of view; see "Categories and sharing" below for what backs that.
+
+## Categories and sharing
+
+`internal/category` owns `categories` plus `category_shares` (migration
+`0022_category_sharing.sql`) — a many-to-many grant of one of two
+`Permission` tiers (`view`, `append`) from a category's real owner to
+another user. Unlike `internal/account`'s four-tier model, there is no
+shareable "owner" tier for categories: only the real owner
+(`categories.owner_id`) may ever rename, reparent, disable/enable, delete,
+reorder, or manage shares on a category — a share only ever grants
+visibility and/or usability of the category itself.
+
+- **`view`** lets the recipient filter/see by the category (it resolves in
+  entry-list/report category filters, and its name resolves wherever an
+  entry using it is displayed) but the category is never offered as a
+  pickable option on a new or edited entry. **`append`** additionally
+  makes it pickable — see `Usable` above, the one check `internal/entry`
+  consults, so sharing plugs in with zero changes to that package.
+- **No cascade.** Sharing a category shares only that node — its
+  children, if any, stay private to the real owner unless separately
+  shared. A shared category's `parent_id` is returned as-is (never
+  rewritten); it renders as a top-level node for the recipient simply
+  because that parent usually isn't in their own `GET /api/categories`
+  response. (The one case this doesn't hold — the recipient is
+  independently shared the parent too, as a second, separate share — is a
+  real, reproducible scenario, not a hypothetical; it's handled entirely
+  client-side, by never tree-building shared categories together with
+  owned ones. See `frontend/AGENTS.md`.)
+- **`GET /api/categories`** returns the union of the caller's own full
+  tree (nested, `permission: "owner"`) and every category shared with
+  them (flat rows, `permission` "view"/"append", `shared: true`,
+  `owner_name` set) — `Store.GetForCaller`/`List` resolve this; the
+  strictly-owner-scoped `Store.Get`/`Exists`/`Subtree` (parent validation,
+  reparent-cycle detection) are untouched, since those operations only
+  ever act within the real owner's own tree regardless of sharing.
+  **`GET /api/categories/{id}`** is new with this capability — categories
+  had no single-fetch endpoint before it existed only to back the sharing
+  page's category header.
+- **`GET`/`POST /api/categories/{id}/shares`,
+  `PATCH`/`DELETE /api/categories/{id}/shares/{userId}`** — list requires
+  any tier (view+); invite/update/revoke require being the real owner
+  (never a shared tier, since none grants that); a caller may always
+  self-leave their own share regardless of tier. The real owner can never
+  be a target of update, revoke, or self-leave (`ErrInvalidValue`, `400`).
+- **Sharing is by email**, resolved through the same `UserLookup` shape
+  `internal/account` already declares (`*auth.Service` satisfies both
+  structurally); wired in `main.go` via `category.WithMailer`/
+  `WithBaseURL` at construction and `categorySvc.SetUserLookup(authSvc)`
+  after `buildAuth`, mirroring `accountSvc`'s wiring. A match creates/
+  updates the share row and sends a notification email
+  (`mailer.SendCategoryShare`); no match returns `{matched: false,
+  invite_allowed}` without writing anything.
+- **Revoking a share only stops *new* selection** — it never touches an
+  entry already categorized under that category, for the same reason
+  disabling a category doesn't: `Usable` is consulted only when
+  `category_id` is being newly set, never for a value merely carried over
+  unchanged.
 
 ## Tags
 

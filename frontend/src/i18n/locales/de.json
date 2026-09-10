@@ -351,6 +351,7 @@
   "categories": {
     "title": "Kategorien",
     "empty": "Noch keine Kategorien. Erstelle eine, um loszulegen.",
+    "notFound": "Diese Kategorie existiert nicht, oder du hast keinen Zugriff darauf.",
     "loadError": "Kategorien konnten nicht geladen werden — bitte versuche es erneut.",
     "deleteError": "„{{name}}“ konnte nicht gelöscht werden — es gibt noch Unterkategorien oder Buchungen, die darauf verweisen.",
     "entryCount_one": "{{count}} Buchung",
@@ -371,10 +372,21 @@
       "moveUp": "Nach oben",
       "moveDown": "Nach unten",
       "edit": "Bearbeiten",
+      "share": "Teilen",
+      "viewSharing": "Freigabe",
+      "leave": "Verlassen",
       "disable": "Deaktivieren",
       "enable": "Aktivieren",
       "delete": "Löschen",
       "deleteDisabledHint": "Erst möglich, wenn sie keine Unterkategorien und keine Buchungen mehr hat."
+    },
+    "shared": {
+      "badgeTitle": "Geteilt von {{owner}}"
+    },
+    "sharedWithMe": {
+      "heading": "Mit mir geteilt",
+      "confirmLeaveTitle": "„{{name}}“ verlassen?",
+      "confirmLeaveBody": "Du verlierst sofort den Zugriff auf diese Kategorie — sie kann dann nicht mehr für deine Buchungen ausgewählt werden und erscheint nicht mehr in deinen Filtern."
     },
     "edit": {
       "heading": "Kategorie bearbeiten",
@@ -391,6 +403,36 @@
       "deleteBody": "Dies ist nur möglich, solange sie keine Unterkategorien hat und keine Buchung sie verwendet. Dies kann hier nicht rückgängig gemacht werden.",
       "cancel": "Abbrechen",
       "confirmAction": "Bestätigen"
+    },
+    "sharing": {
+      "title": "„{{category}}“ teilen",
+      "subtitle": "Alle hier aufgeführten Personen können Buchungen nach dieser Kategorie filtern und sehen; „Hinzufügen“ erlaubt zusätzlich, sie für eigene Buchungen auszuwählen.",
+      "realOwner": "Eigentümer",
+      "unknownUser": "Unbekannter Nutzer",
+      "grantedBy": "Hinzugefügt von {{name}} am {{date}}",
+      "leave": "Verlassen",
+      "revoke": "Entziehen",
+      "noShares": "Noch mit niemandem geteilt.",
+      "inviteTitle": "Mit jemandem teilen",
+      "email": "E-Mail",
+      "permissionLabel": "Berechtigung",
+      "inviteSubmit": "Teilen",
+      "inviteError": "Diese Kategorie konnte nicht geteilt werden — bitte überprüfe das Formular und versuche es erneut.",
+      "unmatched": "Für {{email}} ist kein Konto registriert.",
+      "appInviteSent": "Einladung gesendet.",
+      "sendAppInvite": "Einladung senden",
+      "inviteUnavailable": "Einladungen sind auf dieser Instanz derzeit nicht verfügbar.",
+      "permission": {
+        "view": "Nur ansehen",
+        "append": "Hinzufügen",
+        "owner": "Eigentümer"
+      },
+      "confirm": {
+        "revokeTitle": "Diese Freigabe entziehen?",
+        "revokeBody": "{{name}} verliert sofort den Zugriff auf diese Kategorie.",
+        "leaveTitle": "Diese geteilte Kategorie verlassen?",
+        "leaveBody": "Du verlierst sofort den Zugriff auf diese Kategorie."
+      }
     }
   },
   "reports": {

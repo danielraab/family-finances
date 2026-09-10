@@ -17,20 +17,44 @@ import (
 // still referenced by one — see category.ErrInUse's doc comment — and it
 // always reports Category.EntryCount as 0, mirroring memory.TagStore's
 // equivalent gap.
+//
+// It also has no visibility into internal/auth's users, the same accepted
+// gap memory.AccountStore has for AccountShare.Name/Email/GrantedByName:
+// CategoryShare.Name/Email/GrantedByName and Category.OwnerName are always
+// left empty here — fine, since storage/memory is test/local-dev
+// infrastructure, never what ships.
 type CategoryStore struct {
-	mu   sync.Mutex
-	cats map[string]category.Category
-	seq  int
+	mu     sync.Mutex
+	cats   map[string]category.Category
+	shares map[string]category.CategoryShare // key: categoryShareKey(categoryID, userID)
+	seq    int
 }
 
 // NewCategoryStore returns an empty CategoryStore.
 func NewCategoryStore() *CategoryStore {
-	return &CategoryStore{cats: map[string]category.Category{}}
+	return &CategoryStore{
+		cats:   map[string]category.Category{},
+		shares: map[string]category.CategoryShare{},
+	}
 }
 
 func (s *CategoryStore) nextID() string {
 	s.seq++
 	return "cat" + strconv.Itoa(s.seq)
+}
+
+func categoryShareKey(categoryID, userID string) string { return categoryID + "|" + userID }
+
+// permissionLocked resolves callerID's Permission on c (id is c's own key,
+// passed separately to avoid a second map lookup). Callers MUST hold s.mu.
+func (s *CategoryStore) permissionLocked(id, callerID string, c category.Category) category.Permission {
+	if c.OwnerID == callerID {
+		return category.PermissionOwner
+	}
+	if sh, ok := s.shares[categoryShareKey(id, callerID)]; ok {
+		return sh.Permission
+	}
+	return ""
 }
 
 // visible reports whether c belongs to ownerID and is not soft-deleted.
@@ -45,14 +69,21 @@ func sameGroup(a, b category.Category) bool {
 	return a.ParentID == nil || *a.ParentID == *b.ParentID
 }
 
-func (s *CategoryStore) List(_ context.Context, ownerID string) ([]category.Category, error) {
+func (s *CategoryStore) List(_ context.Context, callerID string) ([]category.Category, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []category.Category
-	for _, c := range s.cats {
-		if visible(c, ownerID) {
-			out = append(out, c)
+	for id, c := range s.cats {
+		if c.DeletedAt != nil {
+			continue
 		}
+		perm := s.permissionLocked(id, callerID, c)
+		if perm == "" {
+			continue
+		}
+		c.Permission = perm
+		c.Shared = c.OwnerID != callerID
+		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].SortOrder != out[j].SortOrder {
@@ -70,6 +101,18 @@ func (s *CategoryStore) Get(_ context.Context, ownerID, id string) (category.Cat
 	if !ok || !visible(c, ownerID) {
 		return category.Category{}, category.ErrNotFound
 	}
+	return c, nil
+}
+
+func (s *CategoryStore) GetForCaller(_ context.Context, callerID, id string) (category.Category, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.cats[id]
+	if !ok || c.DeletedAt != nil {
+		return category.Category{}, category.ErrNotFound
+	}
+	c.Permission = s.permissionLocked(id, callerID, c)
+	c.Shared = c.Permission != "" && c.OwnerID != callerID
 	return c, nil
 }
 
@@ -283,4 +326,78 @@ func (s *CategoryStore) Subtree(_ context.Context, ownerID, id string) ([]string
 		}
 	}
 	return out, nil
+}
+
+// --- sharing -----------------------------------------------------------
+
+func (s *CategoryStore) CreateOrUpdateShare(_ context.Context, categoryID, userID string, permission category.Permission, grantedBy string) (category.CategoryShare, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := categoryShareKey(categoryID, userID)
+	now := time.Now().UTC()
+	sh, exists := s.shares[key]
+	if exists {
+		sh.Permission = permission
+		sh.GrantedBy = grantedBy
+		sh.UpdatedAt = now
+	} else {
+		sh = category.CategoryShare{
+			CategoryID: categoryID,
+			UserID:     userID,
+			Permission: permission,
+			GrantedBy:  grantedBy,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+	}
+	s.shares[key] = sh
+	return sh, nil
+}
+
+func (s *CategoryStore) ListShares(_ context.Context, categoryID string) ([]category.CategoryShare, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []category.CategoryShare
+	for _, sh := range s.shares {
+		if sh.CategoryID == categoryID {
+			out = append(out, sh)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (s *CategoryStore) ShareByUser(_ context.Context, categoryID, userID string) (category.CategoryShare, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sh, ok := s.shares[categoryShareKey(categoryID, userID)]
+	if !ok {
+		return category.CategoryShare{}, category.ErrNotFound
+	}
+	return sh, nil
+}
+
+func (s *CategoryStore) UpdateSharePermission(_ context.Context, categoryID, userID string, permission category.Permission) (category.CategoryShare, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := categoryShareKey(categoryID, userID)
+	sh, ok := s.shares[key]
+	if !ok {
+		return category.CategoryShare{}, category.ErrNotFound
+	}
+	sh.Permission = permission
+	sh.UpdatedAt = time.Now().UTC()
+	s.shares[key] = sh
+	return sh, nil
+}
+
+func (s *CategoryStore) DeleteShare(_ context.Context, categoryID, userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := categoryShareKey(categoryID, userID)
+	if _, ok := s.shares[key]; !ok {
+		return category.ErrNotFound
+	}
+	delete(s.shares, key)
+	return nil
 }

@@ -75,8 +75,21 @@ function NewEntry() {
   const account = accounts.find((a) => a.id === accountId);
   // A new entry never starts with a category, so a disabled one is simply
   // never offered — unlike editing, there's no existing value to preserve.
+  // A category shared at view tier only is excluded too — it can be
+  // filtered/seen by, but never newly selected on an entry; an
+  // append-shared one (or an owned one, permission "owner") is offered
+  // like any other, always flat — its parent_id is cleared so it can never
+  // nest even in the rare case its real parent happens to also be shared
+  // with this caller (ids are otherwise unrelated to this caller's own
+  // tree, so there's no other reason it would ever nest).
   const categoryOptions = flattenCategoryTree(
-    categories.filter((c) => !c.disabled),
+    categories
+      .filter((c) => !c.disabled && c.permission !== "view")
+      .map((c) => {
+        if (!c.shared) return c;
+        const { parent_id, ...rest } = c;
+        return rest;
+      }),
   );
   // view-only accounts can't have entries created against them — never
   // offered when picking freely; a preset account_id (the ?account_id=

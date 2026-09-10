@@ -79,18 +79,19 @@ func main() {
 
 	settingsSvc, settingsHandler := buildSettings(pool)
 	accountSvc, accountHandler := buildAccount(pool, mail, cfg.Auth.BaseURL)
-	categorySvc, categoryHandler := buildCategory(pool)
+	categorySvc, categoryHandler := buildCategory(pool, mail, cfg.Auth.BaseURL)
 
 	authSvc, authHandler, err := buildAuth(ctx, cfg, pool, mail, settingsSvc, categorySvc)
 	if err != nil {
 		slog.Error("build auth", "error", err)
 		os.Exit(1)
 	}
-	// accountSvc needs authSvc as its email-lookup/invite-eligibility
-	// source for sharing, and authSvc is built after it — a
-	// post-construction wiring no constructor option can resolve on its
-	// own. See account.Service.SetUserLookup's doc comment.
+	// accountSvc/categorySvc each need authSvc as their email-lookup/
+	// invite-eligibility source for sharing, and authSvc is built after
+	// them — a post-construction wiring no constructor option can resolve
+	// on its own. See account.Service.SetUserLookup's doc comment.
 	accountSvc.SetUserLookup(authSvc)
+	categorySvc.SetUserLookup(authSvc)
 
 	tagSvc, tagHandler := buildTag(pool)
 	entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc, settingsSvc)
@@ -138,10 +139,13 @@ func buildAccount(pool *postgres.Pool, mail *mailer.Mailer, baseURL string) (*ac
 }
 
 // buildCategory constructs the category service and its HTTP handler over
-// the Postgres store.
-func buildCategory(pool *postgres.Pool) (*category.Service, http.Handler) {
+// the Postgres store. mail and baseURL back the share-notification email
+// (see category.WithMailer/WithBaseURL); the email-lookup/invite-
+// eligibility source (category.UserLookup) is wired in separately, once
+// auth.Service exists — see main()'s SetUserLookup call.
+func buildCategory(pool *postgres.Pool, mail *mailer.Mailer, baseURL string) (*category.Service, http.Handler) {
 	store := postgres.NewCategoryStore(pool)
-	svc := category.NewService(store)
+	svc := category.NewService(store, category.WithMailer(mail), category.WithBaseURL(baseURL))
 	handler := category.NewHandler(svc, category.HandlerOptions{RenderError: httpapi.WriteError})
 	return svc, handler
 }

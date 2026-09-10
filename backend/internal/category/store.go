@@ -21,19 +21,37 @@ var (
 	ErrInUse = errors.New("category is in use")
 	// ErrCycle: an update would make a category its own ancestor.
 	ErrCycle = errors.New("category cannot be its own ancestor")
+	// ErrForbidden: the caller has some permission on the category (a
+	// share) but not enough for the attempted operation — every
+	// share-management action (invite, change permission, revoke someone
+	// else's) requires being the real owner. Distinct from ErrNotFound,
+	// which is for no permission at all.
+	ErrForbidden = errors.New("forbidden")
 )
 
 // Sentinels is every error above, for the httpapi mapping.
-var Sentinels = []error{ErrNotFound, ErrInvalidValue, ErrInUse, ErrCycle}
+var Sentinels = []error{ErrNotFound, ErrInvalidValue, ErrInUse, ErrCycle, ErrForbidden}
 
 // Store is the persistence contract category declares. internal/storage/memory
 // and internal/storage/postgres implement it; package main injects one.
 type Store interface {
-	// List returns every non-deleted category ownerID owns.
-	List(ctx context.Context, ownerID string) ([]Category, error)
+	// List returns every non-deleted category callerID owns (full tree,
+	// Permission "owner") union every category shared with them (flat,
+	// Permission "view"/"append", Shared true, OwnerName set).
+	List(ctx context.Context, callerID string) ([]Category, error)
 	// Get returns the category, scoped to ownerID; ErrNotFound if it does
-	// not exist, belongs to a different owner, or is soft-deleted.
+	// not exist, belongs to a different owner, or is soft-deleted. Used
+	// only for the strictly-owner-scoped operations below (parent
+	// validation, cycle detection) — never for a caller-facing read, which
+	// goes through GetForCaller instead.
 	Get(ctx context.Context, ownerID, id string) (Category, error)
+	// GetForCaller returns the category by id, annotated with callerID's
+	// Permission/Shared/OwnerName (Permission is "" when callerID has no
+	// access at all — not itself an error; Service.Get is the one place
+	// that's translated into ErrNotFound, mirroring account.Store.Get's
+	// convention). ErrNotFound only when id names no category at all, or a
+	// soft-deleted one.
+	GetForCaller(ctx context.Context, callerID, id string) (Category, error)
 	// Create appends the new category to the end of its sibling group
 	// (same ownerID + parent_id).
 	Create(ctx context.Context, ownerID string, in New) (Category, error)
@@ -73,4 +91,25 @@ type Store interface {
 	// pure SQL, is the only caller that needs to guard against a non-empty
 	// tree, since it isn't calling this method).
 	SeedDefaults(ctx context.Context, ownerID string) error
+
+	// --- sharing ---
+
+	// CreateOrUpdateShare grants userID permission on categoryID, recording
+	// grantedBy. An existing share for (categoryID, userID) has its
+	// permission overwritten in place rather than duplicating a row.
+	CreateOrUpdateShare(ctx context.Context, categoryID, userID string, permission Permission, grantedBy string) (CategoryShare, error)
+	// ListShares returns every current share on categoryID — not including
+	// the real owner, who carries no share row (Service composes that
+	// separately for display).
+	ListShares(ctx context.Context, categoryID string) ([]CategoryShare, error)
+	// ShareByUser returns userID's own share on categoryID, or ErrNotFound
+	// if they have none (including when they are the real owner, who has
+	// no share row).
+	ShareByUser(ctx context.Context, categoryID, userID string) (CategoryShare, error)
+	// UpdateSharePermission changes an existing share's permission.
+	// ErrNotFound if no share exists for (categoryID, userID).
+	UpdateSharePermission(ctx context.Context, categoryID, userID string, permission Permission) (CategoryShare, error)
+	// DeleteShare removes a share unconditionally (no soft delete).
+	// ErrNotFound if none exists.
+	DeleteShare(ctx context.Context, categoryID, userID string) error
 }

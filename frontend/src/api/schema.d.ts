@@ -440,7 +440,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get a category
+         * @description Visible to any caller holding at least view permission on it (real ownership or any share).
+         */
+        get: operations["getCategory"];
         put?: never;
         post?: never;
         /**
@@ -532,6 +536,54 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/categories/{id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a category's shares
+         * @description Visible to any caller holding at least view permission (real ownership or any share) — every user with access to a category can see who else has access. Does not include the real owner as a row (their identity is on the Category itself via owner_name); a client renders that as the fixed first row separately.
+         */
+        get: operations["getCategoryShares"];
+        put?: never;
+        /**
+         * Share a category with a user by email
+         * @description Real-owner only — unlike account-sharing there is no shareable "owner" tier that could also admit this. Deliberately does not hide whether email matched a registered user — the caller already holds an authenticated, real-owner grant on a real category. A match creates or updates (201, share overwrites any existing one for that user in place) a share and emails the recipient a notification with an application link. No match returns 200 with matched: false and invite_allowed reflecting whether the instance currently permits sending a new application invite for that email; no share is created. Sharing with the caller's own email is rejected (400).
+         */
+        post: operations["postCategoryShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/categories/{id}/shares/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a share, or leave a shared category
+         * @description The real owner may target any user's share (revoke). Any user may target their own (userId equal to the caller's own id) — self-leave, requiring no owner permission of its own. Either way access is removed immediately and unconditionally (no soft delete); entries already categorized under it keep resolving and displaying that category normally for every user who can otherwise see them. The real owner can never be a target (400) — they carry no share row, so self-leave is unavailable to them.
+         */
+        delete: operations["deleteCategoryShare"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a share's permission
+         * @description Real-owner only. The real owner can never be a target (400) — they carry no share row to change.
+         */
+        patch: operations["patchCategoryShare"];
         trace?: never;
     };
     "/api/entries": {
@@ -907,16 +959,52 @@ export interface components {
             created_at: string;
             /** @description Blocks the category from being newly selected on an entry; existing entries and child categories referencing it are unaffected. */
             disabled: boolean;
-            /** @description The number of the caller's own non-deleted entries directly categorized under this category. Direct references only — entries under a descendant category are not counted. */
+            /** @description The number of the *viewing caller's own* non-deleted entries directly categorized under this category. Direct references only — entries under a descendant category are not counted. */
             entry_count: number;
             /** @description Optional opaque presentation token naming a client icon. Stored and echoed verbatim; never interpreted by the backend. Absent when unset. */
             icon?: string;
             id: string;
             name: string;
+            /** @description The real owner's display name (or email, as a fallback). Present for every category, but only meaningful to render when shared is true. */
+            owner_name?: string;
             /** @description Absent for a root category. */
             parent_id?: string;
+            permission: components["schemas"]["CategoryPermission"];
+            /** @description True when the caller is not this category's real owner (i.e. they hold it via a share). Never true for the real owner's own view of their own category. */
+            shared: boolean;
             /** @description Meaningful only among siblings sharing the same parent_id. */
             sort_order: number;
+        };
+        /**
+         * @description Two shareable tiers, each a strict superset of the one before it: view (the category resolves in entry-list/report filters and on entries already categorized under it, but cannot be newly selected), append (+ selectable when categorizing an entry). owner is the real owner's own, implicit permission — never a valid value for a share; only the real owner may ever edit a category's own metadata, lifecycle, or shares.
+         * @enum {string}
+         */
+        CategoryPermission: "view" | "append" | "owner";
+        CategoryShare: {
+            /** Format: date-time */
+            created_at: string;
+            email: string;
+            granted_by: string;
+            granted_by_name: string;
+            name: string;
+            permission: components["schemas"]["CategoryPermission"];
+            /** Format: date-time */
+            updated_at: string;
+            user_id: string;
+        };
+        CategoryShareInvite: {
+            email: string;
+            permission: components["schemas"]["CategoryPermission"];
+        };
+        CategoryShareInviteResult: {
+            /** @description Only meaningful when matched is false: whether the instance currently allows sending a new application invite for this email (mirrors POST /api/auth/invites' own gating). */
+            invite_allowed: boolean;
+            /** @description True when email matched an existing, active user and a share was created or updated (share is then present). False when no such user exists. */
+            matched: boolean;
+            share?: components["schemas"]["CategoryShare"];
+        };
+        CategorySharePermissionUpdate: {
+            permission: components["schemas"]["CategoryPermission"];
         };
         CategoryWrite: {
             /** @description Optional opaque client colour token. An empty string clears it; omitting the field leaves it unchanged. */
@@ -1957,6 +2045,30 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    getCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The category. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     deleteCategory: {
         parameters: {
             query?: never;
@@ -2103,6 +2215,125 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getCategoryShares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every current share on the category. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryShare"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    postCategoryShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryShareInvite"];
+            };
+        };
+        responses: {
+            /** @description No user matched that email; see invite_allowed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryShareInviteResult"];
+                };
+            };
+            /** @description The share was created or updated. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryShareInviteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteCategoryShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: components["parameters"]["ShareUserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The share is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    patchCategoryShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: components["parameters"]["ShareUserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategorySharePermissionUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated share. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryShare"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

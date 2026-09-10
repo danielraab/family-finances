@@ -4,7 +4,7 @@ import {
   DialogPanel,
   DialogTitle,
 } from "@headlessui/react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -58,7 +58,7 @@ function subtreeIds(categories: Category[], id: string): Set<string> {
  * phone as on a desktop. See web-client-categories's spec and design.md.
  */
 function CategoriesPage() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -89,6 +89,7 @@ function CategoriesPage() {
   const [confirmingDelete, setConfirmingDelete] = useState<Category | null>(
     null,
   );
+  const [confirmingLeave, setConfirmingLeave] = useState<Category | null>(null);
 
   async function refresh() {
     const { data, response } = await api.GET("/api/categories");
@@ -111,16 +112,23 @@ function CategoriesPage() {
     return null;
   }
 
-  const tree = buildCategoryTree(categories ?? []);
-  const parentOptions = flattenCategoryTree(categories ?? []);
+  // The caller's own tree (nested, full controls) is built only from
+  // categories they really own — a category shared with them, even at
+  // append, never nests into or offers as a parent within it. It renders
+  // separately, flat, in its own "shared with me" section below.
+  const ownCategories = (categories ?? []).filter(
+    (c) => c.permission === "owner",
+  );
+  const sharedCategories = (categories ?? []).filter((c) => c.shared);
+  const tree = buildCategoryTree(ownCategories);
+  const parentOptions = flattenCategoryTree(ownCategories);
   const editParentOptions = editing
     ? parentOptions.filter(
-        (o) => !subtreeIds(categories ?? [], editing.id).has(o.id),
+        (o) => !subtreeIds(ownCategories, editing.id).has(o.id),
       )
     : [];
   const editingHasChildren =
-    editing !== null &&
-    (categories ?? []).some((c) => c.parent_id === editing.id);
+    editing !== null && ownCategories.some((c) => c.parent_id === editing.id);
 
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -225,6 +233,19 @@ function CategoriesPage() {
     }
   }
 
+  async function performLeave() {
+    if (!confirmingLeave || !user) return;
+    const target = confirmingLeave;
+    setConfirmingLeave(null);
+    const { response } = await api.DELETE(
+      "/api/categories/{id}/shares/{userId}",
+      { params: { path: { id: target.id, userId: user.id } } },
+    );
+    if (response.ok) {
+      setCategories((prev) => prev?.filter((c) => c.id !== target.id) ?? null);
+    }
+  }
+
   function renderNode(
     node: CategoryNode,
     depth: number,
@@ -283,11 +304,53 @@ function CategoriesPage() {
             >
               {t("categories.actions.edit")}
             </button>
+            <Link
+              to="/categories/$categoryId/sharing"
+              params={{ categoryId: node.id }}
+              className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              {t("categories.actions.share")}
+            </Link>
           </div>
         </div>
         {node.children.map((child, i) =>
           renderNode(child, depth + 1, i === 0, i === node.children.length - 1),
         )}
+      </div>
+    );
+  }
+
+  function renderSharedNode(node: Category) {
+    return (
+      <div
+        key={node.id}
+        className="flex flex-col gap-2 rounded-lg border border-black/10 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:bg-black"
+      >
+        <div className="flex items-center gap-2 text-sm">
+          <CategoryLabel
+            category={node}
+            className="font-medium text-zinc-900 dark:text-zinc-100"
+          />
+          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
+            {t(`categories.sharing.permission.${node.permission}`)}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <Link
+            to="/categories/$categoryId/sharing"
+            params={{ categoryId: node.id }}
+            className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            {t("categories.actions.viewSharing")}
+          </Link>
+          <button
+            type="button"
+            onClick={() => setConfirmingLeave(node)}
+            className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            {t("categories.actions.leave")}
+          </button>
+        </div>
       </div>
     );
   }
@@ -354,7 +417,7 @@ function CategoriesPage() {
         </p>
       )}
 
-      {categories !== null && categories.length === 0 ? (
+      {categories !== null && ownCategories.length === 0 ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           {t("categories.empty")}
         </p>
@@ -365,6 +428,57 @@ function CategoriesPage() {
           )}
         </div>
       )}
+
+      {sharedCategories.length > 0 && (
+        <div className="flex flex-col gap-3 border-t border-black/10 pt-6 dark:border-white/10">
+          <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+            {t("categories.sharedWithMe.heading")}
+          </h2>
+          <div className="flex flex-col gap-2">
+            {sharedCategories.map((c) => renderSharedNode(c))}
+          </div>
+        </div>
+      )}
+
+      <Dialog
+        open={confirmingLeave !== null}
+        onClose={() => setConfirmingLeave(null)}
+        className="relative z-50"
+      >
+        <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
+            {confirmingLeave && (
+              <>
+                <DialogTitle className="text-base font-semibold">
+                  {t("categories.sharedWithMe.confirmLeaveTitle", {
+                    name: confirmingLeave.name,
+                  })}
+                </DialogTitle>
+                <Description className="text-sm text-zinc-600 dark:text-zinc-400">
+                  {t("categories.sharedWithMe.confirmLeaveBody")}
+                </Description>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingLeave(null)}
+                    className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+                  >
+                    {t("categories.confirm.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={performLeave}
+                    className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+                  >
+                    {t("categories.confirm.confirmAction")}
+                  </button>
+                </div>
+              </>
+            )}
+          </DialogPanel>
+        </div>
+      </Dialog>
 
       <Dialog
         open={editing !== null}
