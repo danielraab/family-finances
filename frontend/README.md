@@ -6,7 +6,7 @@ Node server in production (the Go backend embeds and serves it).
 
 ## Prerequisites
 
-- Node 22+
+- Node 26+
 - pnpm 11+ (`corepack enable`)
 
 ## Getting started
