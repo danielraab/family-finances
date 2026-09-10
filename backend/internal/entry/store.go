@@ -9,33 +9,45 @@ import (
 // Sentinel errors. internal/httpapi/respond.go maps these to status codes in
 // one place; domain and service code never mentions net/http.
 var (
-	// ErrNotFound: no such entry (or it belongs to a different owner, or is
-	// soft-deleted, or its account is soft-deleted — all behave identically
-	// to nonexistent).
+	// ErrNotFound: no such entry (or it is soft-deleted, or its account is
+	// soft-deleted or the caller has no permission on it at all — all
+	// behave identically to nonexistent).
 	ErrNotFound = errors.New("not found")
 	// ErrInvalidValue: a field failed validation, including a category or
 	// tag that does not exist or is not the caller's, or an account_id the
-	// caller does not own.
+	// caller does not have at least append permission on.
 	ErrInvalidValue = errors.New("invalid value")
 	// ErrAccountDisabled: the target account has disabled = true; only
 	// entry creation is rejected by it (see accounts and design.md).
 	ErrAccountDisabled = errors.New("account is disabled")
+	// ErrForbidden: the caller has some permission on the entry's account
+	// but not enough for the attempted operation — view attempting to
+	// write at all, or append attempting to edit/delete an entry a
+	// different user created. Distinct from ErrNotFound, which is for no
+	// permission at all.
+	ErrForbidden = errors.New("forbidden")
 )
 
 // Sentinels is every error above, for the httpapi mapping.
-var Sentinels = []error{ErrNotFound, ErrInvalidValue, ErrAccountDisabled}
+var Sentinels = []error{ErrNotFound, ErrInvalidValue, ErrAccountDisabled, ErrForbidden}
 
 // AccountLookup is the narrow view of internal/account that entry needs:
-// confirming the caller owns the target account (and reading its currency
-// and disabled flag), and resolving which of the caller's accounts are
-// currently visible (non-deleted) to scope a listing or balance query.
+// resolving what the caller may do on an account (its currency, disabled
+// flag, and the caller's effective permission tier — see design.md's
+// "permission resolution replaces AccountLookup.Owner" decision), and
+// resolving which of the caller's accounts are currently visible
+// (non-deleted, owned or shared) to scope a listing or balance query.
 // *account.Service satisfies this structurally.
 type AccountLookup interface {
-	// Owner returns accountID's owner, currency, and disabled flag, or
-	// ErrNotFound (also returned for a soft-deleted account).
-	Owner(ctx context.Context, accountID string) (ownerID string, currency string, disabled bool, err error)
-	// VisibleIDs returns every non-deleted account id ownerID owns.
-	VisibleIDs(ctx context.Context, ownerID string) ([]string, error)
+	// Access resolves accountID's currency and disabled flag, plus
+	// callerID's effective permission on it — "" when callerID has no
+	// access at all (real ownership or any share). ErrNotFound only when
+	// accountID itself does not exist or is soft-deleted; an empty
+	// permission on an otherwise-valid account is not an error.
+	Access(ctx context.Context, accountID, callerID string) (currency string, disabled bool, permission string, err error)
+	// VisibleIDs returns every non-deleted account id callerID owns or has
+	// any permission on.
+	VisibleIDs(ctx context.Context, callerID string) ([]string, error)
 }
 
 // CategoryLookup is the narrow view of internal/category that entry needs.
@@ -82,20 +94,27 @@ type TimezoneLookup interface {
 
 // Store is the persistence contract entry declares. internal/storage/memory
 // and internal/storage/postgres implement it; package main injects one.
+//
+// Every method here is deliberately unscoped by caller — see design.md's
+// "entry read/write authorization moves from the Store layer into the
+// Service layer" decision. Service resolves the caller's permission via
+// AccountLookup.Access (read: PermissionView+; write: PermissionAppend+,
+// with an additional CreatedBy check at exactly PermissionAppend) before
+// calling any of these, so a Store implementation never needs to know
+// sharing exists as a concept.
 type Store interface {
-	Create(ctx context.Context, ownerID string, in New) (Entry, error)
-	// Get returns the entry, scoped to ownerID; ErrNotFound if it does not
-	// exist, belongs to a different owner, or is soft-deleted.
-	Get(ctx context.Context, ownerID, id string) (Entry, error)
-	Update(ctx context.Context, ownerID, id string, upd Update) (Entry, error)
+	Create(ctx context.Context, createdBy string, in New) (Entry, error)
+	// Get returns the entry by id alone, excluding soft-deleted rows.
+	Get(ctx context.Context, id string) (Entry, error)
+	Update(ctx context.Context, id string, upd Update) (Entry, error)
 	// SoftDelete sets deleted_at. One-way — no undelete.
-	SoftDelete(ctx context.Context, ownerID, id string) error
+	SoftDelete(ctx context.Context, id string) error
 
-	// List returns a page of ownerID's entries matching filter (already
-	// resolved by Service — AccountIDs and CategoryIDs are the effective
-	// sets to filter by), plus the cursor for the next page, or nil once
-	// there are no more.
-	List(ctx context.Context, ownerID string, filter Filter) ([]Entry, *Cursor, error)
+	// List returns a page of entries matching filter (already resolved by
+	// Service — AccountIDs and CategoryIDs are the effective sets to
+	// filter by, already narrowed to the caller's visible accounts), plus
+	// the cursor for the next page, or nil once there are no more.
+	List(ctx context.Context, filter Filter) ([]Entry, *Cursor, error)
 
 	// Balance computes accountID's balance as of asOf: the sum of every
 	// non-deleted entry's Amount at or before asOf. A balance adjustment's
@@ -106,20 +125,19 @@ type Store interface {
 	// balance adjustment and summing only the transactions after it.
 	Balance(ctx context.Context, accountID string, asOf time.Time) (int64, error)
 
-	// Sum computes, for ownerID's entries matching filter (already resolved
-	// by Service exactly as List's is — AccountIDs and CategoryIDs are the
-	// effective sets to filter by) and restricted to Kind ==
+	// Sum computes, for entries matching filter (already resolved by
+	// Service exactly as List's is) and restricted to Kind ==
 	// KindTransaction regardless of filter.Kind, the total amount per
 	// account id, plus the total number of matching entries across every
 	// account. Service.Sum groups the per-account totals by currency —
 	// Store has no notion of an account's currency.
-	Sum(ctx context.Context, ownerID string, filter Filter) (perAccount map[string]int64, count int, err error)
+	Sum(ctx context.Context, filter Filter) (perAccount map[string]int64, count int, err error)
 
-	// FlowSummary buckets ownerID's entries matching filter (already
-	// resolved by Service — AccountIDs is the effective set to filter by,
-	// Timezone is already resolved) by booking_timestamp in filter.Timezone,
-	// one row per (account, period) combination that has at least one
-	// matching entry. Service.FlowSummary fills in periods with no matching
-	// entries and resolves each account id to its currency.
-	FlowSummary(ctx context.Context, ownerID string, filter FlowFilter) ([]FlowRow, error)
+	// FlowSummary buckets entries matching filter (already resolved by
+	// Service — AccountIDs is the effective set to filter by, Timezone is
+	// already resolved) by booking_timestamp in filter.Timezone, one row
+	// per (account, period) combination that has at least one matching
+	// entry. Service.FlowSummary fills in periods with no matching entries
+	// and resolves each account id to its currency.
+	FlowSummary(ctx context.Context, filter FlowFilter) ([]FlowRow, error)
 }

@@ -29,6 +29,7 @@ import { Route as SettingsTagsRouteImport } from './routes/settings.tags'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as AccountsAccountIdIndexRouteImport } from './routes/accounts.$accountId.index'
 import { Route as AccountsAccountIdEditRouteImport } from './routes/accounts.$accountId.edit'
+import { Route as AccountsAccountIdSharingRouteImport } from './routes/accounts.$accountId.sharing'
 import { Route as EntriesEntryIdEditRouteImport } from './routes/entries.$entryId.edit'
 
 const IndexRoute = IndexRouteImport.update({
@@ -131,6 +132,12 @@ const AccountsAccountIdEditRoute = AccountsAccountIdEditRouteImport.update({
   path: '/edit',
   getParentRoute: () => AccountsAccountIdRoute,
 } as any)
+const AccountsAccountIdSharingRoute =
+  AccountsAccountIdSharingRouteImport.update({
+    id: '/sharing',
+    path: '/sharing',
+    getParentRoute: () => AccountsAccountIdRoute,
+  } as any)
 const EntriesEntryIdEditRoute = EntriesEntryIdEditRouteImport.update({
   id: '/$entryId/edit',
   path: '/$entryId/edit',
@@ -157,6 +164,7 @@ export interface FileRoutesByFullPath {
   '/entries/': typeof EntriesIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
+  '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
@@ -176,6 +184,7 @@ export interface FileRoutesByTo {
   '/entries': typeof EntriesIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
+  '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
   '/accounts/$accountId': typeof AccountsAccountIdIndexRoute
 }
@@ -200,6 +209,7 @@ export interface FileRoutesById {
   '/entries/': typeof EntriesIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
+  '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
@@ -225,6 +235,7 @@ export interface FileRouteTypes {
     | '/entries/'
     | '/settings/'
     | '/accounts/$accountId/edit'
+    | '/accounts/$accountId/sharing'
     | '/entries/$entryId/edit'
     | '/accounts/$accountId/'
   fileRoutesByTo: FileRoutesByTo
@@ -244,6 +255,7 @@ export interface FileRouteTypes {
     | '/entries'
     | '/settings'
     | '/accounts/$accountId/edit'
+    | '/accounts/$accountId/sharing'
     | '/entries/$entryId/edit'
     | '/accounts/$accountId'
   id:
@@ -267,6 +279,7 @@ export interface FileRouteTypes {
     | '/entries/'
     | '/settings/'
     | '/accounts/$accountId/edit'
+    | '/accounts/$accountId/sharing'
     | '/entries/$entryId/edit'
     | '/accounts/$accountId/'
   fileRoutesById: FileRoutesById
@@ -424,6 +437,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountsAccountIdEditRouteImport
       parentRoute: typeof AccountsAccountIdRoute
     }
+    '/accounts/$accountId/sharing': {
+      id: '/accounts/$accountId/sharing'
+      path: '/sharing'
+      fullPath: '/accounts/$accountId/sharing'
+      preLoaderRoute: typeof AccountsAccountIdSharingRouteImport
+      parentRoute: typeof AccountsAccountIdRoute
+    }
     '/entries/$entryId/edit': {
       id: '/entries/$entryId/edit'
       path: '/$entryId/edit'
@@ -436,11 +456,13 @@ declare module '@tanstack/react-router' {
 
 interface AccountsAccountIdRouteChildren {
   AccountsAccountIdEditRoute: typeof AccountsAccountIdEditRoute
+  AccountsAccountIdSharingRoute: typeof AccountsAccountIdSharingRoute
   AccountsAccountIdIndexRoute: typeof AccountsAccountIdIndexRoute
 }
 
 const AccountsAccountIdRouteChildren: AccountsAccountIdRouteChildren = {
   AccountsAccountIdEditRoute: AccountsAccountIdEditRoute,
+  AccountsAccountIdSharingRoute: AccountsAccountIdSharingRoute,
   AccountsAccountIdIndexRoute: AccountsAccountIdIndexRoute,
 }
 

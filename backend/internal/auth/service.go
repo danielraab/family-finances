@@ -307,8 +307,32 @@ func (s *Service) CompleteOIDC(ctx context.Context, state, code, currentUserID s
 
 // InviteEnabled reports whether an authenticated user may currently create
 // invites: always while signup is enabled, otherwise per AUTH_INVITE_ENABLED.
+// Also satisfies account.UserLookup structurally, for account-sharing's
+// "invite this person instead" nudge when a share-by-email doesn't match an
+// existing user.
 func (s *Service) InviteEnabled() bool {
 	return s.p.SignupEnabled || s.p.InviteEnabled
+}
+
+// ByEmail resolves email to an existing, non-disabled, non-soft-deleted
+// user's id and display name — satisfies account.UserLookup structurally,
+// used by account-sharing's email-based invite flow (see that package's
+// design.md: deliberately not anti-enumeration, since the caller already
+// holds an authenticated, owner-tier grant on a real account). ok is false
+// for no match, a disabled user, or a soft-deleted one — never an error, so
+// account.Service doesn't need to know this package's sentinel errors.
+func (s *Service) ByEmail(ctx context.Context, email string) (userID, displayName string, ok bool, err error) {
+	u, err := s.store.UserByEmail(ctx, NormalizeEmail(email))
+	if errors.Is(err, ErrNotFound) {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	if u.Disabled || u.DeletedAt != nil {
+		return "", "", false, nil
+	}
+	return u.ID, u.DisplayName, true, nil
 }
 
 // CreateInvite records an invite from inviterID for addr and emails an

@@ -184,6 +184,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an account's shares
+         * @description Visible to any caller holding at least view permission (real ownership or any share) — every user with access to an account can see who else has access. Does not include the real owner as a row (their identity is on the Account itself via owner_name); a client renders that as the fixed first row separately.
+         */
+        get: operations["getAccountShares"];
+        put?: never;
+        /**
+         * Share an account with a user by email
+         * @description Owner-tier only (real owner or a shared owner). Unlike authentication's anti-enumeration endpoints, this deliberately does not hide whether email matched a registered user — the caller already holds an authenticated, owner-tier grant on a real account. A match creates or updates (200-201, share overwrites any existing one for that user in place) a share and emails the recipient a notification with an application link. No match returns 200 with matched: false and invite_allowed reflecting whether the instance currently permits sending a new application invite for that email; no share is created. Sharing with the caller's own email or the account's real owner's email is rejected (400).
+         */
+        post: operations["postAccountShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{id}/shares/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a share, or leave a shared account
+         * @description Owner-tier callers may target any user's share (revoke). Any user may target their own (userId equal to the caller's own id) — self-leave, requiring no owner-tier permission of its own. Either way access is removed immediately and unconditionally (no soft delete); entries the removed user created remain on the account, attributed to them, for every remaining permission holder. The real owner can never be a target (400) — they carry no share row, so self-leave is unavailable to them.
+         */
+        delete: operations["deleteAccountShare"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a share's permission
+         * @description Owner-tier only. The real owner can never be a target (400) — they carry no share row to change.
+         */
+        patch: operations["patchAccountShare"];
+        trace?: never;
+    };
     "/api/auth/config": {
         parameters: {
             query?: never;
@@ -800,6 +848,12 @@ export interface components {
             id: string;
             /** Format: date */
             opening_date: string;
+            /** @description The real owner's display name (or email, as a fallback). Present for every account, but only meaningful to render when shared is true. */
+            owner_name?: string;
+            /** @description The caller's own effective permission on this account — always "owner" for the real owner, never absent. */
+            permission: components["schemas"]["AccountPermission"];
+            /** @description True when the caller is not this account's real owner (i.e. they hold a share). Always false for the real owner, even when they have shared the account with others. */
+            shared: boolean;
             title: string;
             type_id: string;
             /** Format: date-time */
@@ -819,6 +873,37 @@ export interface components {
             opening_date: string;
             title: string;
             type_id: string;
+        };
+        /**
+         * @description Four tiers, each a strict superset of the one before it: view (read entries and balance), append (+ create entries, edit/delete only ones created by the same user), entry_admin (+ edit/delete any entry on the account), owner (+ edit account metadata except type_id, disable/enable/soft-delete the account, manage shares).
+         * @enum {string}
+         */
+        AccountPermission: "view" | "append" | "entry_admin" | "owner";
+        AccountShare: {
+            /** Format: date-time */
+            created_at: string;
+            email: string;
+            granted_by: string;
+            granted_by_name: string;
+            name: string;
+            permission: components["schemas"]["AccountPermission"];
+            /** Format: date-time */
+            updated_at: string;
+            user_id: string;
+        };
+        AccountShareInvite: {
+            email: string;
+            permission: components["schemas"]["AccountPermission"];
+        };
+        AccountShareInviteResult: {
+            /** @description Only meaningful when matched is false: whether the instance currently allows sending a new application invite for this email (mirrors POST /api/auth/invites' own gating). */
+            invite_allowed: boolean;
+            /** @description True when email matched an existing, active user and a share was created or updated (share is then present). False when no such user exists — see design.md's deliberate, non-anti-enumeration decision for this endpoint. */
+            matched: boolean;
+            share?: components["schemas"]["AccountShare"];
+        };
+        AccountSharePermissionUpdate: {
+            permission: components["schemas"]["AccountPermission"];
         };
         AccountType: {
             /** Format: date-time */
@@ -929,6 +1014,10 @@ export interface components {
             category_id?: string;
             /** Format: date-time */
             created_at: string;
+            /** @description The id of the user who logged this entry — immutable after creation, not necessarily the account's real owner once it has been shared (see account-sharing). */
+            created_by: string;
+            /** @description The creator's display name (or email, as a fallback), resolved server-side so a viewer can see who logged an entry without a separate lookup. */
+            created_by_name?: string;
             description?: string;
             id: string;
             kind: components["schemas"]["EntryKind"];
@@ -1133,6 +1222,7 @@ export interface components {
     parameters: {
         AccountId: string;
         EntryId: string;
+        ShareUserId: string;
     };
     requestBodies: never;
     headers: never;
@@ -1483,6 +1573,125 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAccountShares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every current share on the account. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountShare"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    postAccountShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountShareInvite"];
+            };
+        };
+        responses: {
+            /** @description No user matched that email; see invite_allowed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountShareInviteResult"];
+                };
+            };
+            /** @description The share was created or updated. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountShareInviteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAccountShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AccountId"];
+                userId: components["parameters"]["ShareUserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The share is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    patchAccountShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AccountId"];
+                userId: components["parameters"]["ShareUserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountSharePermissionUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated share. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountShare"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

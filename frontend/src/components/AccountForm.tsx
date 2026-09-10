@@ -54,11 +54,17 @@ const inputClass =
 function validate(
   values: AccountFormValues,
   types: AccountType[],
+  typeLocked: boolean,
 ): string | null {
   if (values.title.trim() === "") return "title";
-  if (values.type_id === "") return "type_id";
-  if (types.find((type) => type.id === values.type_id)?.disabled) {
-    return "type_id";
+  // A locked type field isn't submitted at all (see handleSubmit), and the
+  // caller's own account-types list has no business validating a value
+  // that belongs to a different user's (the real owner's) lookup anyway.
+  if (!typeLocked) {
+    if (values.type_id === "") return "type_id";
+    if (types.find((type) => type.id === values.type_id)?.disabled) {
+      return "type_id";
+    }
   }
   if (!/^[A-Z]{3}$/.test(values.currency)) return "currency";
   if (values.opening_date === "") return "opening_date";
@@ -75,12 +81,20 @@ export function AccountForm({
   submitting,
   onSubmit,
   serverError,
+  typeLocked,
 }: {
   initial: AccountFormValues;
   submitLabel: string;
   submitting: boolean;
   onSubmit: (values: AccountCreate) => void;
   serverError: string | null;
+  /**
+   * When true, the type field renders read-only and type_id is omitted
+   * from the submitted body entirely — a shared owner editing someone
+   * else's account may not reassign type_id even to its own current
+   * value (the backend rejects the field's mere presence). Default false.
+   */
+  typeLocked?: boolean | undefined;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
@@ -126,12 +140,18 @@ export function AccountForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const invalid = validate(values, types);
+    const invalid = validate(values, types, typeLocked ?? false);
     setInvalidField(invalid);
     if (invalid) return;
-    onSubmit({
+    // type_id is asserted in below rather than included in this literal:
+    // AccountCreate requires it, but a locked field must be omitted from
+    // the request body entirely (the backend rejects a shared owner's
+    // request merely for including type_id, even unchanged) — so it's
+    // assigned separately, conditionally, after construction. JSON.
+    // stringify drops the key when left undefined, so an omitted
+    // assignment here really does omit it on the wire.
+    const body = {
       title: values.title.trim(),
-      type_id: values.type_id,
       currency: values.currency,
       opening_date: values.opening_date,
       // Always sent: "" leaves the field unset on create and clears it on
@@ -143,7 +163,11 @@ export function AccountForm({
         financial_institute: values.financial_institute.trim() || undefined,
         closing_date: values.closing_date || undefined,
       }),
-    });
+    } as AccountCreate;
+    if (!typeLocked) {
+      body.type_id = values.type_id;
+    }
+    onSubmit(body);
   }
 
   return (
@@ -180,42 +204,59 @@ export function AccountForm({
         }}
       />
 
-      <label className="flex flex-col gap-1.5 text-sm font-medium">
-        {t("accounts.form.type")}
-        <select
-          value={values.type_id}
-          onChange={(event) => set("type_id", event.target.value)}
-          className={inputClass}
-          required
-        >
-          <option value="" disabled>
-            {t("accounts.form.typePlaceholder")}
-          </option>
-          {currentType?.disabled && (
-            <option value={currentType.id} disabled>
-              {currentType.title} ({t("accounts.form.typeDisabledOption")})
-            </option>
-          )}
-          {types
-            .filter((type) => !type.disabled)
-            .map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.title}
-              </option>
-            ))}
-        </select>
-        {invalidField === "type_id" ? (
-          <span className="text-xs font-normal text-red-600 dark:text-red-400">
-            {t("accounts.form.typeRequired")}
-          </span>
-        ) : (
-          currentType?.disabled && (
-            <span className="text-xs font-normal text-red-600 dark:text-red-400">
-              {t("accounts.form.typeDisabledHint")}
+      <div className="flex flex-col gap-1.5 text-sm font-medium">
+        <label htmlFor="account-type-field">{t("accounts.form.type")}</label>
+        {typeLocked ? (
+          <>
+            <input
+              id="account-type-field"
+              value={t("accounts.form.typeLockedValue")}
+              disabled
+              className={`${inputClass} opacity-60`}
+            />
+            <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+              {t("accounts.form.typeLockedHint")}
             </span>
-          )
+          </>
+        ) : (
+          <>
+            <select
+              id="account-type-field"
+              value={values.type_id}
+              onChange={(event) => set("type_id", event.target.value)}
+              className={inputClass}
+              required
+            >
+              <option value="" disabled>
+                {t("accounts.form.typePlaceholder")}
+              </option>
+              {currentType?.disabled && (
+                <option value={currentType.id} disabled>
+                  {currentType.title} ({t("accounts.form.typeDisabledOption")})
+                </option>
+              )}
+              {types
+                .filter((type) => !type.disabled)
+                .map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.title}
+                  </option>
+                ))}
+            </select>
+            {invalidField === "type_id" ? (
+              <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                {t("accounts.form.typeRequired")}
+              </span>
+            ) : (
+              currentType?.disabled && (
+                <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                  {t("accounts.form.typeDisabledHint")}
+                </span>
+              )
+            )}
+          </>
         )}
-      </label>
+      </div>
 
       <div className="flex flex-col gap-4 sm:flex-row">
         <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">

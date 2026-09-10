@@ -42,6 +42,11 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("POST /api/accounts/{id}/disable", h.disable)
 	h.mux.HandleFunc("POST /api/accounts/{id}/enable", h.enable)
 
+	h.mux.HandleFunc("GET /api/accounts/{id}/shares", h.listShares)
+	h.mux.HandleFunc("POST /api/accounts/{id}/shares", h.inviteShare)
+	h.mux.HandleFunc("PATCH /api/accounts/{id}/shares/{userId}", h.updateShare)
+	h.mux.HandleFunc("DELETE /api/accounts/{id}/shares/{userId}", h.revokeShare)
+
 	h.mux.HandleFunc("GET /api/account-types", h.listTypes)
 	h.mux.HandleFunc("POST /api/account-types", h.createType)
 	h.mux.HandleFunc("PATCH /api/account-types/{id}", h.updateType)
@@ -213,6 +218,116 @@ func (h *Handler) enable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, acc)
+}
+
+// --- sharing -----------------------------------------------------------
+
+func (h *Handler) listShares(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	shares, err := h.svc.ListShares(r.Context(), user.ID, r.PathValue("id"))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	if shares == nil {
+		shares = []AccountShare{}
+	}
+	writeJSON(w, http.StatusOK, shares)
+}
+
+type shareInviteBody struct {
+	Email      *string `json:"email"`
+	Permission *string `json:"permission"`
+}
+
+type shareInviteResponse struct {
+	Matched       bool          `json:"matched"`
+	InviteAllowed bool          `json:"invite_allowed"`
+	Share         *AccountShare `json:"share,omitempty"`
+}
+
+// callerDisplayName is what a share-notification email's "X shared this
+// with you" line names the granter as — the caller's own display name,
+// falling back to their email when unset.
+func callerDisplayName(u auth.User) string {
+	if u.DisplayName != "" {
+		return u.DisplayName
+	}
+	return u.Email
+}
+
+func (h *Handler) inviteShare(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	var body shareInviteBody
+	if err := decodeJSON(r, &body); err != nil {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+	var email, permission string
+	if body.Email != nil {
+		email = *body.Email
+	}
+	if body.Permission != nil {
+		permission = *body.Permission
+	}
+	result, err := h.svc.InviteShare(r.Context(), user.ID, callerDisplayName(user), r.PathValue("id"), email, Permission(permission))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	if !result.Matched {
+		writeJSON(w, http.StatusOK, shareInviteResponse{Matched: false, InviteAllowed: result.InviteAllowed})
+		return
+	}
+	writeJSON(w, http.StatusCreated, shareInviteResponse{Matched: true, Share: result.Share})
+}
+
+type sharePermissionBody struct {
+	Permission *string `json:"permission"`
+}
+
+func (h *Handler) updateShare(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	var body sharePermissionBody
+	if err := decodeJSON(r, &body); err != nil {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+	var permission string
+	if body.Permission != nil {
+		permission = *body.Permission
+	}
+	share, err := h.svc.UpdateSharePermission(r.Context(), user.ID, r.PathValue("id"), r.PathValue("userId"), Permission(permission))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, share)
+}
+
+func (h *Handler) revokeShare(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	if err := h.svc.RevokeShare(r.Context(), user.ID, r.PathValue("id"), r.PathValue("userId")); err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- account types ---------------------------------------------------

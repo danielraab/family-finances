@@ -234,7 +234,9 @@
       "closingDateInvalid": "Das Schließungsdatum darf nicht vor dem Eröffnungsdatum liegen.",
       "create": "Konto erstellen",
       "save": "Änderungen speichern",
-      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut."
+      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut.",
+      "typeLockedValue": "Vom Kontoinhaber verwaltet",
+      "typeLockedHint": "Nur der echte Kontoinhaber kann den Kontotyp ändern."
     },
     "new": {
       "title": "Neues Konto"
@@ -268,6 +270,41 @@
         "deleteBody": "Dies entfernt es aus deiner Kontenliste. Dies kann hier nicht rückgängig gemacht werden.",
         "cancel": "Abbrechen",
         "confirmAction": "Bestätigen"
+      }
+    },
+    "share": "Teilen",
+    "shared": {
+      "badgeTitle": "Geteilt von {{owner}}"
+    },
+    "sharing": {
+      "title": "„{{account}}“ teilen",
+      "subtitle": "Alle hier aufgeführten Personen sehen die Buchungen und den Kontostand. Was sie sonst noch dürfen, hängt von ihrer Berechtigung ab.",
+      "realOwner": "Inhaber",
+      "unknownUser": "Unbekannter Benutzer",
+      "grantedBy": "Hinzugefügt von {{name}} am {{date}}",
+      "leave": "Verlassen",
+      "revoke": "Entziehen",
+      "noShares": "Noch mit niemandem geteilt.",
+      "inviteTitle": "Mit jemandem teilen",
+      "email": "E-Mail",
+      "permissionLabel": "Berechtigung",
+      "inviteSubmit": "Teilen",
+      "inviteError": "Konto konnte nicht geteilt werden — bitte Angaben prüfen und erneut versuchen.",
+      "unmatched": "Für {{email}} ist kein Konto registriert.",
+      "appInviteSent": "Einladung gesendet.",
+      "sendAppInvite": "Einladung senden",
+      "inviteUnavailable": "Einladungen sind auf dieser Instanz derzeit nicht verfügbar.",
+      "permission": {
+        "view": "Nur ansehen",
+        "append": "Hinzufügen",
+        "entry_admin": "Buchungsverwaltung",
+        "owner": "Inhaber"
+      },
+      "confirm": {
+        "revokeTitle": "Diese Freigabe entziehen?",
+        "revokeBody": "{{name}} verliert sofort jeden Zugriff auf dieses Konto, auch auf selbst erstellte Buchungen.",
+        "leaveTitle": "Dieses geteilte Konto verlassen?",
+        "leaveBody": "Du verlierst sofort jeden Zugriff auf dieses Konto, auch auf von dir erstellte Buchungen."
       }
     }
   },
@@ -342,7 +379,8 @@
       "confirmAccountChangeTitle": "Diese Buchung verschieben?",
       "confirmAccountChangeBody": "Diese Buchung wird nach „{{account}}“ verschoben.",
       "confirmAccountChangeConfirm": "Buchung verschieben"
-    }
+    },
+    "createdBy": "Erfasst von {{name}}"
   },
   "categories": {
     "title": "Kategorien",

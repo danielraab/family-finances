@@ -47,11 +47,11 @@ func TestPGAccountCreateGetList(t *testing.T) {
 		t.Fatalf("acc = %+v", acc)
 	}
 
-	got, err := store.Get(ctx, owner.ID, acc.ID)
+	got, err := store.Get(ctx, acc.ID, owner.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ID != acc.ID {
+	if got.ID != acc.ID || got.Permission != account.PermissionOwner {
 		t.Fatalf("Get = %+v", got)
 	}
 
@@ -64,7 +64,7 @@ func TestPGAccountCreateGetList(t *testing.T) {
 	}
 }
 
-func TestPGAccountCrossOwnerNotFound(t *testing.T) {
+func TestPGAccountCrossOwnerHasNoPermission(t *testing.T) {
 	store, authStore := newAccountStore(t)
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "owner2@example.com")
@@ -79,8 +79,16 @@ func TestPGAccountCrossOwnerNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := store.Get(ctx, other.ID, acc.ID); !errors.Is(err, account.ErrNotFound) {
-		t.Fatalf("err = %v, want ErrNotFound", err)
+	// Store.Get itself never returns ErrNotFound just because the caller
+	// lacks permission — it always returns the row, with Permission empty;
+	// account.Service.Get is what translates that into ErrNotFound (see
+	// design.md).
+	got, err := store.Get(ctx, acc.ID, other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Permission != "" {
+		t.Fatalf("Permission = %q, want empty", got.Permission)
 	}
 }
 
@@ -113,7 +121,7 @@ func TestPGAccountUpdateClosingDateClear(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := store.Update(ctx, owner.ID, acc.ID, account.Update{
+	got, err := store.Update(ctx, acc.ID, account.Update{
 		ClosingDate: account.OptionalDate{Set: true, Value: nil},
 	})
 	if err != nil {
@@ -137,7 +145,7 @@ func TestPGAccountSoftDeleteExcludesFromListing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SoftDelete(ctx, owner.ID, acc.ID); err != nil {
+	if err := store.SoftDelete(ctx, acc.ID); err != nil {
 		t.Fatal(err)
 	}
 	list, err := store.List(ctx, owner.ID)
@@ -163,13 +171,13 @@ func TestPGAccountDisableEnable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := store.SetDisabled(ctx, owner.ID, acc.ID, true)
+	got, err := store.SetDisabled(ctx, acc.ID, true)
 	if err != nil || !got.Disabled {
 		t.Fatalf("SetDisabled true: got=%+v err=%v", got, err)
 	}
-	ownerID, currency, disabled, err := store.Owner(ctx, acc.ID)
-	if err != nil || ownerID != owner.ID || currency != "EUR" || !disabled {
-		t.Fatalf("Owner: %q %q %v %v", ownerID, currency, disabled, err)
+	access, err := store.Access(ctx, acc.ID, owner.ID)
+	if err != nil || access.Currency != "EUR" || !access.Disabled || access.Permission != account.PermissionOwner {
+		t.Fatalf("Access: %+v %v", access, err)
 	}
 }
 

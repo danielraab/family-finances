@@ -34,12 +34,14 @@ func NewService(store Store, accounts AccountLookup, categories CategoryLookup, 
 	return s
 }
 
-// checkAccount confirms ownerID owns accountID and that it is not disabled —
-// the rule Create applies to the account an entry is created against, and
-// Update applies identically to a new account_id an entry is being moved to.
-func (s *Service) checkAccount(ctx context.Context, ownerID, accountID string) error {
-	accOwner, _, disabled, err := s.accounts.Owner(ctx, accountID)
-	if err != nil || accOwner != ownerID {
+// checkAccount confirms callerID holds at least append permission on
+// accountID (real ownership or a share, per account-sharing) and that it
+// is not disabled — the rule Create applies to the account an entry is
+// created against, and Update applies identically to a new account_id an
+// entry is being moved to.
+func (s *Service) checkAccount(ctx context.Context, callerID, accountID string) error {
+	_, disabled, permission, err := s.accounts.Access(ctx, accountID, callerID)
+	if err != nil || !Permission(permission).AtLeast(PermissionAppend) {
 		return ErrInvalidValue
 	}
 	if disabled {
@@ -48,20 +50,53 @@ func (s *Service) checkAccount(ctx context.Context, ownerID, accountID string) e
 	return nil
 }
 
-// Create validates in, confirms ownerID owns the target account and that it
-// is not disabled, confirms any category/tags are usable, and creates the
-// entry.
-func (s *Service) Create(ctx context.Context, ownerID string, in New) (Entry, error) {
+// authorizeEntryWrite fetches id and resolves callerID's write access to
+// it: ErrNotFound when callerID has no permission at all on its parent
+// account (matching the "behaves as not found" convention every other
+// no-access case in this codebase uses); ErrForbidden when callerID has
+// some permission but not enough for *this* entry — below append, or
+// exactly append on an entry a different user created. See design.md's
+// "editing or deleting an entry is gated by permission tier and, for
+// append, by who created it" decision.
+func (s *Service) authorizeEntryWrite(ctx context.Context, callerID, id string) (Entry, error) {
+	current, err := s.store.Get(ctx, id)
+	if err != nil {
+		return Entry{}, err
+	}
+	_, _, permStr, err := s.accounts.Access(ctx, current.AccountID, callerID)
+	if err != nil {
+		return Entry{}, err
+	}
+	permission := Permission(permStr)
+	if !permission.AtLeast(PermissionView) {
+		return Entry{}, ErrNotFound
+	}
+	if !permission.AtLeast(PermissionAppend) {
+		return Entry{}, ErrForbidden
+	}
+	if permission == PermissionAppend && current.CreatedBy != callerID {
+		return Entry{}, ErrForbidden
+	}
+	return current, nil
+}
+
+// Create validates in, confirms callerID holds at least append permission
+// on the target account and that it is not disabled, confirms any
+// category/tags belong to callerID (the entry's creator — see design.md on
+// why category/tag validation stays creator-scoped rather than
+// account-owner-scoped now that they can differ), and creates the entry
+// with CreatedBy set to callerID.
+func (s *Service) Create(ctx context.Context, callerID string, in New) (Entry, error) {
 	if err := validateNew(in); err != nil {
 		return Entry{}, err
 	}
 
-	if err := s.checkAccount(ctx, ownerID, in.AccountID); err != nil {
+	if err := s.checkAccount(ctx, callerID, in.AccountID); err != nil {
 		return Entry{}, err
 	}
 
 	if in.CategoryID != nil {
-		ok, err := s.categories.Usable(ctx, ownerID, *in.CategoryID)
+		ok, err := s.categories.Usable(ctx, callerID, *in.CategoryID)
 		if err != nil {
 			return Entry{}, err
 		}
@@ -72,7 +107,7 @@ func (s *Service) Create(ctx context.Context, ownerID string, in New) (Entry, er
 	if len(in.TagIDs) > 0 {
 		// Every tag id is new at creation, so Usable (owned + not disabled)
 		// applies to the whole set.
-		ok, err := s.tags.Usable(ctx, ownerID, in.TagIDs)
+		ok, err := s.tags.Usable(ctx, callerID, in.TagIDs)
 		if err != nil {
 			return Entry{}, err
 		}
@@ -81,25 +116,39 @@ func (s *Service) Create(ctx context.Context, ownerID string, in New) (Entry, er
 		}
 	}
 
-	return s.store.Create(ctx, ownerID, in)
+	return s.store.Create(ctx, callerID, in)
 }
 
-// Get returns ownerID's entry with this id.
-func (s *Service) Get(ctx context.Context, ownerID, id string) (Entry, error) {
-	return s.store.Get(ctx, ownerID, id)
+// Get returns id as seen by callerID: ErrNotFound when they hold no
+// permission on its parent account at all.
+func (s *Service) Get(ctx context.Context, callerID, id string) (Entry, error) {
+	e, err := s.store.Get(ctx, id)
+	if err != nil {
+		return Entry{}, err
+	}
+	_, _, permStr, err := s.accounts.Access(ctx, e.AccountID, callerID)
+	if err != nil {
+		return Entry{}, err
+	}
+	if !Permission(permStr).AtLeast(PermissionView) {
+		return Entry{}, ErrNotFound
+	}
+	return e, nil
 }
 
-// Update validates and applies a partial change to ownerID's entry.
-// AccountID and Kind cannot be changed — there is no field for them on
-// Update at all (see its doc comment).
-func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (Entry, error) {
-	current, err := s.store.Get(ctx, ownerID, id)
+// Update validates and applies a partial change to id, authorized for
+// callerID per authorizeEntryWrite. AccountID and Kind cannot be changed —
+// there is no field for Kind on Update at all (see its doc comment); a
+// non-nil AccountID moves the entry, subject to the same append+/disabled
+// checks Create applies to its target.
+func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (Entry, error) {
+	current, err := s.authorizeEntryWrite(ctx, callerID, id)
 	if err != nil {
 		return Entry{}, err
 	}
 
 	if upd.AccountID != nil {
-		if err := s.checkAccount(ctx, ownerID, *upd.AccountID); err != nil {
+		if err := s.checkAccount(ctx, callerID, *upd.AccountID); err != nil {
 			return Entry{}, err
 		}
 	}
@@ -128,9 +177,11 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (E
 	}
 	// Only a category explicitly supplied in this request is validated —
 	// an update that doesn't touch category_id never re-checks the
-	// entry's existing (possibly since-disabled) category.
+	// entry's existing (possibly since-disabled) category. Validated
+	// against callerID — the person making this edit, not the entry's
+	// original creator — matching Create's creator-scoped rule.
 	if upd.CategoryID.Set && upd.CategoryID.Value != nil {
-		ok, err := s.categories.Usable(ctx, ownerID, *upd.CategoryID.Value)
+		ok, err := s.categories.Usable(ctx, callerID, *upd.CategoryID.Value)
 		if err != nil {
 			return Entry{}, err
 		}
@@ -140,7 +191,7 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (E
 	}
 
 	if upd.TagIDs != nil && len(*upd.TagIDs) > 0 {
-		ok, err := s.tags.OwnedBy(ctx, ownerID, *upd.TagIDs)
+		ok, err := s.tags.OwnedBy(ctx, callerID, *upd.TagIDs)
 		if err != nil {
 			return Entry{}, err
 		}
@@ -152,7 +203,7 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (E
 		// caller is actually adding need to pass the not-disabled check.
 		newTagIDs := diffStrings(*upd.TagIDs, current.TagIDs)
 		if len(newTagIDs) > 0 {
-			ok, err := s.tags.Usable(ctx, ownerID, newTagIDs)
+			ok, err := s.tags.Usable(ctx, callerID, newTagIDs)
 			if err != nil {
 				return Entry{}, err
 			}
@@ -162,7 +213,7 @@ func (s *Service) Update(ctx context.Context, ownerID, id string, upd Update) (E
 		}
 	}
 
-	return s.store.Update(ctx, ownerID, id, upd)
+	return s.store.Update(ctx, id, upd)
 }
 
 // diffStrings returns the elements of next not present in current.
@@ -180,23 +231,26 @@ func diffStrings(next, current []string) []string {
 	return out
 }
 
-// Delete soft-deletes ownerID's entry.
-func (s *Service) Delete(ctx context.Context, ownerID, id string) error {
-	return s.store.SoftDelete(ctx, ownerID, id)
+// Delete soft-deletes id, authorized for callerID per authorizeEntryWrite.
+func (s *Service) Delete(ctx context.Context, callerID, id string) error {
+	if _, err := s.authorizeEntryWrite(ctx, callerID, id); err != nil {
+		return err
+	}
+	return s.store.SoftDelete(ctx, id)
 }
 
 // resolveFilter applies the account-visibility and category resolution
-// shared by List and Sum: narrows f.AccountIDs to ownerID's own visible
-// accounts (intersected with any caller-supplied AccountIDs), and — when
-// f.CategoryID is set — resolves f.CategoryIDs to either the category's
-// full subtree (the default) or the category alone (CategoryMode:
-// ModeExact).
-func (s *Service) resolveFilter(ctx context.Context, ownerID string, f Filter) (Filter, error) {
+// shared by List and Sum: narrows f.AccountIDs to callerID's own visible
+// accounts (owned or shared, per account-sharing — intersected with any
+// caller-supplied AccountIDs), and — when f.CategoryID is set — resolves
+// f.CategoryIDs to either the category's full subtree (the default) or the
+// category alone (CategoryMode: ModeExact).
+func (s *Service) resolveFilter(ctx context.Context, callerID string, f Filter) (Filter, error) {
 	if !f.CategoryMode.valid() {
 		return Filter{}, ErrInvalidValue
 	}
 
-	visible, err := s.accounts.VisibleIDs(ctx, ownerID)
+	visible, err := s.accounts.VisibleIDs(ctx, callerID)
 	if err != nil {
 		return Filter{}, err
 	}
@@ -210,7 +264,7 @@ func (s *Service) resolveFilter(ctx context.Context, ownerID string, f Filter) (
 		if f.CategoryMode == ModeExact {
 			f.CategoryIDs = []string{*f.CategoryID}
 		} else {
-			ids, err := s.categories.Subtree(ctx, ownerID, *f.CategoryID)
+			ids, err := s.categories.Subtree(ctx, callerID, *f.CategoryID)
 			if err != nil {
 				return Filter{}, err
 			}
@@ -221,10 +275,10 @@ func (s *Service) resolveFilter(ctx context.Context, ownerID string, f Filter) (
 	return f, nil
 }
 
-// List resolves f's caller-supplied AccountIDs/CategoryID against the
-// caller's visible accounts and the category tree, applies defaults for
-// Sort/Dir/Limit, and returns a page of ownerID's matching entries.
-func (s *Service) List(ctx context.Context, ownerID string, f Filter) ([]Entry, *Cursor, error) {
+// List resolves f's caller-supplied AccountIDs/CategoryID against
+// callerID's visible accounts and category tree, applies defaults for
+// Sort/Dir/Limit, and returns a page of matching entries.
+func (s *Service) List(ctx context.Context, callerID string, f Filter) ([]Entry, *Cursor, error) {
 	if f.Sort == "" {
 		f.Sort = SortBookingTimestamp
 	} else if !f.Sort.valid() {
@@ -242,34 +296,34 @@ func (s *Service) List(ctx context.Context, ownerID string, f Filter) ([]Entry, 
 		return nil, nil, ErrInvalidValue
 	}
 
-	f, err := s.resolveFilter(ctx, ownerID, f)
+	f, err := s.resolveFilter(ctx, callerID, f)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return s.store.List(ctx, ownerID, f)
+	return s.store.List(ctx, f)
 }
 
 // Sum resolves f the same way List does (account visibility, category
 // exact/subtree resolution), then returns the matching kind: transaction
 // entries' amounts summed per account currency — Store.Sum forces the
 // transaction-only restriction regardless of f.Kind. Currencies are
-// resolved per matching account via AccountLookup.Owner, since Store has
+// resolved per matching account via AccountLookup.Access, since Store has
 // no notion of an account's currency.
-func (s *Service) Sum(ctx context.Context, ownerID string, f Filter) (Summary, error) {
-	f, err := s.resolveFilter(ctx, ownerID, f)
+func (s *Service) Sum(ctx context.Context, callerID string, f Filter) (Summary, error) {
+	f, err := s.resolveFilter(ctx, callerID, f)
 	if err != nil {
 		return Summary{}, err
 	}
 
-	perAccount, count, err := s.store.Sum(ctx, ownerID, f)
+	perAccount, count, err := s.store.Sum(ctx, f)
 	if err != nil {
 		return Summary{}, err
 	}
 
 	totals := make(map[string]int64, len(perAccount))
 	for accountID, amount := range perAccount {
-		_, currency, _, err := s.accounts.Owner(ctx, accountID)
+		currency, _, _, err := s.accounts.Access(ctx, accountID, callerID)
 		if err != nil {
 			return Summary{}, err
 		}
@@ -292,12 +346,12 @@ func (s *Service) Sum(ctx context.Context, ownerID string, f Filter) (Summary, e
 
 // FlowSummary resolves f's caller-supplied AccountIDs the same way List/Sum
 // do, resolves the caller's timezone (default UTC when no TimezoneLookup is
-// wired, the lookup fails, or it reports empty), buckets ownerID's matching
-// entries via Store.FlowSummary, and fills in every period in the
-// requested year (or month, for FlowUnitDay) that had no matching entries
-// at all — a bucket is never omitted for being empty. Each row's account is
-// resolved to its currency the same way Sum resolves its per-account totals.
-func (s *Service) FlowSummary(ctx context.Context, ownerID string, f FlowFilter) ([]FlowBucket, error) {
+// wired, the lookup fails, or it reports empty), buckets matching entries
+// via Store.FlowSummary, and fills in every period in the requested year
+// (or month, for FlowUnitDay) that had no matching entries at all — a
+// bucket is never omitted for being empty. Each row's account is resolved
+// to its currency the same way Sum resolves its per-account totals.
+func (s *Service) FlowSummary(ctx context.Context, callerID string, f FlowFilter) ([]FlowBucket, error) {
 	if !f.Unit.valid() {
 		return nil, ErrInvalidValue
 	}
@@ -312,7 +366,7 @@ func (s *Service) FlowSummary(ctx context.Context, ownerID string, f FlowFilter)
 		return nil, ErrInvalidValue
 	}
 
-	visible, err := s.accounts.VisibleIDs(ctx, ownerID)
+	visible, err := s.accounts.VisibleIDs(ctx, callerID)
 	if err != nil {
 		return nil, err
 	}
@@ -324,12 +378,12 @@ func (s *Service) FlowSummary(ctx context.Context, ownerID string, f FlowFilter)
 
 	f.Timezone = "UTC"
 	if s.timezones != nil {
-		if tz, err := s.timezones.Timezone(ctx, ownerID); err == nil && tz != "" {
+		if tz, err := s.timezones.Timezone(ctx, callerID); err == nil && tz != "" {
 			f.Timezone = tz
 		}
 	}
 
-	rows, err := s.store.FlowSummary(ctx, ownerID, f)
+	rows, err := s.store.FlowSummary(ctx, f)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +394,7 @@ func (s *Service) FlowSummary(ctx context.Context, ownerID string, f FlowFilter)
 	for _, row := range rows {
 		currency, ok := currencyByAccount[row.AccountID]
 		if !ok {
-			_, cur, _, err := s.accounts.Owner(ctx, row.AccountID)
+			cur, _, _, err := s.accounts.Access(ctx, row.AccountID, callerID)
 			if err != nil {
 				return nil, err
 			}
@@ -409,20 +463,20 @@ func flowPeriods(f FlowFilter) []string {
 	return periods
 }
 
-// Balance confirms ownerID owns accountID, then returns its live balance as
-// of asOf.
-func (s *Service) Balance(ctx context.Context, ownerID, accountID string, asOf time.Time) (int64, error) {
-	owner, _, _, err := s.accounts.Owner(ctx, accountID)
+// Balance confirms callerID holds at least view permission on accountID,
+// then returns its live balance as of asOf.
+func (s *Service) Balance(ctx context.Context, callerID, accountID string, asOf time.Time) (int64, error) {
+	_, _, permission, err := s.accounts.Access(ctx, accountID, callerID)
 	if err != nil {
 		return 0, err
 	}
-	if owner != ownerID {
+	if !Permission(permission).AtLeast(PermissionView) {
 		return 0, ErrNotFound
 	}
 	return s.store.Balance(ctx, accountID, asOf)
 }
 
-// BalanceSeries returns ownerID's running account balance sampled at every
+// BalanceSeries returns callerID's running account balance sampled at every
 // local midnight of f.Year/f.Month — one point at 00:00 on each calendar
 // day of the month, plus a closing point at 00:00 on the first day of the
 // following month — in the caller's resolved timezone (default UTC). Each
@@ -432,7 +486,7 @@ func (s *Service) Balance(ctx context.Context, ownerID, accountID string, asOf t
 // that opens it) — the same anchor-aware computation
 // GET /api/accounts/{id}/balance uses. Every currency present in the
 // resolved accounts appears on every point, including with a 0 amount.
-func (s *Service) BalanceSeries(ctx context.Context, ownerID string, f BalanceFilter) ([]BalancePoint, error) {
+func (s *Service) BalanceSeries(ctx context.Context, callerID string, f BalanceFilter) ([]BalancePoint, error) {
 	if f.Unit != FlowUnitDay {
 		return nil, ErrInvalidValue
 	}
@@ -443,7 +497,7 @@ func (s *Service) BalanceSeries(ctx context.Context, ownerID string, f BalanceFi
 		return nil, ErrInvalidValue
 	}
 
-	visible, err := s.accounts.VisibleIDs(ctx, ownerID)
+	visible, err := s.accounts.VisibleIDs(ctx, callerID)
 	if err != nil {
 		return nil, err
 	}
@@ -455,7 +509,7 @@ func (s *Service) BalanceSeries(ctx context.Context, ownerID string, f BalanceFi
 
 	f.Timezone = "UTC"
 	if s.timezones != nil {
-		if tz, err := s.timezones.Timezone(ctx, ownerID); err == nil && tz != "" {
+		if tz, err := s.timezones.Timezone(ctx, callerID); err == nil && tz != "" {
 			f.Timezone = tz
 		}
 	}
@@ -469,7 +523,7 @@ func (s *Service) BalanceSeries(ctx context.Context, ownerID string, f BalanceFi
 	currencyByAccount := make(map[string]string, len(f.AccountIDs))
 	currencySet := map[string]struct{}{}
 	for _, id := range f.AccountIDs {
-		_, cur, _, err := s.accounts.Owner(ctx, id)
+		cur, _, _, err := s.accounts.Access(ctx, id, callerID)
 		if err != nil {
 			return nil, err
 		}

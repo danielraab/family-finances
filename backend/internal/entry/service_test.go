@@ -14,10 +14,17 @@ type stubAccounts struct {
 	owner    map[string]string
 	currency map[string]string
 	disabled map[string]bool
+	// shares maps accountID -> userID -> permission, for tests exercising
+	// account-sharing tiers without depending on the real internal/account
+	// package.
+	shares map[string]map[string]string
 }
 
 func newStubAccounts() *stubAccounts {
-	return &stubAccounts{owner: map[string]string{}, currency: map[string]string{}, disabled: map[string]bool{}}
+	return &stubAccounts{
+		owner: map[string]string{}, currency: map[string]string{}, disabled: map[string]bool{},
+		shares: map[string]map[string]string{},
+	}
 }
 
 func (s *stubAccounts) add(id, ownerID, currency string) {
@@ -25,18 +32,37 @@ func (s *stubAccounts) add(id, ownerID, currency string) {
 	s.currency[id] = currency
 }
 
-func (s *stubAccounts) Owner(_ context.Context, accountID string) (string, string, bool, error) {
-	owner, ok := s.owner[accountID]
-	if !ok {
-		return "", "", false, errNotFound
+// share grants userID permission on accountID — mirrors account-sharing's
+// account_shares, entirely independent of the real owner.
+func (s *stubAccounts) share(accountID, userID, permission string) {
+	if s.shares[accountID] == nil {
+		s.shares[accountID] = map[string]string{}
 	}
-	return owner, s.currency[accountID], s.disabled[accountID], nil
+	s.shares[accountID][userID] = permission
 }
 
-func (s *stubAccounts) VisibleIDs(_ context.Context, ownerID string) ([]string, error) {
+func (s *stubAccounts) Access(_ context.Context, accountID, callerID string) (string, bool, string, error) {
+	owner, ok := s.owner[accountID]
+	if !ok {
+		return "", false, "", errNotFound
+	}
+	permission := ""
+	if owner == callerID {
+		permission = "owner"
+	} else if p, ok := s.shares[accountID][callerID]; ok {
+		permission = p
+	}
+	return s.currency[accountID], s.disabled[accountID], permission, nil
+}
+
+func (s *stubAccounts) VisibleIDs(_ context.Context, callerID string) ([]string, error) {
 	var out []string
 	for id, owner := range s.owner {
-		if owner == ownerID {
+		if owner == callerID {
+			out = append(out, id)
+			continue
+		}
+		if _, ok := s.shares[id][callerID]; ok {
 			out = append(out, id)
 		}
 	}

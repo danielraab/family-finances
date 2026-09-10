@@ -27,9 +27,10 @@ production they ship as a single Docker image — see Architecture below.
 Start PostgreSQL, then the backend:
 
 ```bash
-docker compose up -d db  # PostgreSQL on localhost:5432
+docker compose --profile dev up -d # PostgreSQL on localhost:5432, adminer on 8081 mailpit on 8025
 cd backend
-export DATABASE_URL=postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
+#export DATABASE_URL=postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
+set -a && source .env && set +a
 go run .                 # http://localhost:8080
 ```
 

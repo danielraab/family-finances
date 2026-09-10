@@ -89,6 +89,23 @@ func (m *Mailer) SendInvite(ctx context.Context, addr, link, invitedByEmail stri
 	return m.send(ctx, addr, "You're invited to Family Finances", text, html)
 }
 
+// SendAccountShare emails addr that accountTitle has been shared with them
+// by granterName at the given permission tier, with a link into the
+// application. Satisfies account.Mailer.
+func (m *Mailer) SendAccountShare(ctx context.Context, addr, accountTitle, granterName, permission, link string) error {
+	by := granterName
+	if by == "" {
+		by = "a member"
+	}
+	text := by + ` shared the account "` + accountTitle + `" with you (` + permission + ` access). Open it here:` +
+		"\n\n" + link
+	html := paragraphs(
+		htmlEscape(by)+` shared the account "`+htmlEscape(accountTitle)+`" with you (`+htmlEscape(permission)+` access). Open it here:`,
+		`<a href="`+htmlEscape(link)+`">`+htmlEscape(link)+`</a>`,
+	)
+	return m.send(ctx, addr, "An account was shared with you on Family Finances", text, html)
+}
+
 // send composes the MIME message and delivers it.
 func (m *Mailer) send(ctx context.Context, to, subject, textBody, htmlBody string) error {
 	msg, err := m.compose(to, subject, textBody, htmlBody)

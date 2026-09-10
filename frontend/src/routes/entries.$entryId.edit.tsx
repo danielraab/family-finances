@@ -9,6 +9,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
+import { useAuth } from "../components/AuthProvider";
 import { SignedAmountInput } from "../components/SignedAmountInput";
 import { TagInput } from "../components/TagInput";
 import { amountToInput, inputToAmount } from "../lib/amount";
@@ -36,6 +37,7 @@ const inputClass =
 function EditEntry() {
   const { entryId } = Route.useParams();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [entry, setEntry] = useState<Entry | null | undefined>(undefined);
@@ -240,217 +242,237 @@ function EditEntry() {
     setAccountUnlocked(false);
   }
 
+  // entry_admin/owner may edit any entry on the account; append may edit
+  // only what they themselves created; view (or append on someone else's
+  // entry) is read-only — see account-entries' design.md.
+  const canEdit =
+    account !== null &&
+    (account.permission === "entry_admin" ||
+      account.permission === "owner" ||
+      (account.permission === "append" && entry.created_by === user?.id));
+
   return (
     <section className="mx-auto flex w-full max-w-xl flex-col gap-8 px-6 py-12 sm:px-10">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        {t("entries.edit.title")}
-      </h1>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t("entries.edit.title")}
+        </h1>
+        {entry.created_by !== user?.id && entry.created_by_name && (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {t("entries.createdBy", { name: entry.created_by_name })}
+          </p>
+        )}
+      </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5 text-sm font-medium">
-          {t("entries.form.account")}
-          {accountUnlocked ? (
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedAccountId}
-                onChange={(e) => setSelectedAccountId(e.target.value)}
-                className={`${inputClass} flex-1`}
-              >
-                {accountOptions.map((a) => (
-                  <option
-                    key={a.id}
-                    value={a.id}
-                    disabled={a.disabled && a.id === selectedAccountId}
-                  >
-                    {a.title}
-                    {a.disabled && a.id === selectedAccountId
-                      ? ` (${t("entries.form.accountDisabledOption")})`
-                      : ""}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={cancelAccountChange}
-                aria-label={t("entries.form.cancelAccountChange")}
-                className="rounded-md px-2 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <input
-                value={account?.title ?? entry.account_id}
-                disabled
-                className={`${inputClass} flex-1 opacity-60`}
-              />
-              <button
-                type="button"
-                onClick={() => setAccountUnlocked(true)}
-                aria-label={t("entries.form.changeAccount")}
-                className="rounded-md px-2 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-              >
-                ✎
-              </button>
-            </div>
-          )}
-          {currencyMismatch && selectedAccount && account && (
-            <span className="text-xs font-normal text-amber-600 dark:text-amber-400">
-              {t("entries.form.accountCurrencyWarning", {
-                currency: selectedAccount.currency,
-                originalCurrency: account.currency,
-              })}
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1.5 text-sm font-medium">
-          {t("entries.form.kind")}
-          <input
-            value={
-              entry.kind === "transaction"
-                ? t("entries.kind.transaction")
-                : t("entries.kind.balanceAdjustment")
-            }
-            disabled
-            className={`${inputClass} opacity-60`}
-          />
-        </div>
-
-        {entry.kind === "transaction" ? (
+        <fieldset disabled={!canEdit} className="contents">
           <div className="flex flex-col gap-1.5 text-sm font-medium">
-            {t("entries.form.amount", { currency: account?.currency ?? "" })}
-            <SignedAmountInput
-              magnitude={transactionAmount}
-              onMagnitudeChange={setTransactionAmount}
-              negative={transactionNegative}
-              onNegativeChange={setTransactionNegative}
-              currency={account?.currency ?? ""}
-              invalid={invalidField === "amount"}
-            />
-            {invalidField === "amount" && (
-              <span className="text-xs font-normal text-red-600 dark:text-red-400">
-                {inputToAmount(transactionAmount) === 0
-                  ? t("entries.form.amountZero")
-                  : t("entries.form.amountInvalid")}
+            {t("entries.form.account")}
+            {accountUnlocked ? (
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className={`${inputClass} flex-1`}
+                >
+                  {accountOptions.map((a) => (
+                    <option
+                      key={a.id}
+                      value={a.id}
+                      disabled={a.disabled && a.id === selectedAccountId}
+                    >
+                      {a.title}
+                      {a.disabled && a.id === selectedAccountId
+                        ? ` (${t("entries.form.accountDisabledOption")})`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={cancelAccountChange}
+                  aria-label={t("entries.form.cancelAccountChange")}
+                  className="rounded-md px-2 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  value={account?.title ?? entry.account_id}
+                  disabled
+                  className={`${inputClass} flex-1 opacity-60`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setAccountUnlocked(true)}
+                  aria-label={t("entries.form.changeAccount")}
+                  className="rounded-md px-2 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+                >
+                  ✎
+                </button>
+              </div>
+            )}
+            {currencyMismatch && selectedAccount && account && (
+              <span className="text-xs font-normal text-amber-600 dark:text-amber-400">
+                {t("entries.form.accountCurrencyWarning", {
+                  currency: selectedAccount.currency,
+                  originalCurrency: account.currency,
+                })}
               </span>
             )}
           </div>
-        ) : (
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            {t("entries.form.amount", { currency: account?.currency ?? "" })}
+
+          <div className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.kind")}
             <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              inputMode="decimal"
+              value={
+                entry.kind === "transaction"
+                  ? t("entries.kind.transaction")
+                  : t("entries.kind.balanceAdjustment")
+              }
+              disabled
+              className={`${inputClass} opacity-60`}
+            />
+          </div>
+
+          {entry.kind === "transaction" ? (
+            <div className="flex flex-col gap-1.5 text-sm font-medium">
+              {t("entries.form.amount", { currency: account?.currency ?? "" })}
+              <SignedAmountInput
+                magnitude={transactionAmount}
+                onMagnitudeChange={setTransactionAmount}
+                negative={transactionNegative}
+                onNegativeChange={setTransactionNegative}
+                currency={account?.currency ?? ""}
+                invalid={invalidField === "amount"}
+              />
+              {invalidField === "amount" && (
+                <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                  {inputToAmount(transactionAmount) === 0
+                    ? t("entries.form.amountZero")
+                    : t("entries.form.amountInvalid")}
+                </span>
+              )}
+            </div>
+          ) : (
+            <label className="flex flex-col gap-1.5 text-sm font-medium">
+              {t("entries.form.amount", { currency: account?.currency ?? "" })}
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                inputMode="decimal"
+                className={inputClass}
+                required
+              />
+              {invalidField === "amount" && (
+                <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                  {t("entries.form.amountInvalid")}
+                </span>
+              )}
+            </label>
+          )}
+
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.bookingTimestamp")}
+            <input
+              type="datetime-local"
+              value={bookingTimestamp}
+              onChange={(e) => setBookingTimestamp(e.target.value)}
               className={inputClass}
               required
             />
-            {invalidField === "amount" && (
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.title")}
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className={inputClass}
+              required
+            />
+            {invalidField === "title" && (
               <span className="text-xs font-normal text-red-600 dark:text-red-400">
-                {t("entries.form.amountInvalid")}
+                {t("entries.form.titleRequired")}
               </span>
             )}
           </label>
-        )}
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          {t("entries.form.bookingTimestamp")}
-          <input
-            type="datetime-local"
-            value={bookingTimestamp}
-            onChange={(e) => setBookingTimestamp(e.target.value)}
-            className={inputClass}
-            required
-          />
-        </label>
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.description")}
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className={`${inputClass} min-h-16`}
+            />
+          </label>
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          {t("entries.form.title")}
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className={inputClass}
-            required
-          />
-          {invalidField === "title" && (
-            <span className="text-xs font-normal text-red-600 dark:text-red-400">
-              {t("entries.form.titleRequired")}
-            </span>
-          )}
-        </label>
-
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          {t("entries.form.description")}
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className={`${inputClass} min-h-16`}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1.5 text-sm font-medium">
-          {t("entries.form.category")}
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">
-              {entry.kind === "balance_adjustment"
-                ? t("entries.form.categoryNone")
-                : t("entries.form.categoryPlaceholder")}
-            </option>
-            {categoryOptions.map((c) => (
-              <option
-                key={c.id}
-                value={c.id}
-                disabled={currentCategory?.disabled && c.id === categoryId}
-              >
-                {c.label}
-                {currentCategory?.disabled && c.id === categoryId
-                  ? ` (${t("entries.form.categoryDisabledOption")})`
-                  : ""}
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.category")}
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">
+                {entry.kind === "balance_adjustment"
+                  ? t("entries.form.categoryNone")
+                  : t("entries.form.categoryPlaceholder")}
               </option>
-            ))}
-          </select>
-          {invalidField === "category_id" && (
-            <span className="text-xs font-normal text-red-600 dark:text-red-400">
-              {t("entries.form.categoryRequired")}
-            </span>
+              {categoryOptions.map((c) => (
+                <option
+                  key={c.id}
+                  value={c.id}
+                  disabled={currentCategory?.disabled && c.id === categoryId}
+                >
+                  {c.label}
+                  {currentCategory?.disabled && c.id === categoryId
+                    ? ` (${t("entries.form.categoryDisabledOption")})`
+                    : ""}
+                </option>
+              ))}
+            </select>
+            {invalidField === "category_id" && (
+              <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                {t("entries.form.categoryRequired")}
+              </span>
+            )}
+          </label>
+
+          <div className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.tags")}
+            <TagInput
+              value={tagNames}
+              onChange={setTagNames}
+              existingTags={tags.filter((tg) => !tg.disabled)}
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           )}
-        </label>
+        </fieldset>
 
-        <div className="flex flex-col gap-1.5 text-sm font-medium">
-          {t("entries.form.tags")}
-          <TagInput
-            value={tagNames}
-            onChange={setTagNames}
-            existingTags={tags.filter((tg) => !tg.disabled)}
-          />
-        </div>
-
-        {error && (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        {canEdit && (
+          <div className="flex items-center justify-between">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {t("entries.form.save")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
+            >
+              {t("entries.edit.delete")}
+            </button>
+          </div>
         )}
-
-        <div className="flex items-center justify-between">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            {t("entries.form.save")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmingDelete(true)}
-            className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
-          >
-            {t("entries.edit.delete")}
-          </button>
-        </div>
       </form>
 
       <Dialog

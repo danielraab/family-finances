@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
+import { useAuth } from "../components/AuthProvider";
 import {
   amountColorClass,
   formatAmount,
@@ -72,6 +73,7 @@ function EntriesListPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -362,6 +364,13 @@ function EntriesListPage() {
                   >
                     {entry.title}
                   </Link>
+                  {entry.created_by !== user?.id && entry.created_by_name && (
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                      {t("entries.createdBy", {
+                        name: entry.created_by_name,
+                      })}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
                   {(() => {

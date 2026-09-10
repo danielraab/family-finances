@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
+import { useAuth } from "../components/AuthProvider";
 import {
   LineChart,
   type LineChartSeries,
@@ -38,6 +39,7 @@ const BALANCE_DOT = "fill-[#2a78d6] dark:fill-[#3987e5]";
 function AccountDetails() {
   const { accountId } = Route.useParams();
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
   const [balance, setBalance] = useState<number | null>(null);
@@ -167,13 +169,24 @@ function AccountDetails() {
             </p>
           )}
         </div>
-        <Link
-          to="/accounts/$accountId/edit"
-          params={{ accountId }}
-          className="rounded-md border border-black/15 px-3 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]"
-        >
-          {t("accounts.details.edit")}
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            to="/accounts/$accountId/sharing"
+            params={{ accountId }}
+            className="rounded-md border border-black/15 px-3 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]"
+          >
+            {t("accounts.share")}
+          </Link>
+          {account.permission === "owner" && (
+            <Link
+              to="/accounts/$accountId/edit"
+              params={{ accountId }}
+              className="rounded-md border border-black/15 px-3 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]"
+            >
+              {t("accounts.details.edit")}
+            </Link>
+          )}
+        </div>
       </header>
 
       <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
@@ -329,13 +342,15 @@ function AccountDetails() {
             >
               {t("accounts.details.seeAll")}
             </Link>
-            <Link
-              to="/entries/new"
-              search={{ account_id: accountId }}
-              className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              {t("entries.create")}
-            </Link>
+            {account.permission !== "view" && (
+              <Link
+                to="/entries/new"
+                search={{ account_id: accountId }}
+                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {t("entries.create")}
+              </Link>
+            )}
           </div>
         </div>
 
@@ -358,6 +373,15 @@ function AccountDetails() {
                       {new Date(entry.booking_timestamp).toLocaleDateString(
                         i18n.resolvedLanguage,
                       )}
+                      {entry.created_by !== user?.id &&
+                        entry.created_by_name && (
+                          <>
+                            {" · "}
+                            {t("entries.createdBy", {
+                              name: entry.created_by_name,
+                            })}
+                          </>
+                        )}
                     </span>
                   </div>
                   <span className="flex flex-col items-end gap-0.5">

@@ -33,7 +33,7 @@ func NewEntryStore() *EntryStore {
 	return &EntryStore{rows: map[string]entryRow{}}
 }
 
-func (s *EntryStore) Create(_ context.Context, ownerID string, in entry.New) (entry.Entry, error) {
+func (s *EntryStore) Create(_ context.Context, createdBy string, in entry.New) (entry.Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seq++
@@ -51,7 +51,7 @@ func (s *EntryStore) Create(_ context.Context, ownerID string, in entry.New) (en
 	}
 	e := entry.Entry{
 		ID:               strconv.FormatInt(s.seq, 10),
-		OwnerID:          ownerID,
+		CreatedBy:        createdBy,
 		AccountID:        in.AccountID,
 		Kind:             in.Kind,
 		Amount:           amount,
@@ -69,21 +69,21 @@ func (s *EntryStore) Create(_ context.Context, ownerID string, in entry.New) (en
 	return s.rows[e.ID].e, nil
 }
 
-func (s *EntryStore) Get(_ context.Context, ownerID, id string) (entry.Entry, error) {
+func (s *EntryStore) Get(_ context.Context, id string) (entry.Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	row, ok := s.rows[id]
-	if !ok || row.e.OwnerID != ownerID || row.e.DeletedAt != nil {
+	if !ok || row.e.DeletedAt != nil {
 		return entry.Entry{}, entry.ErrNotFound
 	}
 	return row.e, nil
 }
 
-func (s *EntryStore) Update(_ context.Context, ownerID, id string, upd entry.Update) (entry.Entry, error) {
+func (s *EntryStore) Update(_ context.Context, id string, upd entry.Update) (entry.Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	row, ok := s.rows[id]
-	if !ok || row.e.OwnerID != ownerID || row.e.DeletedAt != nil {
+	if !ok || row.e.DeletedAt != nil {
 		return entry.Entry{}, entry.ErrNotFound
 	}
 	// Captured before the update so both the position this entry is
@@ -141,11 +141,11 @@ func (s *EntryStore) Update(_ context.Context, ownerID, id string, upd entry.Upd
 	return s.rows[id].e, nil
 }
 
-func (s *EntryStore) SoftDelete(_ context.Context, ownerID, id string) error {
+func (s *EntryStore) SoftDelete(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	row, ok := s.rows[id]
-	if !ok || row.e.OwnerID != ownerID || row.e.DeletedAt != nil {
+	if !ok || row.e.DeletedAt != nil {
 		return entry.ErrNotFound
 	}
 	now := time.Now().UTC()
@@ -253,11 +253,17 @@ func (s *EntryStore) recomputeFromLocked(accountID string, ts time.Time, seq int
 	s.setAmountLocked(accountID, a2ID, a2TS, a2Seq, a2Reading)
 }
 
-// matchingRows returns every non-deleted entry owned by ownerID that
-// matches f's account/category/tag/kind/date-range/query filters, in no
-// particular order. List and Sum both build on this so their filtering
-// logic can never diverge. Callers hold s.mu.
-func (s *EntryStore) matchingRows(ownerID string, f entry.Filter) []entryRow {
+// matchingRows returns every non-deleted entry matching f's
+// account/category/tag/kind/date-range/query filters, in no particular
+// order. Scoping to the caller happens entirely through f.AccountIDs —
+// already narrowed by Service to the caller's visible (owned or shared)
+// accounts before it reaches here, per design.md's "entry read/write
+// authorization moves from the Store layer into the Service layer"
+// decision — never by an owner/creator equality check, so a viewer sees
+// every entry on a visible account regardless of who created it. List and
+// Sum both build on this so their filtering logic can never diverge.
+// Callers hold s.mu.
+func (s *EntryStore) matchingRows(f entry.Filter) []entryRow {
 	if len(f.AccountIDs) == 0 {
 		return nil
 	}
@@ -270,7 +276,7 @@ func (s *EntryStore) matchingRows(ownerID string, f entry.Filter) []entryRow {
 	var rows []entryRow
 	for _, row := range s.rows {
 		e := row.e
-		if e.OwnerID != ownerID || e.DeletedAt != nil {
+		if e.DeletedAt != nil {
 			continue
 		}
 		if !accountSet[e.AccountID] {
@@ -302,11 +308,11 @@ func (s *EntryStore) matchingRows(ownerID string, f entry.Filter) []entryRow {
 	return rows
 }
 
-func (s *EntryStore) List(_ context.Context, ownerID string, f entry.Filter) ([]entry.Entry, *entry.Cursor, error) {
+func (s *EntryStore) List(_ context.Context, f entry.Filter) ([]entry.Entry, *entry.Cursor, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows := s.matchingRows(ownerID, f)
+	rows := s.matchingRows(f)
 
 	asc := f.Dir == entry.DirAsc
 	sort.Slice(rows, func(i, j int) bool {
@@ -420,13 +426,13 @@ func (s *EntryStore) Balance(_ context.Context, accountID string, asOf time.Time
 
 // Sum implements entry.Store's Sum: f's matching entries, restricted to
 // kind: transaction regardless of f.Kind, summed per account id.
-func (s *EntryStore) Sum(_ context.Context, ownerID string, f entry.Filter) (map[string]int64, int, error) {
+func (s *EntryStore) Sum(_ context.Context, f entry.Filter) (map[string]int64, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	txKind := entry.KindTransaction
 	f.Kind = &txKind
-	rows := s.matchingRows(ownerID, f)
+	rows := s.matchingRows(f)
 
 	perAccount := make(map[string]int64, len(rows))
 	for _, row := range rows {
@@ -439,7 +445,7 @@ func (s *EntryStore) Sum(_ context.Context, ownerID string, f entry.Filter) (map
 // period) combination with at least one matching entry, bucketed by
 // booking_timestamp converted into f.Timezone (Service.FlowSummary already
 // resolved it, default "UTC") and truncated to f.Unit.
-func (s *EntryStore) FlowSummary(_ context.Context, ownerID string, f entry.FlowFilter) ([]entry.FlowRow, error) {
+func (s *EntryStore) FlowSummary(_ context.Context, f entry.FlowFilter) ([]entry.FlowRow, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -454,7 +460,7 @@ func (s *EntryStore) FlowSummary(_ context.Context, ownerID string, f entry.Flow
 
 	for _, row := range s.rows {
 		e := row.e
-		if e.OwnerID != ownerID || e.DeletedAt != nil || !accountSet[e.AccountID] {
+		if e.DeletedAt != nil || !accountSet[e.AccountID] {
 			continue
 		}
 		local := e.BookingTimestamp.In(loc)

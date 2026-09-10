@@ -78,6 +78,10 @@ function NewEntry() {
   const categoryOptions = flattenCategoryTree(
     categories.filter((c) => !c.disabled),
   );
+  // view-only accounts can't have entries created against them — never
+  // offered when picking freely; a preset account_id (the ?account_id=
+  // flow, field locked either way) is left as-is rather than filtered.
+  const selectableAccounts = accounts.filter((a) => a.permission !== "view");
 
   async function resolveTagIds(): Promise<string[]> {
     const ids: string[] = [];
@@ -170,7 +174,7 @@ function NewEntry() {
             <option value="" disabled>
               {t("entries.form.accountPlaceholder")}
             </option>
-            {accounts.map((a) => (
+            {selectableAccounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.title} ({a.currency})
               </option>

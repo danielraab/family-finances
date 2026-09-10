@@ -1,9 +1,10 @@
 // Package account owns bookkeeping accounts — each belonging to exactly one
-// owner and visible only to them — and the admin-managed, instance-global
-// account_types lookup they reference. It follows the repo's four-file shape
-// (account.go, store.go, service.go, handler.go). It imports internal/auth
-// only for auth.UserFromContext and internal/settings only for
-// settings.ValidateCurrency — never their Store or a database driver.
+// real owner, shareable with other users at one of four permission tiers
+// (see Permission) — and the per-owner account_types lookup they reference.
+// It follows the repo's four-file shape (account.go, store.go, service.go,
+// handler.go). It imports internal/auth only for auth.UserFromContext and
+// internal/settings only for settings.ValidateCurrency — never their Store
+// or a database driver.
 package account
 
 import (
@@ -89,12 +90,19 @@ func (o *OptionalDate) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// Account is a bookkeeping account: title, description, admin-managed type,
+// Account is a bookkeeping account: title, description, per-owner type,
 // currency, financial institute, and opening/closing dates. It has exactly
-// one owner and is visible only to them (no sharing in this change — see
-// design.md). Disabled blocks creating new entries against it without
-// hiding it or affecting existing entries; it is independent of ClosingDate
-// (informational only) and of soft delete.
+// one real owner (OwnerID) but MAY be shared with other users at one of
+// four permission tiers — see Permission and AccountShare. Disabled blocks
+// creating new entries against it without hiding it or affecting existing
+// entries; it is independent of ClosingDate (informational only) and of
+// soft delete.
+//
+// Permission and OwnerName are populated by Service, never by Store — they
+// depend on the viewing caller (Permission) or a cross-package user lookup
+// (OwnerName), neither of which a Store implementation has access to.
+// OwnerName is set only when the viewing caller is not the real owner, so
+// the client can render a "shared by X" badge without a second request.
 type Account struct {
 	ID                 string     `json:"id"`
 	Title              string     `json:"title"`
@@ -109,8 +117,101 @@ type Account struct {
 	Disabled           bool       `json:"disabled"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
+	Permission         Permission `json:"permission"`
+	Shared             bool       `json:"shared"`
+	OwnerName          string     `json:"owner_name,omitempty"`
 	OwnerID            string     `json:"-"`
 	DeletedAt          *time.Time `json:"-"`
+}
+
+// Permission is the level of access a user has on an account: either the
+// real owner (implicitly PermissionOwner, with no AccountShare row) or a
+// tier granted via a share. Each tier is a strict superset of the ones
+// before it — see AtLeast.
+type Permission string
+
+const (
+	// PermissionView grants reading the account's entries and balance.
+	PermissionView Permission = "view"
+	// PermissionAppend additionally grants creating entries and
+	// editing/deleting only entries the same user created.
+	PermissionAppend Permission = "append"
+	// PermissionEntryAdmin additionally grants editing/deleting any entry
+	// on the account, not only ones that user created.
+	PermissionEntryAdmin Permission = "entry_admin"
+	// PermissionOwner additionally grants editing the account's own
+	// metadata (all fields except TypeID — see Service.Update), disabling/
+	// enabling/soft-deleting the account, and managing shares. Identical in
+	// capability to the real owner, whether held via OwnerID or a share.
+	PermissionOwner Permission = "owner"
+)
+
+// permissionRank orders the four tiers for AtLeast; not exported — callers
+// compare via AtLeast, never the raw rank.
+var permissionRank = map[Permission]int{
+	PermissionView:       1,
+	PermissionAppend:     2,
+	PermissionEntryAdmin: 3,
+	PermissionOwner:      4,
+}
+
+func (p Permission) valid() bool {
+	_, ok := permissionRank[p]
+	return ok
+}
+
+// AtLeast reports whether p is other or a stronger tier. An empty
+// Permission (no access at all) is never AtLeast anything, including
+// PermissionView.
+func (p Permission) AtLeast(other Permission) bool {
+	pr, ok := permissionRank[p]
+	if !ok {
+		return false
+	}
+	or, ok := permissionRank[other]
+	if !ok {
+		return false
+	}
+	return pr >= or
+}
+
+// Access is what a specific caller may do on a specific account, resolved
+// by Service.Access (internal/entry's AccountLookup interface consumes this
+// shape too, under its own local type — see that package's design note).
+// Permission is "" when the caller has no access at all — real ownership
+// and every AccountShare checked in one place, so a consumer never needs to
+// know shares exist as a separate concept.
+type Access struct {
+	Currency   string
+	Disabled   bool
+	Permission Permission
+}
+
+// AccountShare is one row granting a non-owner user a Permission on an
+// account. The account's real owner (Account.OwnerID) never has a row here
+// — see Service.ListShares, which synthesizes the real owner's entry
+// separately for display.
+type AccountShare struct {
+	AccountID     string     `json:"-"`
+	UserID        string     `json:"user_id"`
+	Name          string     `json:"name"`
+	Email         string     `json:"email"`
+	Permission    Permission `json:"permission"`
+	GrantedBy     string     `json:"granted_by"`
+	GrantedByName string     `json:"granted_by_name"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// ShareResult is the outcome of Service.InviteShare: either a created/
+// updated share (Matched), or a report that the email matched no user
+// (!Matched), including whether the instance currently allows sending an
+// application invite — see design.md's "sharing by email is a synchronous,
+// revealing lookup" decision.
+type ShareResult struct {
+	Matched       bool
+	Share         *AccountShare
+	InviteAllowed bool
 }
 
 // Type is one row of the account_types lookup, private to the user who

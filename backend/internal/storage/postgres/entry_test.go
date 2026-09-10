@@ -76,11 +76,11 @@ func TestPGEntryCreateGetUpdateDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.Amount != 1234 || e.OwnerID != f.owner {
+	if e.Amount != 1234 || e.CreatedBy != f.owner {
 		t.Fatalf("e = %+v", e)
 	}
 
-	got, err := f.entries.Get(ctx, f.owner, e.ID)
+	got, err := f.entries.Get(ctx, e.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestPGEntryCreateGetUpdateDelete(t *testing.T) {
 	}
 
 	newTitle := "Coffee and pastry"
-	updated, err := f.entries.Update(ctx, f.owner, e.ID, entry.Update{Title: &newTitle})
+	updated, err := f.entries.Update(ctx, e.ID, entry.Update{Title: &newTitle})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,10 +97,10 @@ func TestPGEntryCreateGetUpdateDelete(t *testing.T) {
 		t.Fatalf("updated = %+v", updated)
 	}
 
-	if err := f.entries.SoftDelete(ctx, f.owner, e.ID); err != nil {
+	if err := f.entries.SoftDelete(ctx, e.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.entries.Get(ctx, f.owner, e.ID); !errors.Is(err, entry.ErrNotFound) {
+	if _, err := f.entries.Get(ctx, e.ID); !errors.Is(err, entry.ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }
@@ -125,7 +125,7 @@ func TestPGEntryUpdateMovesAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	updated, err := f.entries.Update(ctx, f.owner, e.ID, entry.Update{AccountID: &acc2.ID})
+	updated, err := f.entries.Update(ctx, e.ID, entry.Update{AccountID: &acc2.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestPGEntryUpdateMovesAccount(t *testing.T) {
 		t.Fatalf("AccountID = %q, want %q", updated.AccountID, acc2.ID)
 	}
 
-	got, err := f.entries.Get(ctx, f.owner, e.ID)
+	got, err := f.entries.Get(ctx, e.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestPGEntryListCursorPaginationRoundTrips(t *testing.T) {
 		Dir:        entry.DirAsc,
 		Limit:      2,
 	}
-	first, cursor1, err := f.entries.List(ctx, f.owner, filter)
+	first, cursor1, err := f.entries.List(ctx, filter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestPGEntryListCursorPaginationRoundTrips(t *testing.T) {
 	}
 
 	filter.After = cursor1
-	second, cursor2, err := f.entries.List(ctx, f.owner, filter)
+	second, cursor2, err := f.entries.List(ctx, filter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestPGEntryListCursorPaginationRoundTrips(t *testing.T) {
 	}
 
 	filter.After = cursor2
-	third, cursor3, err := f.entries.List(ctx, f.owner, filter)
+	third, cursor3, err := f.entries.List(ctx, filter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestPGEntryListFiltersByCategorySubtree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, _, err := f.entries.List(ctx, f.owner, entry.Filter{
+	items, _, err := f.entries.List(ctx, entry.Filter{
 		AccountIDs: []string{f.accID}, CategoryIDs: subtree,
 		CategoryID: &f.catID, Sort: entry.SortBookingTimestamp, Dir: entry.DirAsc, Limit: 10,
 	})
@@ -377,7 +377,7 @@ func TestPGEntrySumGroupsByAccountAndExcludesBalanceAdjustments(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	perAccount, count, err := f.entries.Sum(ctx, f.owner, entry.Filter{
+	perAccount, count, err := f.entries.Sum(ctx, entry.Filter{
 		AccountIDs: []string{f.accID, acc2.ID},
 	})
 	if err != nil {
@@ -416,7 +416,7 @@ func TestPGEntrySumExactModeExcludesDescendants(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	perAccount, count, err := f.entries.Sum(ctx, f.owner, entry.Filter{
+	perAccount, count, err := f.entries.Sum(ctx, entry.Filter{
 		AccountIDs: []string{f.accID}, CategoryID: &f.catID, CategoryIDs: []string{f.catID},
 	})
 	if err != nil {
@@ -438,7 +438,7 @@ func TestPGEntrySoftDeletedExcludedFromBalance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.entries.SoftDelete(ctx, f.owner, e.ID); err != nil {
+	if err := f.entries.SoftDelete(ctx, e.ID); err != nil {
 		t.Fatal(err)
 	}
 	balance, err := f.entries.Balance(ctx, f.accID, at("2024-06-01T00:00:00Z"))
@@ -475,7 +475,7 @@ func TestPGEntryTransactionInsertedBeforeAdjustmentShiftsItsDelta(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	got, err := f.entries.Get(ctx, f.owner, adj.ID)
+	got, err := f.entries.Get(ctx, adj.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,18 +521,18 @@ func TestPGEntryEditingTransactionBetweenTwoAdjustmentsOnlyRecomputesTheFollowin
 	}
 
 	newAmount := int64(-5000)
-	if _, err := f.entries.Update(ctx, f.owner, txn.ID, entry.Update{Amount: &newAmount}); err != nil {
+	if _, err := f.entries.Update(ctx, txn.ID, entry.Update{Amount: &newAmount}); err != nil {
 		t.Fatal(err)
 	}
 
-	gotA, err := f.entries.Get(ctx, f.owner, adjA.ID)
+	gotA, err := f.entries.Get(ctx, adjA.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if gotA.Amount != 10000 {
 		t.Fatalf("AdjA.Amount = %d, want unchanged 10000", gotA.Amount)
 	}
-	gotB, err := f.entries.Get(ctx, f.owner, adjB.ID)
+	gotB, err := f.entries.Get(ctx, adjB.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,11 +569,11 @@ func TestPGEntryDeletingAnAdjustmentShiftsTheNextOnesBaseline(t *testing.T) {
 		t.Fatalf("AdjC.Amount before delete = %d, want 5000", adjC.Amount)
 	}
 
-	if err := f.entries.SoftDelete(ctx, f.owner, adjB.ID); err != nil {
+	if err := f.entries.SoftDelete(ctx, adjB.ID); err != nil {
 		t.Fatal(err)
 	}
 
-	gotC, err := f.entries.Get(ctx, f.owner, adjC.ID)
+	gotC, err := f.entries.Get(ctx, adjC.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -608,18 +608,18 @@ func TestPGEntryMovingAnAdjustmentPastAnotherRecomputesBothNeighbors(t *testing.
 	}
 
 	newTS := at("2024-01-15T00:00:00Z")
-	if _, err := f.entries.Update(ctx, f.owner, adjB.ID, entry.Update{BookingTimestamp: &newTS}); err != nil {
+	if _, err := f.entries.Update(ctx, adjB.ID, entry.Update{BookingTimestamp: &newTS}); err != nil {
 		t.Fatal(err)
 	}
 
-	gotC, err := f.entries.Get(ctx, f.owner, adjC.ID)
+	gotC, err := f.entries.Get(ctx, adjC.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if gotC.Amount != 20000 {
 		t.Fatalf("AdjC.Amount after AdjB moved past it = %d, want 20000 (30000-10000, now against AdjA)", gotC.Amount)
 	}
-	gotB, err := f.entries.Get(ctx, f.owner, adjB.ID)
+	gotB, err := f.entries.Get(ctx, adjB.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -681,12 +681,12 @@ func TestPGEntryMovingAcrossAccountsRecomputesBothAccountsAdjustments(t *testing
 	}
 
 	// Move the transaction from acc1 to acc2.
-	if _, err := f.entries.Update(ctx, f.owner, txn.ID, entry.Update{AccountID: &acc2.ID}); err != nil {
+	if _, err := f.entries.Update(ctx, txn.ID, entry.Update{AccountID: &acc2.ID}); err != nil {
 		t.Fatal(err)
 	}
 
 	// acc1's later adjustment loses the moved transaction's contribution.
-	gotAdj1b, err := f.entries.Get(ctx, f.owner, adj1b.ID)
+	gotAdj1b, err := f.entries.Get(ctx, adj1b.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -694,7 +694,7 @@ func TestPGEntryMovingAcrossAccountsRecomputesBothAccountsAdjustments(t *testing
 		t.Fatalf("adj1b.Amount after the transaction moved away = %d, want 10000 (20000-10000)", gotAdj1b.Amount)
 	}
 	// acc2's adjustment now has to absorb the newly-arrived transaction.
-	gotAdj2, err := f.entries.Get(ctx, f.owner, adj2.ID)
+	gotAdj2, err := f.entries.Get(ctx, adj2.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -769,7 +769,7 @@ func TestPGEntryMigration0018BackfillPreservesBalances(t *testing.T) {
 	insert := func(kind string, amount int64, ts string, catID *string) {
 		t.Helper()
 		if _, err := pool.Exec(ctx, `
-			INSERT INTO entries (owner_id, account_id, kind, amount, booking_timestamp, title, category_id)
+			INSERT INTO entries (created_by, account_id, kind, amount, booking_timestamp, title, category_id)
 			VALUES ($1, $2, $3, $4, $5, 'legacy', $6)`,
 			owner.ID, acc.ID, kind, amount, at(ts), catID,
 		); err != nil {
@@ -866,7 +866,7 @@ func TestPGEntryFlowSummaryMonthlyBucketsWithAdjustmentDelta(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := f.entries.FlowSummary(ctx, f.owner, entry.FlowFilter{
+	rows, err := f.entries.FlowSummary(ctx, entry.FlowFilter{
 		AccountIDs: []string{f.accID}, Unit: entry.FlowUnitMonth, Year: 2024, Timezone: "UTC",
 	})
 	if err != nil {
@@ -902,7 +902,7 @@ func TestPGEntryFlowSummaryDailyBuckets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := f.entries.FlowSummary(ctx, f.owner, entry.FlowFilter{
+	rows, err := f.entries.FlowSummary(ctx, entry.FlowFilter{
 		AccountIDs: []string{f.accID}, Unit: entry.FlowUnitDay, Year: 2024, Month: 2, Timezone: "UTC",
 	})
 	if err != nil {
@@ -926,7 +926,7 @@ func TestPGEntryFlowSummaryUsesGivenTimezone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := f.entries.FlowSummary(ctx, f.owner, entry.FlowFilter{
+	rows, err := f.entries.FlowSummary(ctx, entry.FlowFilter{
 		AccountIDs: []string{f.accID}, Unit: entry.FlowUnitMonth, Year: 2024, Timezone: "America/New_York",
 	})
 	if err != nil {

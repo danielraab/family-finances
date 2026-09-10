@@ -254,6 +254,43 @@ it works the same on a phone as on a desktop:
   otherwise-untouched category, matching the backend's "only a category
   explicitly supplied is validated" rule.
 
+## Accounts and sharing
+
+Every `Account` response carries the caller's own `permission` (`view`,
+`append`, `entry_admin`, or `owner`) and, only when the caller isn't the
+account's real owner, `shared: true` plus `owner_name` — see
+`backend/AGENTS.md`'s "Accounts and sharing" section for the tier semantics.
+The frontend never re-derives access from anything else; every gate below
+reads `account.permission`/`account.shared` straight off that response.
+
+- `src/routes/accounts.$accountId.index.tsx` shows the Edit link,
+  disable/enable, and delete actions only when `permission === "owner"`; a
+  Share link to `/accounts/{id}/sharing` is always shown, at every tier.
+- `src/routes/accounts.$accountId.edit.tsx` redirects to the detail page for
+  any non-owner tier, and renders `AccountForm`'s type field read-only
+  (`typeLocked`) when the visitor holds `owner` only via a share
+  (`shared === true`) rather than being the real owner — a shared owner may
+  edit everything else but not reassign `type_id`, and the field is omitted
+  from the request body entirely rather than resubmitted unchanged.
+- `src/routes/accounts.$accountId.sharing.tsx` is the one page a share is
+  managed from: it always lists the real owner as a fixed first row, then
+  every share. At `owner` tier it also renders the invite-by-email form
+  (surfacing a "not registered" nudge with an inline invite link/form when
+  `POST .../shares` responds `matched: false`), a permission `<select>` per
+  non-owner row, and a Revoke action per row; at every other tier it's
+  read-only except a Leave action on the visitor's own row, if present.
+- `src/components/AccountLabel.tsx` renders the shared badge + `owner_name`
+  whenever `account.shared` is true (never for the real owner viewing their
+  own account) — used everywhere an account is named outside a native
+  `<select>`, per "Entity icons & colours" below.
+- Entry-side gating: `entries.$entryId.edit.tsx` renders the form read-only
+  unless the visitor's permission on the entry's account is `entry_admin`/
+  `owner`, or is `append` and they are the entry's `created_by`;
+  `entries.new.tsx`'s account picker only offers `append`+ accounts; the
+  ledger and account-detail recent-entries list annotate every entry with
+  `created_by_name` whenever `created_by !== currentUser.id`, not only on
+  shared accounts.
+
 ## Entity icons & colours
 
 An account or category may carry an optional `icon` and an optional `color`

@@ -242,7 +242,7 @@ func TestPGTagEntryCountReflectsAttachedAndDeletedEntries(t *testing.T) {
 		t.Fatalf("EntryCount after two attachments = %d, want 2", got.EntryCount)
 	}
 
-	if err := entryStore.SoftDelete(ctx, owner.ID, e1.ID); err != nil {
+	if err := entryStore.SoftDelete(ctx, e1.ID); err != nil {
 		t.Fatal(err)
 	}
 	got, err = tagStore.Get(ctx, owner.ID, tg.ID)
