@@ -116,7 +116,7 @@ jobs:
       - name: Compute translation coverage
         run: node frontend/scripts/i18n-coverage.mjs
       - name: Comment on PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require("fs");
