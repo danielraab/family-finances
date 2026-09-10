@@ -4,7 +4,9 @@
 FROM node:26-alpine AS frontend
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile
+# Node 26 no longer bundles Corepack (nodejs/node#57617); install it from npm
+# before enabling it, rather than relying on `corepack` being preinstalled.
+RUN npm install -g corepack && corepack enable && pnpm install --frozen-lockfile
 COPY frontend/ ./
 RUN pnpm build
 
