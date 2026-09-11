@@ -2,7 +2,12 @@ import type { components } from "../api/schema";
 
 type Category = components["schemas"]["Category"];
 
-export type CategoryOption = { id: string; label: string };
+export type CategoryOption = {
+  id: string;
+  label: string;
+  shared: boolean;
+  ownerName: string | undefined;
+};
 
 /**
  * Flattens the category tree into a depth-indented list, root categories
@@ -25,7 +30,12 @@ export function flattenCategoryTree(categories: Category[]): CategoryOption[] {
   const out: CategoryOption[] = [];
   function walk(parentKey: string, depth: number) {
     for (const c of byParent.get(parentKey) ?? []) {
-      out.push({ id: c.id, label: "    ".repeat(depth) + c.name });
+      out.push({
+        id: c.id,
+        label: "    ".repeat(depth) + c.name,
+        shared: c.shared,
+        ownerName: c.owner_name,
+      });
       walk(c.id, depth + 1);
     }
   }

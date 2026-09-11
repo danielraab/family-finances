@@ -442,6 +442,8 @@ function EditEntry() {
                   disabled={currentCategory?.disabled && c.id === categoryId}
                 >
                   {c.label}
+                  {c.shared &&
+                    ` — ${t("categories.shared.badgeTitle", { owner: c.ownerName ?? "" })}`}
                   {currentCategory?.disabled && c.id === categoryId
                     ? ` (${t("entries.form.categoryDisabledOption")})`
                     : ""}

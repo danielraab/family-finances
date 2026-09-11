@@ -230,6 +230,8 @@ function EntriesListPage() {
             {categoryOptions.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
+                {c.shared &&
+                  ` — ${t("categories.shared.badgeTitle", { owner: c.ownerName ?? "" })}`}
               </option>
             ))}
           </select>
