@@ -180,9 +180,6 @@ function EntriesListPage() {
   const categoryOptions = flattenCategoryTree(categories);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const tagById = new Map(tags.map((tg) => [tg.id, tg]));
-  const accountCurrency = (accountId: string) =>
-    accounts.find((a) => a.id === accountId)?.currency ?? "";
-
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-12 sm:px-10">
       <header className="flex items-center justify-between gap-4">
@@ -475,7 +472,7 @@ function EntriesListPage() {
                         entry.kind === "balance_adjustment"
                           ? (entry.balance ?? 0)
                           : entry.amount,
-                        accountCurrency(entry.account_id),
+                        entry.account_currency ?? "",
                         displayedDecimalPlaces,
                         i18n.resolvedLanguage ?? "en",
                       )}
@@ -484,7 +481,7 @@ function EntriesListPage() {
                       <span className="font-mono text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
                         {formatSignedAmount(
                           entry.amount,
-                          accountCurrency(entry.account_id),
+                          entry.account_currency ?? "",
                           displayedDecimalPlaces,
                           i18n.resolvedLanguage ?? "en",
                         )}

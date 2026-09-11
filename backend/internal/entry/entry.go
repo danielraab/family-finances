@@ -98,9 +98,18 @@ func (m CategoryMode) valid() bool {
 // CreatedByName is resolved server-side (never by the client joining
 // against a shares list) so a viewer can see who logged an entry across a
 // cursor-paginated, filtered list with no second request — see design.md.
+//
+// AccountCurrency is resolved server-side the same way, regardless of the
+// caller's account-level access to AccountID — so a client can always
+// render Amount correctly, including for an entry surfaced only via a
+// category-permission filter with no account access at all (see
+// category-sharing). Like CreatedByName, it's omitempty: the memory Store
+// (domain/handler unit tests only, never production) never populates it —
+// see design.md.
 type Entry struct {
 	ID               string     `json:"id"`
 	AccountID        string     `json:"account_id"`
+	AccountCurrency  string     `json:"account_currency,omitempty"`
 	Kind             Kind       `json:"kind"`
 	Amount           int64      `json:"amount"`
 	Balance          *int64     `json:"balance,omitempty"`
@@ -228,7 +237,16 @@ type Cursor struct {
 // caller's own visible accounts (optionally narrowed further by the
 // caller-supplied AccountIDs) before reaching Store.
 type Filter struct {
-	AccountIDs   []string
+	AccountIDs []string
+	// AllAccounts, when true, tells Store to ignore AccountIDs entirely —
+	// no account_id restriction for this query. Set only by
+	// Service.resolveFilter, when CategoryID names a category the caller
+	// holds real permission on (ownership or a share) and no explicit
+	// AccountIDs filter was also supplied: that category permission alone
+	// authorizes seeing its entries, regardless of account access. Every
+	// other filter (CategoryIDs, TagID, Kind, date range, Query) still
+	// applies as usual — this only lifts the account restriction.
+	AllAccounts  bool
 	CategoryID   *string
 	CategoryMode CategoryMode
 	CategoryIDs  []string

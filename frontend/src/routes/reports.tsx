@@ -244,8 +244,6 @@ function ReportsPage() {
   }
 
   const categoryOptions = flattenCategoryTree(categories);
-  const accountCurrency = (accountId: string) =>
-    accounts.find((a) => a.id === accountId)?.currency ?? "";
   const hasGenerated = generatedFilter !== null;
   const stale = generatedFilter !== null && isStale(generatedFilter, search);
 
@@ -427,7 +425,9 @@ function ReportsPage() {
                         return account ? (
                           <AccountLabel account={account} iconSize={16} />
                         ) : (
-                          entry.account_id
+                          <span className="italic">
+                            {t("entries.notShared")}
+                          </span>
                         );
                       })()}
                     </td>
@@ -436,7 +436,7 @@ function ReportsPage() {
                     >
                       {formatAmount(
                         entry.amount,
-                        accountCurrency(entry.account_id),
+                        entry.account_currency ?? "",
                         displayedDecimalPlaces,
                         i18n.resolvedLanguage ?? "en",
                       )}

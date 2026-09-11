@@ -255,16 +255,19 @@ func (s *EntryStore) recomputeFromLocked(accountID string, ts time.Time, seq int
 
 // matchingRows returns every non-deleted entry matching f's
 // account/category/tag/kind/date-range/query filters, in no particular
-// order. Scoping to the caller happens entirely through f.AccountIDs —
-// already narrowed by Service to the caller's visible (owned or shared)
-// accounts before it reaches here, per design.md's "entry read/write
-// authorization moves from the Store layer into the Service layer"
-// decision — never by an owner/creator equality check, so a viewer sees
-// every entry on a visible account regardless of who created it. List and
-// Sum both build on this so their filtering logic can never diverge.
-// Callers hold s.mu.
+// order. Scoping to the caller happens through f.AccountIDs — already
+// narrowed by Service to the caller's visible (owned or shared) accounts
+// before it reaches here, per design.md's "entry read/write authorization
+// moves from the Store layer into the Service layer" decision — never by
+// an owner/creator equality check, so a viewer sees every entry on a
+// visible account regardless of who created it. When f.AllAccounts is set,
+// the account membership check is skipped entirely: the caller's
+// permission on the filtered category (f.CategoryIDs, resolved by
+// entry.Service) is what authorizes those rows instead. List and Sum both
+// build on this so their filtering logic can never diverge. Callers hold
+// s.mu.
 func (s *EntryStore) matchingRows(f entry.Filter) []entryRow {
-	if len(f.AccountIDs) == 0 {
+	if !f.AllAccounts && len(f.AccountIDs) == 0 {
 		return nil
 	}
 	accountSet := toSet(f.AccountIDs)
@@ -279,7 +282,7 @@ func (s *EntryStore) matchingRows(f entry.Filter) []entryRow {
 		if e.DeletedAt != nil {
 			continue
 		}
-		if !accountSet[e.AccountID] {
+		if !f.AllAccounts && !accountSet[e.AccountID] {
 			continue
 		}
 		if categorySet != nil && (e.CategoryID == nil || !categorySet[*e.CategoryID]) {

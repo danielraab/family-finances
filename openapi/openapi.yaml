@@ -2540,6 +2540,19 @@ components:
           type: string
         account_id:
           type: string
+        account_currency:
+          type: string
+          description: >-
+            The currency of account_id, resolved server-side regardless of
+            whether the caller currently holds any account-level access to
+            that account — the same resolve-it-server-side precedent
+            created_by_name establishes below, so amount can always be
+            rendered correctly without a separate account fetch. This
+            matters for an entry the caller can see only via a category
+            permission with no account-level access at all (see
+            category-sharing, entry-categories): account_currency is the
+            one piece of that account's data carried onto the entry, every
+            other detail (name, balance, other entries) stays unexposed.
         kind:
           $ref: "#/components/schemas/EntryKind"
         amount:

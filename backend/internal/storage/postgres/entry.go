@@ -22,23 +22,28 @@ type EntryStore struct {
 func NewEntryStore(pool *pgxpool.Pool) *EntryStore { return &EntryStore{pool: pool} }
 
 // entryCols always assumes the query's FROM clause is literally "entries"
-// (no alias), since the tag_ids and created_by_name subqueries correlate
-// against entries.id / entries.created_by. created_by_name reaches into
-// internal/auth's users table by raw SQL — entry.Store doesn't import
-// internal/auth, but its Postgres implementation may still name its
-// tables, the same precedent internal/storage/postgres/tag.go's
-// entry_count and category.go's Delete already establish for reaching
-// into another domain's table.
+// (no alias), since the tag_ids/created_by_name/account_currency
+// subqueries correlate against entries.id / entries.created_by /
+// entries.account_id. created_by_name and account_currency reach into
+// internal/auth's users table and internal/account's accounts table by raw
+// SQL — entry.Store doesn't import either package, but its Postgres
+// implementation may still name their tables, the same precedent
+// internal/storage/postgres/tag.go's entry_count and category.go's Delete
+// already establish for reaching into another domain's table.
+// account_currency is resolved unconditionally (never gated by the
+// caller's permission on that account) — see design.md's
+// "Entry gains account_currency" decision.
 const entryCols = `id::text, created_by::text, account_id::text, kind, amount, balance_reading, booking_timestamp, title,
 	COALESCE(description, ''), category_id::text, created_at, updated_at,
 	COALESCE((SELECT array_agg(tag_id::text) FROM entry_tags WHERE entry_id = entries.id), '{}'),
-	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = entries.created_by), '')`
+	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = entries.created_by), ''),
+	COALESCE((SELECT currency FROM accounts WHERE accounts.id = entries.account_id), '')`
 
 func scanEntry(row pgx.Row) (entry.Entry, error) {
 	var e entry.Entry
 	var kind string
 	err := row.Scan(&e.ID, &e.CreatedBy, &e.AccountID, &kind, &e.Amount, &e.Balance, &e.BookingTimestamp, &e.Title,
-		&e.Description, &e.CategoryID, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName)
+		&e.Description, &e.CategoryID, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName, &e.AccountCurrency)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return entry.Entry{}, entry.ErrNotFound
 	}
@@ -277,22 +282,25 @@ func (s *EntryStore) SoftDelete(ctx context.Context, id string) error {
 // and Sum, scoping to non-deleted entries matching f's
 // account/category/tag/kind/date-range/query filters — every column is
 // qualified with "entries." so the same clauses work whether or not a
-// caller's query joins another table. f.AccountIDs is always the sole
-// caller-scoping mechanism (already narrowed by entry.Service to the
-// caller's visible, owned-or-shared accounts before it reaches here — see
-// design.md) rather than an owner/creator equality clause, so a viewer
-// sees every entry on a visible account regardless of who created it.
-// Callers append their own additional clauses (and, via the same
-// numbering, args) as needed.
+// caller's query joins another table. f.AccountIDs is the caller-scoping
+// mechanism (already narrowed by entry.Service to the caller's visible,
+// owned-or-shared accounts before it reaches here — see design.md) rather
+// than an owner/creator equality clause, so a viewer sees every entry on a
+// visible account regardless of who created it — except when f.AllAccounts
+// is set, in which case the account_id clause is omitted entirely: the
+// caller's permission on the filtered category (f.CategoryIDs, resolved by
+// entry.Service) is what authorizes those rows instead. Callers append
+// their own additional clauses (and, via the same numbering, args) as
+// needed.
 func buildWhere(f entry.Filter) (where []string, args []any) {
 	arg := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
 	}
 
-	where = []string{
-		"entries.deleted_at IS NULL",
-		"entries.account_id = ANY(" + arg(f.AccountIDs) + "::uuid[])",
+	where = []string{"entries.deleted_at IS NULL"}
+	if !f.AllAccounts {
+		where = append(where, "entries.account_id = ANY("+arg(f.AccountIDs)+"::uuid[])")
 	}
 	if f.CategoryID != nil {
 		where = append(where, "entries.category_id = ANY("+arg(f.CategoryIDs)+"::uuid[])")
@@ -321,7 +329,7 @@ func buildWhere(f entry.Filter) (where []string, args []any) {
 // direction; the keyset comparison on (sortColumn, id) implements the
 // cursor. It fetches Limit+1 rows to know whether a next page exists.
 func (s *EntryStore) List(ctx context.Context, f entry.Filter) ([]entry.Entry, *entry.Cursor, error) {
-	if len(f.AccountIDs) == 0 {
+	if !f.AllAccounts && len(f.AccountIDs) == 0 {
 		return nil, nil, nil
 	}
 
@@ -477,7 +485,7 @@ func recomputeFrom(ctx context.Context, tx pgx.Tx, accountID string, ts time.Tim
 // via AccountLookup and groups by it there, since this package has no
 // business joining into a currency concept that belongs to internal/account.
 func (s *EntryStore) Sum(ctx context.Context, f entry.Filter) (map[string]int64, int, error) {
-	if len(f.AccountIDs) == 0 {
+	if !f.AllAccounts && len(f.AccountIDs) == 0 {
 		return map[string]int64{}, 0, nil
 	}
 

@@ -335,6 +335,71 @@ func TestPGEntryListFiltersByCategorySubtree(t *testing.T) {
 	}
 }
 
+// TestPGEntryListAllAccountsIgnoresAccountIDsRestriction is the
+// postgres-backend regression guard for Filter.AllAccounts (see
+// design.md's "divergence between the postgres and memory store
+// implementations" risk): List/Sum must return a matching entry on an
+// account entirely absent from AccountIDs when AllAccounts is set, and
+// must not fall into the empty-AccountIDs short-circuit.
+func TestPGEntryListAllAccountsIgnoresAccountIDsRestriction(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	otherOwner := mustUser(t, NewAuthStore(f.accounts.pool), "entry-other-owner@example.com")
+	otherAcc := mustAccount(t, f.accounts, otherOwner.ID, "Other owner's account", mustType(t, f.accounts, otherOwner.ID))
+
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(-100),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "mine", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, otherOwner.ID, entry.New{
+		AccountID: otherAcc.ID, Kind: entry.KindTransaction, Amount: ptrInt64(-25),
+		BookingTimestamp: at("2024-01-02T00:00:00Z"), Title: "other owner's", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without AllAccounts, AccountIDs alone still gates as before.
+	scoped, _, err := f.entries.List(ctx, entry.Filter{
+		AccountIDs: []string{f.accID}, CategoryID: &f.catID, CategoryIDs: []string{f.catID},
+		Sort: entry.SortBookingTimestamp, Dir: entry.DirAsc, Limit: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scoped) != 1 || scoped[0].Title != "mine" {
+		t.Fatalf("account-scoped List = %v, want only \"mine\"", scoped)
+	}
+
+	// AllAccounts lifts that restriction, even with AccountIDs left empty
+	// (proving the List/Sum early-return guard honors it too).
+	widened, _, err := f.entries.List(ctx, entry.Filter{
+		AllAccounts: true, CategoryID: &f.catID, CategoryIDs: []string{f.catID},
+		Sort: entry.SortBookingTimestamp, Dir: entry.DirAsc, Limit: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(widened) != 2 {
+		t.Fatalf("AllAccounts List = %v, want both entries", widened)
+	}
+
+	perAccount, count, err := f.entries.Sum(ctx, entry.Filter{
+		AllAccounts: true, CategoryID: &f.catID, CategoryIDs: []string{f.catID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("AllAccounts Sum count = %d, want 2", count)
+	}
+	if perAccount[f.accID] != -100 || perAccount[otherAcc.ID] != -25 {
+		t.Fatalf("AllAccounts Sum perAccount = %v, want -100/-25", perAccount)
+	}
+}
+
 func TestPGEntrySumGroupsByAccountAndExcludesBalanceAdjustments(t *testing.T) {
 	f := newEntryFixture(t)
 	ctx := context.Background()

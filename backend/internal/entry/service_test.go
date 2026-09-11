@@ -92,10 +92,18 @@ type stubCategories struct {
 	disabled map[string]bool
 	// children maps a category id to its direct children, for Subtree.
 	children map[string][]string
+	// shares maps categoryID -> userID -> true, granting that user
+	// visibility of id alone (never cascading to children) — mirrors
+	// category.Service.Subtree's real distinction between an owner's
+	// full-subtree cascade and a share's single-id resolution.
+	shares map[string]map[string]bool
 }
 
 func newStubCategories() *stubCategories {
-	return &stubCategories{owner: map[string]string{}, disabled: map[string]bool{}, children: map[string][]string{}}
+	return &stubCategories{
+		owner: map[string]string{}, disabled: map[string]bool{}, children: map[string][]string{},
+		shares: map[string]map[string]bool{},
+	}
 }
 
 // add registers id as owned by "u1", the fixture owner used throughout
@@ -106,12 +114,44 @@ func (c *stubCategories) addOwnedBy(id, owner string) { c.owner[id] = owner }
 
 func (c *stubCategories) disable(id string) { c.disabled[id] = true }
 
-func (c *stubCategories) Usable(_ context.Context, ownerID, id string) (bool, error) {
-	owner, ok := c.owner[id]
-	return ok && owner == ownerID && !c.disabled[id], nil
+// share grants userID view/append-equivalent visibility of id alone —
+// entry.Service's CategoryLookup interface (Usable/Subtree) never
+// distinguishes view from append itself (Usable's append-only rule is
+// entirely real category.Service's own concern, tested there), so this
+// stub only models "has some share" vs. "owns" vs. "no permission at all."
+func (c *stubCategories) share(id, userID string) {
+	if c.shares[id] == nil {
+		c.shares[id] = map[string]bool{}
+	}
+	c.shares[id][userID] = true
 }
 
-func (c *stubCategories) Subtree(_ context.Context, _, id string) ([]string, error) {
+func (c *stubCategories) Usable(_ context.Context, callerID, id string) (bool, error) {
+	if c.disabled[id] {
+		return false, nil
+	}
+	if owner, ok := c.owner[id]; ok && owner == callerID {
+		return true, nil
+	}
+	return c.shares[id][callerID], nil
+}
+
+// Subtree mirrors category.Service.Subtree: the owner's full descendant
+// subtree for a category callerID owns, id alone for one visible only via
+// a share, and nil (no permission at all) otherwise — its non-emptiness is
+// also the permission signal entry.Service.resolveFilter relies on to
+// widen account scoping for a category-filtered query.
+func (c *stubCategories) Subtree(_ context.Context, callerID, id string) ([]string, error) {
+	owner, ok := c.owner[id]
+	if !ok {
+		return nil, nil
+	}
+	if owner != callerID {
+		if c.shares[id][callerID] {
+			return []string{id}, nil
+		}
+		return nil, nil
+	}
 	out := []string{id}
 	queue := []string{id}
 	for len(queue) > 0 {

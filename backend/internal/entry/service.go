@@ -245,6 +245,17 @@ func (s *Service) Delete(ctx context.Context, callerID, id string) error {
 // caller-supplied AccountIDs), and — when f.CategoryID is set — resolves
 // f.CategoryIDs to either the category's full subtree (the default) or the
 // category alone (CategoryMode: ModeExact).
+//
+// A category filter also grants its own visibility: s.categories.Subtree's
+// result already doubles as a permission check (non-empty iff callerID owns
+// or holds a share on that exact category — see category.Service.Subtree),
+// so when it's non-empty and callerID didn't also supply an explicit
+// AccountIDs filter, f.AllAccounts is set instead of narrowing to visible —
+// the caller's permission on the category itself authorizes seeing its
+// entries regardless of account access. An explicit AccountIDs filter
+// suppresses this (stays scoped to visible, as before): naming a specific
+// account is a narrower question than "every entry in this category." A
+// category callerID has no permission on at all never widens anything.
 func (s *Service) resolveFilter(ctx context.Context, callerID string, f Filter) (Filter, error) {
 	if !f.CategoryMode.valid() {
 		return Filter{}, ErrInvalidValue
@@ -254,21 +265,25 @@ func (s *Service) resolveFilter(ctx context.Context, callerID string, f Filter) 
 	if err != nil {
 		return Filter{}, err
 	}
-	if len(f.AccountIDs) > 0 {
+	explicitAccounts := len(f.AccountIDs) > 0
+	if explicitAccounts {
 		f.AccountIDs = intersect(f.AccountIDs, visible)
 	} else {
 		f.AccountIDs = visible
 	}
 
 	if f.CategoryID != nil {
+		permitted, err := s.categories.Subtree(ctx, callerID, *f.CategoryID)
+		if err != nil {
+			return Filter{}, err
+		}
 		if f.CategoryMode == ModeExact {
 			f.CategoryIDs = []string{*f.CategoryID}
 		} else {
-			ids, err := s.categories.Subtree(ctx, callerID, *f.CategoryID)
-			if err != nil {
-				return Filter{}, err
-			}
-			f.CategoryIDs = ids
+			f.CategoryIDs = permitted
+		}
+		if len(permitted) > 0 && !explicitAccounts {
+			f.AllAccounts = true
 		}
 	}
 
