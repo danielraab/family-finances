@@ -9,18 +9,26 @@ type AccountCreate = components["schemas"]["AccountCreate"];
 type Account = components["schemas"]["Account"];
 
 /**
- * Starter labels offered as `type` autocomplete suggestions for every
- * visitor — English only, matching the former backend seed set. Merged
- * with the visitor's own in-use values from `GET /api/account-types`.
+ * Starter `type` autocomplete suggestions offered to every visitor, as
+ * `accounts.form.types.*` i18n keys so the suggested (and, once picked,
+ * submitted) text is in the visitor's own language. Merged with the
+ * visitor's own in-use values from `GET /api/account-types`.
  */
-const DEFAULT_ACCOUNT_TYPES = [
-  "Checking",
-  "Savings",
-  "Cash",
-  "Credit Card",
-  "Loan",
-  "Investment",
-];
+const DEFAULT_ACCOUNT_TYPE_KEYS = [
+  "checking",
+  "savings",
+  "cash",
+  "creditCard",
+  "prepaidCard",
+  "loan",
+  "mortgage",
+  "investment",
+  "brokerage",
+  "retirement",
+  "business",
+  "insurance",
+  "misc",
+] as const;
 
 /** Feature-detects Intl.supportedValuesOf, absent from older engines. */
 function listCurrencies(): string[] {
@@ -121,8 +129,11 @@ export function AccountForm({
 
   // Default labels first, then any distinct in-use values not already in
   // that list — deduped by exact string match.
+  const defaultAccountTypes = DEFAULT_ACCOUNT_TYPE_KEYS.map((key) =>
+    t(`accounts.form.types.${key}`),
+  );
   const typeOptions = Array.from(
-    new Set([...DEFAULT_ACCOUNT_TYPES, ...typeSuggestions]),
+    new Set([...defaultAccountTypes, ...typeSuggestions]),
   );
 
   function set<K extends keyof AccountFormValues>(

@@ -172,7 +172,22 @@
       "closingDateInvalid": "Das Schließungsdatum darf nicht vor dem Eröffnungsdatum liegen.",
       "create": "Konto erstellen",
       "save": "Änderungen speichern",
-      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut."
+      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut.",
+      "types": {
+        "checking": "Girokonto",
+        "savings": "Sparkonto",
+        "cash": "Bargeld",
+        "creditCard": "Kreditkarte",
+        "prepaidCard": "Prepaid-Karte",
+        "loan": "Kredit",
+        "mortgage": "Hypothek",
+        "investment": "Investition",
+        "brokerage": "Depot",
+        "retirement": "Altersvorsorge",
+        "business": "Geschäftskonto",
+        "insurance": "Versicherung",
+        "misc": "Sonstiges"
+      }
     },
     "new": {
       "title": "Neues Konto"
