@@ -324,10 +324,15 @@ function NewEntry() {
 
         <div className="flex flex-col gap-1.5 text-sm font-medium">
           {t("entries.form.tags")}
+          {/* A view-only shared tag can be seen/filtered by but never
+              newly attached — same append+ rule categoryOptions applies
+              above — so it's excluded from the suggestion list here too. */}
           <TagInput
             value={tagNames}
             onChange={setTagNames}
-            existingTags={tags.filter((tg) => !tg.disabled)}
+            existingTags={tags.filter(
+              (tg) => !tg.disabled && tg.permission !== "view",
+            )}
           />
         </div>
 

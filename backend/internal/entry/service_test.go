@@ -168,19 +168,37 @@ func (c *stubCategories) Subtree(_ context.Context, callerID, id string) ([]stri
 type stubTags struct {
 	owned    map[string]string // tagID -> ownerID
 	disabled map[string]bool
+	// shares maps tagID -> userID -> true, granting that user visibility
+	// of id — mirrors tag.Service.OwnedBy's real "owned by them, or
+	// shared with them at any tier (at least view)" definition.
+	shares map[string]map[string]bool
 }
 
 func newStubTags() *stubTags {
-	return &stubTags{owned: map[string]string{}, disabled: map[string]bool{}}
+	return &stubTags{owned: map[string]string{}, disabled: map[string]bool{}, shares: map[string]map[string]bool{}}
 }
 
 func (t *stubTags) add(id, ownerID string) { t.owned[id] = ownerID }
 
 func (t *stubTags) disable(id string) { t.disabled[id] = true }
 
+// share grants userID visibility of id alone — entry.Service's TagLookup
+// interface never distinguishes view from append itself (that tier
+// distinction is real tag.Service's own concern, tested there), so this
+// stub only models "has some share" vs. "owns" vs. "no permission at all."
+func (t *stubTags) share(id, userID string) {
+	if t.shares[id] == nil {
+		t.shares[id] = map[string]bool{}
+	}
+	t.shares[id][userID] = true
+}
+
 func (t *stubTags) OwnedBy(_ context.Context, owner string, tagIDs []string) (bool, error) {
 	for _, id := range tagIDs {
-		if t.owned[id] != owner {
+		if t.owned[id] == owner {
+			continue
+		}
+		if !t.shares[id][owner] {
 			return false, nil
 		}
 	}
@@ -189,7 +207,13 @@ func (t *stubTags) OwnedBy(_ context.Context, owner string, tagIDs []string) (bo
 
 func (t *stubTags) Usable(_ context.Context, owner string, tagIDs []string) (bool, error) {
 	for _, id := range tagIDs {
-		if t.owned[id] != owner || t.disabled[id] {
+		if t.disabled[id] {
+			return false, nil
+		}
+		if t.owned[id] == owner {
+			continue
+		}
+		if !t.shares[id][owner] {
 			return false, nil
 		}
 	}

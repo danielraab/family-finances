@@ -86,14 +86,16 @@ func main() {
 		slog.Error("build auth", "error", err)
 		os.Exit(1)
 	}
-	// accountSvc/categorySvc each need authSvc as their email-lookup/
+	tagSvc, tagHandler := buildTag(pool, mail, cfg.Auth.BaseURL)
+
+	// accountSvc/categorySvc/tagSvc each need authSvc as their email-lookup/
 	// invite-eligibility source for sharing, and authSvc is built after
 	// them — a post-construction wiring no constructor option can resolve
 	// on its own. See account.Service.SetUserLookup's doc comment.
 	accountSvc.SetUserLookup(authSvc)
 	categorySvc.SetUserLookup(authSvc)
+	tagSvc.SetUserLookup(authSvc)
 
-	tagSvc, tagHandler := buildTag(pool)
 	entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc, settingsSvc)
 
 	srv := httpapi.New(cfg, httpapi.Deps{
@@ -151,10 +153,13 @@ func buildCategory(pool *postgres.Pool, mail *mailer.Mailer, baseURL string) (*c
 }
 
 // buildTag constructs the tag service and its HTTP handler over the
-// Postgres store.
-func buildTag(pool *postgres.Pool) (*tag.Service, http.Handler) {
+// Postgres store. mail and baseURL back the share-notification email (see
+// tag.WithMailer/WithBaseURL); the email-lookup/invite-eligibility source
+// (tag.UserLookup) is wired in separately, once auth.Service exists — see
+// main()'s SetUserLookup call.
+func buildTag(pool *postgres.Pool, mail *mailer.Mailer, baseURL string) (*tag.Service, http.Handler) {
 	store := postgres.NewTagStore(pool)
-	svc := tag.NewService(store)
+	svc := tag.NewService(store, tag.WithMailer(mail), tag.WithBaseURL(baseURL))
 	handler := tag.NewHandler(svc, tag.HandlerOptions{RenderError: httpapi.WriteError})
 	return svc, handler
 }

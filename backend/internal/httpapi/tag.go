@@ -12,4 +12,6 @@ func init() {
 	registerErrStatus(tag.ErrNotFound, http.StatusNotFound)
 	registerErrStatus(tag.ErrInvalidValue, http.StatusBadRequest)
 	registerErrStatus(tag.ErrDuplicateName, http.StatusConflict)
+	registerErrStatus(tag.ErrInUse, http.StatusConflict)
+	registerErrStatus(tag.ErrForbidden, http.StatusForbidden)
 }

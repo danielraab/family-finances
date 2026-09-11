@@ -1,15 +1,23 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "../api/schema";
+import { TagLabel } from "./TagLabel";
 
 type Tag = components["schemas"]["Tag"];
 
+const SUGGESTION_LIMIT = 8;
+
 /**
- * A free-text tag input: matches against the visitor's existing tags as
- * they type, and lets them add any typed name — matched or not. Resolving
- * an unmatched name to a newly-created tag happens on form submit (see
+ * A free-text tag input: matches against the visitor's existing tags
+ * (including ones shared with the visitor, via `existingTags`) as they
+ * type, and lets them add any typed name — matched or not. Resolving an
+ * unmatched name to a newly-created tag happens on form submit (see
  * entries.new.tsx / entries.$entryId.edit.tsx), not here — this component
  * only manages the set of tag *names* currently attached.
+ *
+ * Suggestions show as soon as the field is focused, even before typing —
+ * an empty draft matches every not-yet-attached existing tag rather than
+ * none, so a caller doesn't need to already know a tag's name to find it.
  */
 export function TagInput({
   value,
@@ -22,16 +30,19 @@ export function TagInput({
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState("");
+  const [focused, setFocused] = useState(false);
 
-  const suggestions = draft.trim()
-    ? existingTags
-        .filter(
-          (tag) =>
-            tag.name.toLowerCase().includes(draft.trim().toLowerCase()) &&
-            !value.includes(tag.name),
-        )
-        .slice(0, 6)
-    : [];
+  const byName = new Map(existingTags.map((tag) => [tag.name, tag]));
+
+  const query = draft.trim().toLowerCase();
+  const suggestions = existingTags
+    .filter(
+      (tag) =>
+        !value.includes(tag.name) &&
+        (!query || tag.name.toLowerCase().includes(query)),
+    )
+    .slice(0, SUGGESTION_LIMIT);
+  const showSuggestions = focused && suggestions.length > 0;
 
   function addTag(name: string) {
     const trimmed = name.trim();
@@ -55,7 +66,10 @@ export function TagInput({
             key={name}
             className="flex items-center gap-1 rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium dark:bg-white/10"
           >
-            {name}
+            {(() => {
+              const tag = byName.get(name);
+              return tag ? <TagLabel tag={tag} /> : name;
+            })()}
             <button
               type="button"
               onClick={() => removeTag(name)}
@@ -69,6 +83,8 @@ export function TagInput({
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === ",") {
               event.preventDefault();
@@ -88,16 +104,17 @@ export function TagInput({
           className="min-w-24 flex-1 bg-transparent px-1 py-0.5 text-sm outline-none"
         />
       </div>
-      {suggestions.length > 0 && (
+      {showSuggestions && (
         <div className="flex flex-wrap gap-1.5">
           {suggestions.map((tag) => (
             <button
               key={tag.id}
               type="button"
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => addTag(tag.name)}
               className="rounded-full border border-black/10 px-2 py-0.5 text-xs text-zinc-600 hover:bg-black/[.04] dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/[.06]"
             >
-              {tag.name}
+              <TagLabel tag={tag} />
             </button>
           ))}
         </div>

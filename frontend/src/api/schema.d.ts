@@ -757,7 +757,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the caller's tags */
+        /**
+         * List the caller's tags
+         * @description Every tag the caller owns, plus every tag shared with them (see tag-sharing).
+         */
         get: operations["getTags"];
         put?: never;
         /** Create a tag */
@@ -775,12 +778,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get a tag
+         * @description Visible to any caller holding at least view permission on it (real ownership or any share).
+         */
+        get: operations["getTag"];
         put?: never;
         post?: never;
         /**
          * Delete a tag
-         * @description Always allowed — detaches the tag from every entry it was attached to rather than being blocked by use, unlike a category or account type.
+         * @description Detaches the tag from every entry it was attached to rather than being blocked by use, unlike a category or account type — unless the tag currently has at least one active share, in which case the delete is rejected (409) until every share on it is revoked or left.
          */
         delete: operations["deleteTag"];
         options?: never;
@@ -824,6 +831,54 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/tags/{id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a tag's shares
+         * @description Visible to any caller holding at least view permission (real ownership or any share) — every user with access to a tag can see who else has access. Does not include the real owner as a row (their identity is on the Tag itself via owner_name); a client renders that as the fixed first row separately.
+         */
+        get: operations["getTagShares"];
+        put?: never;
+        /**
+         * Share a tag with a user by email
+         * @description Real-owner only — there is no shareable "owner" tier that could also admit this. Deliberately does not hide whether email matched a registered user — the caller already holds an authenticated, real-owner grant on a real tag. A match creates or updates (201, share overwrites any existing one for that user in place) a share and emails the recipient a notification with an application link. No match returns 200 with matched: false and invite_allowed reflecting whether the instance currently permits sending a new application invite for that email; no share is created. Sharing with the caller's own email is rejected (400).
+         */
+        post: operations["postTagShare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tags/{id}/shares/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a share, or leave a shared tag
+         * @description The real owner may target any user's share (revoke). Any user may target their own (userId equal to the caller's own id) — self-leave, requiring no owner permission of its own. Either way access is removed immediately and unconditionally (no soft delete); entries already carrying the tag keep resolving and displaying it normally for every user who can otherwise see them. The real owner can never be a target (400) — they carry no share row, so self-leave is unavailable to them.
+         */
+        delete: operations["deleteTagShare"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a share's permission
+         * @description Real-owner only. The real owner can never be a target (400) — they carry no share row to change.
+         */
+        patch: operations["patchTagShare"];
         trace?: never;
     };
 }
@@ -1159,10 +1214,46 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             disabled: boolean;
-            /** @description The number of the caller's own non-deleted entries currently carrying this tag. */
+            /** @description The number of the *viewing caller's own* non-deleted entries currently carrying this tag. */
             entry_count: number;
             id: string;
             name: string;
+            /** @description The real owner's display name (or email, as a fallback). Present for every tag, but only meaningful to render when shared is true. */
+            owner_name?: string;
+            permission: components["schemas"]["TagPermission"];
+            /** @description True when the caller is not this tag's real owner (i.e. they hold it via a share). Never true for the real owner's own view of their own tag. */
+            shared: boolean;
+        };
+        /**
+         * @description Two shareable tiers, each a strict superset of the one before it: view (the tag resolves in entry-list filters and on entries already carrying it, but cannot be newly selected), append (+ selectable when tagging an entry). owner is the real owner's own, implicit permission — never a valid value for a share; only the real owner may ever rename, disable/enable, or delete a tag, or manage its shares.
+         * @enum {string}
+         */
+        TagPermission: "view" | "append" | "owner";
+        TagShare: {
+            /** Format: date-time */
+            created_at: string;
+            email: string;
+            granted_by: string;
+            granted_by_name: string;
+            name: string;
+            permission: components["schemas"]["TagPermission"];
+            /** Format: date-time */
+            updated_at: string;
+            user_id: string;
+        };
+        TagShareInvite: {
+            email: string;
+            permission: components["schemas"]["TagPermission"];
+        };
+        TagShareInviteResult: {
+            /** @description Only meaningful when matched is false: whether the instance currently allows sending a new application invite for this email (mirrors POST /api/auth/invites' own gating). */
+            invite_allowed: boolean;
+            /** @description True when email matched an existing, active user and a share was created or updated (share is then present). False when no such user exists. */
+            matched: boolean;
+            share?: components["schemas"]["TagShare"];
+        };
+        TagSharePermissionUpdate: {
+            permission: components["schemas"]["TagPermission"];
         };
         TagWrite: {
             name: string;
@@ -2696,7 +2787,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Every tag the caller owns. */
+            /** @description Every tag the caller owns or has a share on. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2743,6 +2834,30 @@ export interface operations {
             };
         };
     };
+    getTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tag. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     deleteTag: {
         parameters: {
             query?: never;
@@ -2763,6 +2878,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     patchTag: {
@@ -2848,6 +2964,125 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getTagShares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every current share on the tag. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagShare"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    postTagShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagShareInvite"];
+            };
+        };
+        responses: {
+            /** @description No user matched that email; see invite_allowed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagShareInviteResult"];
+                };
+            };
+            /** @description The share was created or updated. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagShareInviteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteTagShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: components["parameters"]["ShareUserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The share is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    patchTagShare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: components["parameters"]["ShareUserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagSharePermissionUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated share. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagShare"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

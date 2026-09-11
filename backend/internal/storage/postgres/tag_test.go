@@ -98,7 +98,10 @@ func TestPGTagOwnedBy(t *testing.T) {
 	}
 }
 
-func TestPGTagDeleteAlwaysAllowed(t *testing.T) {
+// TestPGTagDeleteAllowedWhenUnshared verifies delete stays unconditional
+// (not blocked by use) for a tag with no active share — see
+// tag_sharing_test.go for the blocked-while-shared guard.
+func TestPGTagDeleteAllowedWhenUnshared(t *testing.T) {
 	store, authStore := newTagStore(t)
 	ctx := context.Background()
 	owner := mustUser(t, authStore, "tagowner7@example.com")

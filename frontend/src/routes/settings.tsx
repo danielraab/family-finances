@@ -20,8 +20,8 @@ export const Route = createFileRoute("/settings")({
  * Renders nothing while useAuth is loading or the redirect is pending, so
  * there's no flash of the form before the decision is made. The Users tab
  * is only ever listed for an admin — see settings.users.tsx for its
- * matching direct-link redirect. Tags are per-user (each visitor manages
- * only their own), not admin-gated.
+ * matching direct-link redirect. Tag management lives on its own /tags
+ * page (own nav entry, own auth gate), not here — see tags.tsx.
  */
 function SettingsLayout() {
   const { status, user } = useAuth();
@@ -45,7 +45,6 @@ function SettingsLayout() {
       to: "/settings/invitations" as const,
       label: t("settings.tabs.myInvitations"),
     },
-    { to: "/settings/tags" as const, label: t("settings.tabs.tags") },
     ...(user.is_admin
       ? [{ to: "/settings/users" as const, label: t("settings.tabs.users") }]
       : []),

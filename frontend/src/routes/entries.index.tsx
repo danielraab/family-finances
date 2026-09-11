@@ -6,6 +6,7 @@ import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
+import { TagLabel } from "../components/TagLabel";
 import {
   amountColorClass,
   formatAmount,
@@ -247,6 +248,8 @@ function EntriesListPage() {
             {tags.map((tag) => (
               <option key={tag.id} value={tag.id}>
                 {tag.name}
+                {tag.shared &&
+                  ` — ${t("tags.shared.badgeTitle", { owner: tag.owner_name ?? "" })}`}
               </option>
             ))}
           </select>
@@ -443,12 +446,11 @@ function EntriesListPage() {
                     return (
                       <div className="flex flex-wrap gap-1">
                         {known.map((tag) => (
-                          <span
+                          <TagLabel
                             key={tag.id}
+                            tag={tag}
                             className="rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium dark:bg-white/10"
-                          >
-                            {tag.name}
-                          </span>
+                          />
                         ))}
                         {hasUnknown && (
                           <span className="rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium italic text-zinc-500 dark:bg-white/10 dark:text-zinc-400">

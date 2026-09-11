@@ -239,23 +239,26 @@ func (s *Service) Delete(ctx context.Context, callerID, id string) error {
 	return s.store.SoftDelete(ctx, id)
 }
 
-// resolveFilter applies the account-visibility and category resolution
+// resolveFilter applies the account-visibility and category/tag resolution
 // shared by List and Sum: narrows f.AccountIDs to callerID's own visible
 // accounts (owned or shared, per account-sharing — intersected with any
 // caller-supplied AccountIDs), and — when f.CategoryID is set — resolves
 // f.CategoryIDs to either the category's full subtree (the default) or the
 // category alone (CategoryMode: ModeExact).
 //
-// A category filter also grants its own visibility: s.categories.Subtree's
-// result already doubles as a permission check (non-empty iff callerID owns
-// or holds a share on that exact category — see category.Service.Subtree),
-// so when it's non-empty and callerID didn't also supply an explicit
-// AccountIDs filter, f.AllAccounts is set instead of narrowing to visible —
-// the caller's permission on the category itself authorizes seeing its
-// entries regardless of account access. An explicit AccountIDs filter
-// suppresses this (stays scoped to visible, as before): naming a specific
-// account is a narrower question than "every entry in this category." A
-// category callerID has no permission on at all never widens anything.
+// A category or tag filter also grants its own visibility: s.categories.
+// Subtree's result already doubles as a permission check (non-empty iff
+// callerID owns or holds a share on that exact category — see
+// category.Service.Subtree), and s.tags.OwnedBy likewise reports whether
+// callerID owns or holds any share on the exact tag (see tag.Service.
+// OwnedBy) — so when either check passes and callerID didn't also supply an
+// explicit AccountIDs filter, f.AllAccounts is set instead of narrowing to
+// visible — the caller's permission on the category/tag itself authorizes
+// seeing its entries regardless of account access. An explicit AccountIDs
+// filter suppresses this (stays scoped to visible, as before): naming a
+// specific account is a narrower question than "every entry in this
+// category/tag." A category or tag callerID has no permission on at all
+// never widens anything.
 func (s *Service) resolveFilter(ctx context.Context, callerID string, f Filter) (Filter, error) {
 	if !f.CategoryMode.valid() {
 		return Filter{}, ErrInvalidValue
@@ -283,6 +286,16 @@ func (s *Service) resolveFilter(ctx context.Context, callerID string, f Filter) 
 			f.CategoryIDs = permitted
 		}
 		if len(permitted) > 0 && !explicitAccounts {
+			f.AllAccounts = true
+		}
+	}
+
+	if f.TagID != nil {
+		permitted, err := s.tags.OwnedBy(ctx, callerID, []string{*f.TagID})
+		if err != nil {
+			return Filter{}, err
+		}
+		if permitted && !explicitAccounts {
 			f.AllAccounts = true
 		}
 	}

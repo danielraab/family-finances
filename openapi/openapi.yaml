@@ -1192,10 +1192,13 @@ paths:
     get:
       operationId: getTags
       summary: List the caller's tags
+      description: >-
+        Every tag the caller owns, plus every tag shared with them (see
+        tag-sharing).
       tags: [tags]
       responses:
         "200":
-          description: Every tag the caller owns.
+          description: Every tag the caller owns or has a share on.
           content:
             application/json:
               schema:
@@ -1233,6 +1236,30 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   /api/tags/{id}:
+    get:
+      operationId: getTag
+      summary: Get a tag
+      description: >-
+        Visible to any caller holding at least view permission on it (real
+        ownership or any share).
+      tags: [tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The tag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
     patch:
       operationId: patchTag
       summary: Rename a tag
@@ -1272,9 +1299,11 @@ paths:
       operationId: deleteTag
       summary: Delete a tag
       description: >-
-        Always allowed — detaches the tag from every entry it was attached
-        to rather than being blocked by use, unlike a category or account
-        type.
+        Detaches the tag from every entry it was attached to rather than
+        being blocked by use, unlike a category or account type — unless
+        the tag currently has at least one active share, in which case the
+        delete is rejected (409) until every share on it is revoked or
+        left.
       tags: [tags]
       parameters:
         - name: id
@@ -1287,6 +1316,155 @@ paths:
           description: The tag is deleted.
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/tags/{id}/shares:
+    get:
+      operationId: getTagShares
+      summary: List a tag's shares
+      description: >-
+        Visible to any caller holding at least view permission (real
+        ownership or any share) — every user with access to a tag can see
+        who else has access. Does not include the real owner as a row
+        (their identity is on the Tag itself via owner_name); a client
+        renders that as the fixed first row separately.
+      tags: [tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Every current share on the tag.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TagShare"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: postTagShare
+      summary: Share a tag with a user by email
+      description: >-
+        Real-owner only — there is no shareable "owner" tier that could
+        also admit this. Deliberately does not hide whether email matched
+        a registered user — the caller already holds an authenticated,
+        real-owner grant on a real tag. A match creates or updates (201,
+        share overwrites any existing one for that user in place) a share
+        and emails the recipient a notification with an application link.
+        No match returns 200 with matched: false and invite_allowed
+        reflecting whether the instance currently permits sending a new
+        application invite for that email; no share is created. Sharing
+        with the caller's own email is rejected (400).
+      tags: [tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagShareInvite"
+      responses:
+        "200":
+          description: No user matched that email; see invite_allowed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagShareInviteResult"
+        "201":
+          description: The share was created or updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagShareInviteResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/tags/{id}/shares/{userId}:
+    patch:
+      operationId: patchTagShare
+      summary: Change a share's permission
+      description: >-
+        Real-owner only. The real owner can never be a target (400) — they
+        carry no share row to change.
+      tags: [tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/ShareUserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagSharePermissionUpdate"
+      responses:
+        "200":
+          description: The updated share.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagShare"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteTagShare
+      summary: Revoke a share, or leave a shared tag
+      description: >-
+        The real owner may target any user's share (revoke). Any user may
+        target their own (userId equal to the caller's own id) — self-leave,
+        requiring no owner permission of its own. Either way access is
+        removed immediately and unconditionally (no soft delete); entries
+        already carrying the tag keep resolving and displaying it normally
+        for every user who can otherwise see them. The real owner can never
+        be a target (400) — they carry no share row, so self-leave is
+        unavailable to them.
+      tags: [tags]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/ShareUserId"
+      responses:
+        "204":
+          description: The share is removed.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -2494,7 +2672,7 @@ components:
 
     Tag:
       type: object
-      required: [id, name, disabled, created_at, entry_count]
+      required: [id, name, disabled, created_at, entry_count, permission, shared]
       properties:
         id:
           type: string
@@ -2508,8 +2686,100 @@ components:
         entry_count:
           type: integer
           description: >-
-            The number of the caller's own non-deleted entries currently
-            carrying this tag.
+            The number of the *viewing caller's own* non-deleted entries
+            currently carrying this tag.
+        permission:
+          $ref: '#/components/schemas/TagPermission'
+        shared:
+          type: boolean
+          description: >-
+            True when the caller is not this tag's real owner (i.e. they
+            hold it via a share). Never true for the real owner's own view
+            of their own tag.
+        owner_name:
+          type: string
+          description: >-
+            The real owner's display name (or email, as a fallback). Present
+            for every tag, but only meaningful to render when shared is
+            true.
+
+    TagPermission:
+      type: string
+      enum: [view, append, owner]
+      description: >-
+        Two shareable tiers, each a strict superset of the one before it:
+        view (the tag resolves in entry-list filters and on entries already
+        carrying it, but cannot be newly selected), append (+ selectable
+        when tagging an entry). owner is the real owner's own, implicit
+        permission — never a valid value for a share; only the real owner
+        may ever rename, disable/enable, or delete a tag, or manage its
+        shares.
+
+    TagShare:
+      type: object
+      required:
+        - user_id
+        - name
+        - email
+        - permission
+        - granted_by
+        - granted_by_name
+        - created_at
+        - updated_at
+      properties:
+        user_id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        permission:
+          $ref: '#/components/schemas/TagPermission'
+        granted_by:
+          type: string
+        granted_by_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TagShareInvite:
+      type: object
+      required: [email, permission]
+      properties:
+        email:
+          type: string
+        permission:
+          $ref: '#/components/schemas/TagPermission'
+
+    TagShareInviteResult:
+      type: object
+      required: [matched, invite_allowed]
+      properties:
+        matched:
+          type: boolean
+          description: >-
+            True when email matched an existing, active user and a share
+            was created or updated (share is then present). False when no
+            such user exists.
+        invite_allowed:
+          type: boolean
+          description: >-
+            Only meaningful when matched is false: whether the instance
+            currently allows sending a new application invite for this
+            email (mirrors POST /api/auth/invites' own gating).
+        share:
+          $ref: '#/components/schemas/TagShare'
+
+    TagSharePermissionUpdate:
+      type: object
+      required: [permission]
+      properties:
+        permission:
+          $ref: '#/components/schemas/TagPermission'
 
     TagWrite:
       type: object

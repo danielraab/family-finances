@@ -4,6 +4,7 @@
     "accounts": "Konten",
     "entries": "Buchungen",
     "categories": "Kategorien",
+    "tags": "Tags",
     "reports": "Auswertungen"
   },
   "sidebar": {
@@ -82,8 +83,7 @@
     "tabs": {
       "profile": "Profil",
       "myInvitations": "Meine Einladungen",
-      "users": "Benutzer",
-      "tags": "Tags"
+      "users": "Benutzer"
     },
     "profile": {
       "name": "Vollständiger Name",
@@ -145,33 +145,6 @@
     "myInvitations": {
       "heading": "Von dir gesendete Einladungen",
       "noInvites": "Du hast noch niemanden eingeladen."
-    },
-    "tags": {
-      "heading": "Tags",
-      "empty": "Noch keine Tags. Erstelle einen, um loszulegen.",
-      "nameLabel": "Name",
-      "create": "Tag hinzufügen",
-      "creating": "Wird hinzugefügt…",
-      "createError": "Tag konnte nicht erstellt werden — bitte versuche es erneut.",
-      "columnName": "Name",
-      "columnEntries": "Einträge",
-      "columnStatus": "Status",
-      "statusActive": "Aktiv",
-      "statusDisabled": "Deaktiviert",
-      "edit": "Bearbeiten",
-      "editTitle": "Tag umbenennen",
-      "editError": "Speichern fehlgeschlagen — bitte versuche es erneut.",
-      "save": "Speichern",
-      "saving": "Wird gespeichert…",
-      "cancel": "Abbrechen",
-      "disable": "Deaktivieren",
-      "enable": "Aktivieren",
-      "delete": "Löschen",
-      "confirm": {
-        "deleteTitle": "\"{{name}}\" löschen?",
-        "deleteBody": "Dies entfernt den Tag von jedem Eintrag, der ihn derzeit trägt. Dies kann hier nicht rückgängig gemacht werden.",
-        "confirmAction": "Bestätigen"
-      }
     }
   },
   "accounts": {
@@ -432,6 +405,90 @@
         "revokeBody": "{{name}} verliert sofort den Zugriff auf diese Kategorie.",
         "leaveTitle": "Diese geteilte Kategorie verlassen?",
         "leaveBody": "Du verlierst sofort den Zugriff auf diese Kategorie."
+      }
+    }
+  },
+  "tags": {
+    "title": "Tags",
+    "empty": "Noch keine Tags. Erstelle einen, um loszulegen.",
+    "loadError": "Tags konnten nicht geladen werden — bitte versuche es erneut.",
+    "deleteError": "Tag konnte nicht gelöscht werden — bitte versuche es erneut.",
+    "deleteErrorShared": "„{{name}}“ konnte nicht gelöscht werden — er ist noch mit jemandem geteilt. Entferne zuerst jede Freigabe.",
+    "entryCount_one": "{{count}} Buchung",
+    "entryCount_other": "{{count}} Buchungen",
+    "columnName": "Name",
+    "columnEntries": "Einträge",
+    "columnStatus": "Status",
+    "create": {
+      "nameLabel": "Name",
+      "submit": "Tag hinzufügen",
+      "submitting": "Wird hinzugefügt…",
+      "error": "Tag konnte nicht erstellt werden — bitte versuche es erneut."
+    },
+    "status": {
+      "active": "Aktiv",
+      "disabled": "Deaktiviert"
+    },
+    "actions": {
+      "edit": "Bearbeiten",
+      "share": "Teilen",
+      "viewSharing": "Freigabe",
+      "leave": "Verlassen",
+      "disable": "Deaktivieren",
+      "enable": "Aktivieren",
+      "delete": "Löschen"
+    },
+    "shared": {
+      "badgeTitle": "Geteilt von {{owner}}"
+    },
+    "sharedWithMe": {
+      "heading": "Mit mir geteilt",
+      "confirmLeaveTitle": "„{{name}}“ verlassen?",
+      "confirmLeaveBody": "Du verlierst sofort den Zugriff auf diesen Tag — er kann dann nicht mehr für deine Buchungen ausgewählt werden und erscheint nicht mehr in deinen Filtern."
+    },
+    "edit": {
+      "heading": "Tag umbenennen",
+      "nameLabel": "Name",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "cancel": "Abbrechen",
+      "error": "Speichern fehlgeschlagen — bitte versuche es erneut."
+    },
+    "confirm": {
+      "deleteTitle": "„{{name}}“ löschen?",
+      "deleteBody": "Dies entfernt den Tag von jedem Eintrag, der ihn derzeit trägt, es sei denn, er ist geteilt — dann muss die Freigabe zuerst entfernt werden. Dies kann hier nicht rückgängig gemacht werden.",
+      "cancel": "Abbrechen",
+      "confirmAction": "Bestätigen"
+    },
+    "notFound": "Dieser Tag existiert nicht, oder du hast keinen Zugriff darauf.",
+    "sharing": {
+      "title": "„{{tag}}“ teilen",
+      "subtitle": "Alle hier aufgeführten Personen können Buchungen nach diesem Tag filtern und sehen; „Hinzufügen“ erlaubt zusätzlich, ihn für eigene Buchungen auszuwählen.",
+      "realOwner": "Eigentümer",
+      "unknownUser": "Unbekannter Nutzer",
+      "grantedBy": "Hinzugefügt von {{name}} am {{date}}",
+      "leave": "Verlassen",
+      "revoke": "Entziehen",
+      "noShares": "Noch mit niemandem geteilt.",
+      "inviteTitle": "Mit jemandem teilen",
+      "email": "E-Mail",
+      "permissionLabel": "Berechtigung",
+      "inviteSubmit": "Teilen",
+      "inviteError": "Dieser Tag konnte nicht geteilt werden — bitte überprüfe das Formular und versuche es erneut.",
+      "unmatched": "Für {{email}} ist kein Konto registriert.",
+      "appInviteSent": "Einladung gesendet.",
+      "sendAppInvite": "Einladung senden",
+      "inviteUnavailable": "Einladungen sind auf dieser Instanz derzeit nicht verfügbar.",
+      "permission": {
+        "view": "Nur ansehen",
+        "append": "Hinzufügen",
+        "owner": "Eigentümer"
+      },
+      "confirm": {
+        "revokeTitle": "Diese Freigabe entziehen?",
+        "revokeBody": "{{name}} verliert sofort den Zugriff auf diesen Tag.",
+        "leaveTitle": "Diesen geteilten Tag verlassen?",
+        "leaveBody": "Du verlierst sofort den Zugriff auf diesen Tag."
       }
     }
   },

@@ -300,6 +300,8 @@ function ReportsPage() {
             {tags.map((tag) => (
               <option key={tag.id} value={tag.id}>
                 {tag.name}
+                {tag.shared &&
+                  ` — ${t("tags.shared.badgeTitle", { owner: tag.owner_name ?? "" })}`}
               </option>
             ))}
           </select>

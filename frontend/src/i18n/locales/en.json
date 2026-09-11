@@ -4,6 +4,7 @@
     "accounts": "Accounts",
     "entries": "Entries",
     "categories": "Categories",
+    "tags": "Tags",
     "reports": "Reports"
   },
   "sidebar": {
@@ -82,8 +83,7 @@
     "tabs": {
       "profile": "Profile",
       "myInvitations": "My Invitations",
-      "users": "Users",
-      "tags": "Tags"
+      "users": "Users"
     },
     "profile": {
       "name": "Full name",
@@ -145,33 +145,6 @@
     "myInvitations": {
       "heading": "Invitations you've sent",
       "noInvites": "You haven't invited anyone yet."
-    },
-    "tags": {
-      "heading": "Tags",
-      "empty": "No tags yet. Create one to get started.",
-      "nameLabel": "Name",
-      "create": "Add tag",
-      "creating": "Adding…",
-      "createError": "Couldn't create the tag — please try again.",
-      "columnName": "Name",
-      "columnEntries": "Entries",
-      "columnStatus": "Status",
-      "statusActive": "Active",
-      "statusDisabled": "Disabled",
-      "edit": "Edit",
-      "editTitle": "Rename tag",
-      "editError": "Couldn't save — please try again.",
-      "save": "Save",
-      "saving": "Saving…",
-      "cancel": "Cancel",
-      "disable": "Disable",
-      "enable": "Enable",
-      "delete": "Delete",
-      "confirm": {
-        "deleteTitle": "Delete \"{{name}}\"?",
-        "deleteBody": "This removes the tag from every entry that currently carries it. This cannot be undone here.",
-        "confirmAction": "Confirm"
-      }
     }
   },
   "accounts": {
@@ -432,6 +405,90 @@
         "revokeBody": "{{name}} will immediately lose access to this category.",
         "leaveTitle": "Leave this shared category?",
         "leaveBody": "You'll immediately lose access to this category."
+      }
+    }
+  },
+  "tags": {
+    "title": "Tags",
+    "empty": "No tags yet. Create one to get started.",
+    "loadError": "Couldn't load your tags — please try again.",
+    "deleteError": "Couldn't delete \"{{name}}\" — please try again.",
+    "deleteErrorShared": "Couldn't delete \"{{name}}\" — it is still shared with someone else. Remove every share first.",
+    "entryCount_one": "{{count}} entry",
+    "entryCount_other": "{{count}} entries",
+    "columnName": "Name",
+    "columnEntries": "Entries",
+    "columnStatus": "Status",
+    "create": {
+      "nameLabel": "Name",
+      "submit": "Add tag",
+      "submitting": "Adding…",
+      "error": "Couldn't create the tag — please try again."
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "actions": {
+      "edit": "Edit",
+      "share": "Share",
+      "viewSharing": "Sharing",
+      "leave": "Leave",
+      "disable": "Disable",
+      "enable": "Enable",
+      "delete": "Delete"
+    },
+    "shared": {
+      "badgeTitle": "Shared by {{owner}}"
+    },
+    "sharedWithMe": {
+      "heading": "Shared with me",
+      "confirmLeaveTitle": "Leave \"{{name}}\"?",
+      "confirmLeaveBody": "You'll immediately lose access to this tag — it will no longer be selectable on your entries or appear in your filters."
+    },
+    "edit": {
+      "heading": "Rename tag",
+      "nameLabel": "Name",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "error": "Couldn't save — please try again."
+    },
+    "confirm": {
+      "deleteTitle": "Delete \"{{name}}\"?",
+      "deleteBody": "This removes the tag from every entry that currently carries it, unless it's shared with someone — sharing must be removed first. This cannot be undone here.",
+      "cancel": "Cancel",
+      "confirmAction": "Confirm"
+    },
+    "notFound": "This tag doesn't exist, or you don't have access to it.",
+    "sharing": {
+      "title": "Share “{{tag}}”",
+      "subtitle": "Everyone listed here can filter and see entries by this tag; append additionally lets them select it for their own entries.",
+      "realOwner": "Owner",
+      "unknownUser": "Unknown user",
+      "grantedBy": "Added by {{name}} on {{date}}",
+      "leave": "Leave",
+      "revoke": "Revoke",
+      "noShares": "Not shared with anyone yet.",
+      "inviteTitle": "Share with someone",
+      "email": "Email",
+      "permissionLabel": "Permission",
+      "inviteSubmit": "Share",
+      "inviteError": "Couldn't share this tag — please check the form and try again.",
+      "unmatched": "No account is registered for {{email}}.",
+      "appInviteSent": "Invitation sent.",
+      "sendAppInvite": "Send them an invitation",
+      "inviteUnavailable": "Invitations are currently unavailable on this instance.",
+      "permission": {
+        "view": "View only",
+        "append": "Append",
+        "owner": "Owner"
+      },
+      "confirm": {
+        "revokeTitle": "Revoke this share?",
+        "revokeBody": "{{name}} will immediately lose access to this tag.",
+        "leaveTitle": "Leave this shared tag?",
+        "leaveBody": "You'll immediately lose access to this tag."
       }
     }
   },

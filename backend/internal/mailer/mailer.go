@@ -123,6 +123,23 @@ func (m *Mailer) SendCategoryShare(ctx context.Context, addr, categoryName, gran
 	return m.send(ctx, addr, "A category was shared with you on Family Finances", text, html)
 }
 
+// SendTagShare emails addr that tagName has been shared with them by
+// granterName at the given permission tier, with a link into the
+// application. Satisfies tag.Mailer.
+func (m *Mailer) SendTagShare(ctx context.Context, addr, tagName, granterName, permission, link string) error {
+	by := granterName
+	if by == "" {
+		by = "a member"
+	}
+	text := by + ` shared the tag "` + tagName + `" with you (` + permission + ` access). Open it here:` +
+		"\n\n" + link
+	html := paragraphs(
+		htmlEscape(by)+` shared the tag "`+htmlEscape(tagName)+`" with you (`+htmlEscape(permission)+` access). Open it here:`,
+		`<a href="`+htmlEscape(link)+`">`+htmlEscape(link)+`</a>`,
+	)
+	return m.send(ctx, addr, "A tag was shared with you on Family Finances", text, html)
+}
+
 // send composes the MIME message and delivers it.
 func (m *Mailer) send(ctx context.Context, to, subject, textBody, htmlBody string) error {
 	msg, err := m.compose(to, subject, textBody, htmlBody)

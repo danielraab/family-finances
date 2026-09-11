@@ -17,6 +17,7 @@ import { Route as HomeRouteImport } from './routes/home'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TagsRouteImport } from './routes/tags'
 import { Route as AccountsIndexRouteImport } from './routes/accounts.index'
 import { Route as AccountsAccountIdRouteImport } from './routes/accounts.$accountId'
 import { Route as AccountsNewRouteImport } from './routes/accounts.new'
@@ -24,13 +25,13 @@ import { Route as EntriesIndexRouteImport } from './routes/entries.index'
 import { Route as EntriesNewRouteImport } from './routes/entries.new'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsInvitationsRouteImport } from './routes/settings.invitations'
-import { Route as SettingsTagsRouteImport } from './routes/settings.tags'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as AccountsAccountIdIndexRouteImport } from './routes/accounts.$accountId.index'
 import { Route as AccountsAccountIdEditRouteImport } from './routes/accounts.$accountId.edit'
 import { Route as AccountsAccountIdSharingRouteImport } from './routes/accounts.$accountId.sharing'
 import { Route as CategoriesCategoryIdSharingRouteImport } from './routes/categories_.$categoryId.sharing'
 import { Route as EntriesEntryIdEditRouteImport } from './routes/entries.$entryId.edit'
+import { Route as TagsTagIdSharingRouteImport } from './routes/tags_.$tagId.sharing'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -72,6 +73,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TagsRoute = TagsRouteImport.update({
+  id: '/tags',
+  path: '/tags',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AccountsIndexRoute = AccountsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -107,11 +113,6 @@ const SettingsInvitationsRoute = SettingsInvitationsRouteImport.update({
   path: '/invitations',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsTagsRoute = SettingsTagsRouteImport.update({
-  id: '/tags',
-  path: '/tags',
-  getParentRoute: () => SettingsRoute,
-} as any)
 const SettingsUsersRoute = SettingsUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -144,6 +145,11 @@ const EntriesEntryIdEditRoute = EntriesEntryIdEditRouteImport.update({
   path: '/$entryId/edit',
   getParentRoute: () => EntriesRoute,
 } as any)
+const TagsTagIdSharingRoute = TagsTagIdSharingRouteImport.update({
+  id: '/tags_/$tagId/sharing',
+  path: '/tags/$tagId/sharing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -154,11 +160,11 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/tags': typeof TagsRoute
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
-  '/settings/tags': typeof SettingsTagsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts/': typeof AccountsIndexRoute
   '/entries/': typeof EntriesIndexRoute
@@ -167,6 +173,7 @@ export interface FileRoutesByFullPath {
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/categories/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/tags/$tagId/sharing': typeof TagsTagIdSharingRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -175,10 +182,10 @@ export interface FileRoutesByTo {
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
+  '/tags': typeof TagsRoute
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
-  '/settings/tags': typeof SettingsTagsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts': typeof AccountsIndexRoute
   '/entries': typeof EntriesIndexRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/categories/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/tags/$tagId/sharing': typeof TagsTagIdSharingRoute
   '/accounts/$accountId': typeof AccountsAccountIdIndexRoute
 }
 export interface FileRoutesById {
@@ -199,11 +207,11 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/tags': typeof TagsRoute
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
   '/entries/new': typeof EntriesNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
-  '/settings/tags': typeof SettingsTagsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts/': typeof AccountsIndexRoute
   '/entries/': typeof EntriesIndexRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/categories_/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/tags_/$tagId/sharing': typeof TagsTagIdSharingRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -225,11 +234,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/reports'
     | '/settings'
+    | '/tags'
     | '/accounts/$accountId'
     | '/accounts/new'
     | '/entries/new'
     | '/settings/invitations'
-    | '/settings/tags'
     | '/settings/users'
     | '/accounts/'
     | '/entries/'
@@ -238,6 +247,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/sharing'
     | '/categories/$categoryId/sharing'
     | '/entries/$entryId/edit'
+    | '/tags/$tagId/sharing'
     | '/accounts/$accountId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -246,10 +256,10 @@ export interface FileRouteTypes {
     | '/home'
     | '/login'
     | '/reports'
+    | '/tags'
     | '/accounts/new'
     | '/entries/new'
     | '/settings/invitations'
-    | '/settings/tags'
     | '/settings/users'
     | '/accounts'
     | '/entries'
@@ -258,6 +268,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/sharing'
     | '/categories/$categoryId/sharing'
     | '/entries/$entryId/edit'
+    | '/tags/$tagId/sharing'
     | '/accounts/$accountId'
   id:
     | '__root__'
@@ -269,11 +280,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/reports'
     | '/settings'
+    | '/tags'
     | '/accounts/$accountId'
     | '/accounts/new'
     | '/entries/new'
     | '/settings/invitations'
-    | '/settings/tags'
     | '/settings/users'
     | '/accounts/'
     | '/entries/'
@@ -282,6 +293,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/sharing'
     | '/categories_/$categoryId/sharing'
     | '/entries/$entryId/edit'
+    | '/tags_/$tagId/sharing'
     | '/accounts/$accountId/'
   fileRoutesById: FileRoutesById
 }
@@ -294,7 +306,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  TagsRoute: typeof TagsRoute
   CategoriesCategoryIdSharingRoute: typeof CategoriesCategoryIdSharingRoute
+  TagsTagIdSharingRoute: typeof TagsTagIdSharingRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -355,6 +369,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tags': {
+      id: '/tags'
+      path: '/tags'
+      fullPath: '/tags'
+      preLoaderRoute: typeof TagsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/accounts/': {
       id: '/accounts/'
       path: '/'
@@ -404,13 +425,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsInvitationsRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/settings/tags': {
-      id: '/settings/tags'
-      path: '/tags'
-      fullPath: '/settings/tags'
-      preLoaderRoute: typeof SettingsTagsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
     '/settings/users': {
       id: '/settings/users'
       path: '/users'
@@ -452,6 +466,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/entries/$entryId/edit'
       preLoaderRoute: typeof EntriesEntryIdEditRouteImport
       parentRoute: typeof EntriesRoute
+    }
+    '/tags_/$tagId/sharing': {
+      id: '/tags_/$tagId/sharing'
+      path: '/tags/$tagId/sharing'
+      fullPath: '/tags/$tagId/sharing'
+      preLoaderRoute: typeof TagsTagIdSharingRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -504,14 +525,12 @@ const EntriesRouteWithChildren =
 
 interface SettingsRouteChildren {
   SettingsInvitationsRoute: typeof SettingsInvitationsRoute
-  SettingsTagsRoute: typeof SettingsTagsRoute
   SettingsUsersRoute: typeof SettingsUsersRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsInvitationsRoute: SettingsInvitationsRoute,
-  SettingsTagsRoute: SettingsTagsRoute,
   SettingsUsersRoute: SettingsUsersRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
@@ -529,7 +548,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  TagsRoute: TagsRoute,
   CategoriesCategoryIdSharingRoute: CategoriesCategoryIdSharingRoute,
+  TagsTagIdSharingRoute: TagsTagIdSharingRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
