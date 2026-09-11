@@ -172,7 +172,22 @@
       "closingDateInvalid": "Closing date can't be before the opening date.",
       "create": "Create account",
       "save": "Save changes",
-      "saveError": "Couldn't save — please check the form and try again."
+      "saveError": "Couldn't save — please check the form and try again.",
+      "types": {
+        "checking": "Checking",
+        "savings": "Savings",
+        "cash": "Cash",
+        "creditCard": "Credit Card",
+        "prepaidCard": "Prepaid Card",
+        "loan": "Loan",
+        "mortgage": "Mortgage",
+        "investment": "Investment",
+        "brokerage": "Brokerage",
+        "retirement": "Retirement",
+        "business": "Business",
+        "insurance": "Insurance",
+        "misc": "Other"
+      }
     },
     "new": {
       "title": "New account"

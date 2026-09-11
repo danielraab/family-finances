@@ -175,10 +175,11 @@ Invitations, and Tags for everyone; Users only when `user.is_admin`) plus
   `src/components/InviteList.tsx`.
   There is no Account Types settings tab: an account's type is a free-text
   label on the account itself (`AccountForm.tsx`'s type field is a text
-  input with a `<datalist>` combining a fixed `DEFAULT_ACCOUNT_TYPES`
-  constant and the visitor's own in-use values from
-  `GET /api/account-types`, which now returns a `string[]`). See
-  `backend/AGENTS.md`'s "Account types" section.
+  input with a `<datalist>` combining a fixed `DEFAULT_ACCOUNT_TYPE_KEYS`
+  list — translated via the `accounts.form.types.*` i18n keys, so the
+  submitted suggestion text is in the visitor's own language — and the
+  visitor's own in-use values from `GET /api/account-types`, which returns
+  a `string[]`). See `backend/AGENTS.md`'s "Account types" section.
 - `settings.tags.tsx` (`/settings/tags`, open to every authenticated
   visitor — not admin-gated). Lists the caller's own tags
   (`GET /api/tags`, name/entry-count/Active-or-Disabled status), and can

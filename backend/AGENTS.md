@@ -304,10 +304,10 @@ no create/update/delete/disable/enable endpoint, no `account_types` table,
 no `Type` struct, no seeding hook, and no `ErrTypeInUse`/`ErrTypeDisabled`
 sentinel anymore.
 
-The former default titles (Checking, Savings, Cash, Credit Card, Loan,
-Investment) now live only in the frontend (`DEFAULT_ACCOUNT_TYPES` in
-`AccountForm.tsx`), merged with the `GET /api/account-types` response as the
-type field's `<datalist>` suggestions. `main.go` wires only
+The former default titles now live only in the frontend, as a list of i18n
+keys (`DEFAULT_ACCOUNT_TYPE_KEYS` in `AccountForm.tsx`, translated via
+`accounts.form.types.*`), merged with the `GET /api/account-types` response
+as the type field's `<datalist>` suggestions. `main.go` wires only
 `categorySvc` into `auth.WithNewUserHooks(...)`; a brand-new user gets
 seeded starter categories but no account types.
 
