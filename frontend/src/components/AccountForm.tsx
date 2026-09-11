@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { compact } from "../lib/compact";
+import { CurrencySelect } from "./CurrencySelect";
 import { IconColorPicker } from "./IconColorPicker";
 
 type AccountCreate = components["schemas"]["AccountCreate"];
@@ -29,21 +30,6 @@ const DEFAULT_ACCOUNT_TYPE_KEYS = [
   "insurance",
   "misc",
 ] as const;
-
-/** Feature-detects Intl.supportedValuesOf, absent from older engines. */
-function listCurrencies(): string[] {
-  const supportedValuesOf = (
-    Intl as unknown as { supportedValuesOf?: (key: string) => string[] }
-  ).supportedValuesOf;
-  if (!supportedValuesOf) {
-    return [];
-  }
-  try {
-    return supportedValuesOf("currency").map((code) => code.toUpperCase());
-  } catch {
-    return [];
-  }
-}
 
 export type AccountFormValues = {
   title: string;
@@ -101,9 +87,9 @@ export function AccountForm({
   const [values, setValues] = useState(initial);
   const [typeSuggestions, setTypeSuggestions] = useState<string[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [currencies] = useState(listCurrencies);
   const [invalidField, setInvalidField] = useState<string | null>(null);
   const typeListId = useId();
+  const currencyId = useId();
 
   useEffect(() => {
     Promise.all([api.GET("/api/account-types"), api.GET("/api/accounts")]).then(
@@ -222,27 +208,19 @@ export function AccountForm({
       </label>
 
       <div className="flex flex-col gap-4 sm:flex-row">
-        <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">
+        <label
+          htmlFor={currencyId}
+          className="flex flex-1 flex-col gap-1.5 text-sm font-medium"
+        >
           {t("accounts.form.currency")}
-          <select
+          <CurrencySelect
+            id={currencyId}
             value={values.currency}
-            onChange={(event) => set("currency", event.target.value)}
+            onChange={(value) => set("currency", value)}
             className={inputClass}
+            placeholder={t("accounts.form.currencyPlaceholder")}
             required
-          >
-            <option value="" disabled>
-              {t("accounts.form.currencyPlaceholder")}
-            </option>
-            {!currencies.includes(values.currency) &&
-              values.currency !== "" && (
-                <option value={values.currency}>{values.currency}</option>
-              )}
-            {currencies.map((code) => (
-              <option key={code} value={code}>
-                {code}
-              </option>
-            ))}
-          </select>
+          />
           {invalidField === "currency" && (
             <span className="text-xs font-normal text-red-600 dark:text-red-400">
               {t("accounts.form.currencyInvalid")}
