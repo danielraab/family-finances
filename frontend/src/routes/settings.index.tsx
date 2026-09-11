@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
+import { CurrencySelect } from "../components/CurrencySelect";
 import i18n from "../i18n";
 
 export const Route = createFileRoute("/settings/")({
@@ -14,7 +15,6 @@ type UserSettings = components["schemas"]["UserSettings"];
 type Language = UserSettings["language"];
 
 const LANGUAGES: Language[] = ["en", "de"];
-const CURRENCY_RE = /^[A-Z]{3}$/;
 
 /** Feature-detects Intl.supportedValuesOf, absent from older engines. */
 function listTimezones(): string[] {
@@ -71,7 +71,6 @@ function ProfileSettingsTab() {
   const { user, setUser } = useAuth();
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [timezones] = useState(listTimezones);
-  const [currencyDraft, setCurrencyDraft] = useState("");
   const [errorField, setErrorField] = useState<keyof UserSettings | null>(null);
   const savedName = user?.display_name ?? "";
   const [nameDraft, setNameDraft] = useState(savedName);
@@ -103,7 +102,6 @@ function ProfileSettingsTab() {
     api.GET("/api/settings").then(({ data }) => {
       if (cancelled || !data) return;
       setSettings(data);
-      setCurrencyDraft(data.default_currency);
     });
     return () => {
       cancelled = true;
@@ -122,7 +120,6 @@ function ProfileSettingsTab() {
     });
     if (!response.ok || !data) {
       setSettings(previous);
-      setCurrencyDraft(previous.default_currency);
       setErrorField(field);
       return;
     }
@@ -211,24 +208,11 @@ function ProfileSettingsTab() {
             : null
         }
       >
-        <input
+        <CurrencySelect
           id="settings-default-currency"
-          value={currencyDraft}
-          maxLength={3}
-          onChange={(event) =>
-            setCurrencyDraft(event.target.value.toUpperCase())
-          }
-          onBlur={() => {
-            if (
-              CURRENCY_RE.test(currencyDraft) &&
-              currencyDraft !== settings.default_currency
-            ) {
-              update({ default_currency: currencyDraft });
-            } else {
-              setCurrencyDraft(settings.default_currency);
-            }
-          }}
-          className={`${inputClass} w-24 uppercase`}
+          value={settings.default_currency}
+          onChange={(value) => update({ default_currency: value })}
+          className={`${inputClass} w-24`}
         />
       </SettingField>
 

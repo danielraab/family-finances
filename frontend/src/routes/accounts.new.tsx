@@ -1,8 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
-import { AccountForm, emptyAccountForm } from "../components/AccountForm";
+import {
+  AccountForm,
+  type AccountFormValues,
+  emptyAccountForm,
+} from "../components/AccountForm";
 
 export const Route = createFileRoute("/accounts/new")({
   component: NewAccount,
@@ -13,6 +17,27 @@ function NewAccount() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initial, setInitial] = useState<AccountFormValues | null>(null);
+
+  // Preselect the visitor's default currency (from /settings) so most
+  // accounts need no currency change at all.
+  useEffect(() => {
+    let cancelled = false;
+    api.GET("/api/settings").then(({ data }) => {
+      if (cancelled) return;
+      setInitial({
+        ...emptyAccountForm,
+        currency: data?.default_currency ?? "",
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!initial) {
+    return null;
+  }
 
   return (
     <section className="mx-auto flex w-full max-w-xl flex-col gap-6 px-6 py-12 sm:px-10">
@@ -20,7 +45,7 @@ function NewAccount() {
         {t("accounts.new.title")}
       </h1>
       <AccountForm
-        initial={emptyAccountForm}
+        initial={initial}
         submitLabel={t("accounts.form.create")}
         submitting={submitting}
         serverError={error}
