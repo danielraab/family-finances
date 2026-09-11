@@ -31,9 +31,19 @@ storage and comparison.
 
 #### Scenario: Explicit link while authenticated
 
-- **WHEN** an authenticated user completes a sign-in flow for an identity not
-  yet attached to any user
+- **WHEN** an authenticated user completes the OIDC sign-in flow for a
+  provider identity not yet attached to any user
 - **THEN** that identity is attached to the authenticated user's account
+
+This applies to OIDC only. Magic-link and invite-acceptance completion SHALL
+NOT consult any session already present on the request: a magic link proves
+control of one specific address and an invite names one specific address, so
+completing either SHALL always resolve to (or create) that address's own
+account — never merge into an unrelated account the browser happens to still
+be signed into. (Without this restriction, a stale or shared session cookie —
+e.g. a device or browser reused across staging test accounts — would cause a
+person following their own magic-link or invite email to be silently signed
+in as whoever that leftover session belonged to.)
 
 #### Scenario: Identity uniqueness is enforced
 

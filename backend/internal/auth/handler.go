@@ -66,7 +66,12 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	return h
 }
 
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h.mux.ServeHTTP(w, r) }
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Never let a browser, proxy, or shared-device disk cache reuse a
+	// response carrying a session cookie or another user's account data.
+	w.Header().Set("Cache-Control", "no-store")
+	h.mux.ServeHTTP(w, r)
+}
 
 // --- magic link ---------------------------------------------------------
 
@@ -96,7 +101,7 @@ func (h *Handler) emailCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonClient := wantsJSON(r)
-	user, session, err := h.svc.CompleteEmailLogin(r.Context(), token, currentUserID(r), sessionContext(r, jsonClient))
+	user, session, err := h.svc.CompleteEmailLogin(r.Context(), token, sessionContext(r, jsonClient))
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -379,7 +384,7 @@ func (h *Handler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonClient := wantsJSON(r)
-	user, session, err := h.svc.AcceptInvite(r.Context(), token, currentUserID(r), sessionContext(r, jsonClient))
+	user, session, err := h.svc.AcceptInvite(r.Context(), token, sessionContext(r, jsonClient))
 	if err != nil {
 		h.renderError(w, r, err)
 		return

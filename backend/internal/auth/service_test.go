@@ -170,7 +170,7 @@ func signInEmail(t *testing.T, svc *auth.Service, mailer *stubMailer, email stri
 	if !ok {
 		t.Fatalf("no email sent for %q", email)
 	}
-	user, tok, err := svc.CompleteEmailLogin(context.Background(), tokenFromLink(t, m.link), "", auth.SessionContext{Client: auth.ClientAPI})
+	user, tok, err := svc.CompleteEmailLogin(context.Background(), tokenFromLink(t, m.link), auth.SessionContext{Client: auth.ClientAPI})
 	if err != nil {
 		t.Fatalf("CompleteEmailLogin: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestSignupDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ := mailer.last()
-	if _, _, err := svc.CompleteEmailLogin(context.Background(), tokenFromLink(t, m.link), "", auth.SessionContext{}); err != nil {
+	if _, _, err := svc.CompleteEmailLogin(context.Background(), tokenFromLink(t, m.link), auth.SessionContext{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -288,7 +288,7 @@ func TestInviteBypassesSignupAndDomain(t *testing.T) {
 		t.Fatalf("invite mail not sent: %+v", m)
 	}
 
-	user, _, err := svc.AcceptInvite(context.Background(), tokenFromLink(t, m.link), "", auth.SessionContext{})
+	user, _, err := svc.AcceptInvite(context.Background(), tokenFromLink(t, m.link), auth.SessionContext{})
 	if err != nil {
 		t.Fatalf("AcceptInvite: %v", err)
 	}
@@ -346,10 +346,10 @@ func TestMagicLinkSingleUseAndExpiry(t *testing.T) {
 	m, _ := mailer.last()
 	tok := tokenFromLink(t, m.link)
 
-	if _, _, err := svc.CompleteEmailLogin(context.Background(), tok, "", auth.SessionContext{}); err != nil {
+	if _, _, err := svc.CompleteEmailLogin(context.Background(), tok, auth.SessionContext{}); err != nil {
 		t.Fatalf("first use: %v", err)
 	}
-	if _, _, err := svc.CompleteEmailLogin(context.Background(), tok, "", auth.SessionContext{}); !errors.Is(err, auth.ErrTokenConsumed) {
+	if _, _, err := svc.CompleteEmailLogin(context.Background(), tok, auth.SessionContext{}); !errors.Is(err, auth.ErrTokenConsumed) {
 		t.Fatalf("second use err = %v, want ErrTokenConsumed", err)
 	}
 
@@ -359,7 +359,7 @@ func TestMagicLinkSingleUseAndExpiry(t *testing.T) {
 	}
 	m2, _ := mailer.last()
 	clk.advance(16 * time.Minute)
-	if _, _, err := svc.CompleteEmailLogin(context.Background(), tokenFromLink(t, m2.link), "", auth.SessionContext{}); !errors.Is(err, auth.ErrTokenExpired) {
+	if _, _, err := svc.CompleteEmailLogin(context.Background(), tokenFromLink(t, m2.link), auth.SessionContext{}); !errors.Is(err, auth.ErrTokenExpired) {
 		t.Fatalf("expired token err = %v, want ErrTokenExpired", err)
 	}
 }

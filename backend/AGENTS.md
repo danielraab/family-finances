@@ -190,7 +190,12 @@ to status codes in the one place — `httpapi/respond.go`.
   always `200` — no enumeration) and one OIDC provider
   (`GET /api/auth/oidc/start` → code + PKCE + nonce). They link to the same
   `user` by verified email (magic link always proves it; OIDC only on
-  `email_verified: true`), or explicitly while authenticated.
+  `email_verified: true`), or — OIDC only — explicitly while authenticated
+  (lets an already-signed-in user attach a provider identity whose email
+  isn't verified). Magic-link completion and invite acceptance never consult
+  a session already on the request: each names one specific address, so
+  completing either always resolves to that address's own account, never an
+  unrelated account a stale/shared session cookie happens to belong to.
 - **`GET /api/auth/config`** — unauthenticated; reports which sign-in methods
   the client should show. Today: `{ "oidc": { "label", "start_path" } }` when an
   OIDC provider is configured, else `{ "oidc": null }`. `label` is `OIDC_LABEL`.

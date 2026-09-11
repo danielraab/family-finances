@@ -187,9 +187,13 @@ func (s *Service) emailPermitted(ctx context.Context, email string) (bool, error
 }
 
 // CompleteEmailLogin consumes a magic-link token and establishes a session.
-// currentUserID is the caller's already-authenticated user ("" if anonymous),
-// which links the new email identity to that account.
-func (s *Service) CompleteEmailLogin(ctx context.Context, token, currentUserID string, sc SessionContext) (User, string, error) {
+// It never links to whatever session happens to already be on the request —
+// a magic link always proves control of its own address, so completing one
+// always signs in as (or creates) that address's own account, regardless of
+// any unrelated session cookie the browser happens to be carrying. See
+// service.go's note on identityInput.currentUserID for why this differs from
+// CompleteOIDC.
+func (s *Service) CompleteEmailLogin(ctx context.Context, token string, sc SessionContext) (User, string, error) {
 	hash := hashToken(token)
 	email, err := s.store.ConsumeMagicLinkToken(ctx, hash, s.now())
 	if err != nil {
@@ -200,7 +204,6 @@ func (s *Service) CompleteEmailLogin(ctx context.Context, token, currentUserID s
 		kind:          IdentityEmail,
 		email:         email,
 		emailVerified: true,
-		currentUserID: currentUserID,
 		allowCreate:   true,
 	})
 	if err != nil {
@@ -388,8 +391,12 @@ func (s *Service) CreateInvite(ctx context.Context, inviterID, addr string) (Inv
 }
 
 // AcceptInvite consumes an invite token and establishes a session. Account
-// creation here bypasses the signup toggle and the domain allow-list.
-func (s *Service) AcceptInvite(ctx context.Context, token, currentUserID string, sc SessionContext) (User, string, error) {
+// creation here bypasses the signup toggle and the domain allow-list. Like
+// CompleteEmailLogin, it never links to whatever session happens to already
+// be on the request — an invite names a specific address, so accepting it
+// always signs in as (or creates) that address's own account, never an
+// unrelated account the browser happens to still be signed into.
+func (s *Service) AcceptInvite(ctx context.Context, token string, sc SessionContext) (User, string, error) {
 	hash := hashToken(token)
 	inv, err := s.store.ConsumeInvite(ctx, hash, s.now())
 	if err != nil {
@@ -400,7 +407,6 @@ func (s *Service) AcceptInvite(ctx context.Context, token, currentUserID string,
 		kind:          IdentityEmail,
 		email:         inv.Email,
 		emailVerified: true,
-		currentUserID: currentUserID,
 		allowCreate:   true,
 		bypassPolicy:  true,
 	})
@@ -664,6 +670,15 @@ type identityInput struct {
 	emailVerified bool
 	provider      string
 	subject       string
+	// currentUserID is deliberately populated only by CompleteOIDC. It lets
+	// an already-authenticated user link an OIDC identity whose email isn't
+	// verified (or has no email at all) to their own account — otherwise an
+	// unverified/emailless OIDC identity could never be linked at all, since
+	// ResolveLink won't attach it by email match alone. CompleteEmailLogin
+	// and AcceptInvite never set this: a magic link or invite always proves
+	// (or names) one specific address, so completing either must always
+	// resolve to that address's own account, never silently merge into
+	// whatever unrelated session the browser happens to still be carrying.
 	currentUserID string
 	allowCreate   bool
 	bypassPolicy  bool // invite acceptance: skip signup toggle + domain list
