@@ -263,7 +263,7 @@ function SharingPage() {
           </h2>
           <form
             onSubmit={handleInvite}
-            className="flex flex-wrap items-end gap-3"
+            className="flex flex-wrap items-start gap-3"
           >
             <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium">
               {t("categories.sharing.email")}
@@ -273,6 +273,10 @@ function SharingPage() {
                 onChange={(e) => setInviteEmail(e.target.value)}
                 className={inputClass}
                 required
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                data-form-type="other"
               />
             </label>
             <label className="flex flex-col gap-1.5 text-sm font-medium">
@@ -291,13 +295,21 @@ function SharingPage() {
                 ))}
               </select>
             </label>
-            <button
-              type="submit"
-              disabled={inviting}
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              {t("categories.sharing.inviteSubmit")}
-            </button>
+            <div className="flex flex-col gap-1.5">
+              <span
+                aria-hidden="true"
+                className="invisible text-sm font-medium"
+              >
+                &nbsp;
+              </span>
+              <button
+                type="submit"
+                disabled={inviting}
+                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {t("categories.sharing.inviteSubmit")}
+              </button>
+            </div>
           </form>
           {inviteError && (
             <p className="text-sm text-red-600 dark:text-red-400">
