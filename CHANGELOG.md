@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-11
+
+### Added
+
+- More account-type suggestions (prepaid card, mortgage, brokerage,
+  retirement, business, insurance) and a misc/"Other" catch-all.
+
+### Changed
+
+- Account creation and profile settings now share the same currency
+  select component; the default-currency field in profile settings no
+  longer takes free-text input, and new accounts preselect the
+  visitor's saved default currency.
+- Account-type suggestions are now translated and match the visitor's
+  language instead of being hardcoded in English.
+
 ## [0.1.0] - 2026-09-11
 
 ### Added
@@ -51,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/danielraab/family-finances/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/danielraab/family-finances/compare/v0.0.0...v0.1.0
 [0.0.0]: https://github.com/danielraab/family-finances/releases/tag/v0.0.0
