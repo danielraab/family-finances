@@ -385,7 +385,9 @@
         "file": {
           "label": "File",
           "csvHeaderNote": "The first row of a CSV file must contain column headings.",
-          "parsing": "Reading {{fileName}}…"
+          "parsing": "Reading {{fileName}}…",
+          "chooseFile": "Choose file",
+          "noFileChosen": "No file chosen"
         },
         "mapping": {
           "fieldsHeading": "Column mapping",

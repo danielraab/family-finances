@@ -48,15 +48,23 @@ export function ImportFileStep({
         {t("entries.import.steps.file.csvHeaderNote")}
       </p>
 
-      <label className="flex flex-col gap-1.5 text-sm font-medium">
+      <div className="flex flex-col gap-1.5 text-sm font-medium">
         {t("entries.import.steps.file.label")}
-        <input
-          type="file"
-          accept=".csv,.json,text/csv,application/json"
-          onChange={handleFile}
-          className="text-sm"
-        />
-      </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="cursor-pointer rounded-md border border-black/15 px-4 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]">
+            {t("entries.import.steps.file.chooseFile")}
+            <input
+              type="file"
+              accept=".csv,.json"
+              onChange={handleFile}
+              className="sr-only"
+            />
+          </label>
+          <span className="text-sm font-normal text-zinc-600 dark:text-zinc-400">
+            {fileName ?? t("entries.import.steps.file.noFileChosen")}
+          </span>
+        </div>
+      </div>
 
       {parsing && (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
