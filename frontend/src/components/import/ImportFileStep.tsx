@@ -1,6 +1,7 @@
 import { type ChangeEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  hasSupportedExtension,
   isParseFileError,
   type ParsedFile,
   parseImportFile,
@@ -31,6 +32,12 @@ export function ImportFileStep({
 
     setFileName(file.name);
     setError(null);
+
+    if (!hasSupportedExtension(file.name)) {
+      setError("unsupportedFileType");
+      return;
+    }
+
     setParsing(true);
     const result = await parseImportFile(file);
     setParsing(false);
@@ -55,7 +62,14 @@ export function ImportFileStep({
             {t("entries.import.steps.file.chooseFile")}
             <input
               type="file"
-              accept=".csv,.json"
+              // No `accept` filter, deliberately: Android's document picker
+              // filters by MIME type via a static, inconsistently-populated
+              // extension→MIME table, which has been reported to hide real
+              // .csv files from providers like Google Drive or the Files
+              // app regardless of what's listed here. Every file type is
+              // shown instead, and hasSupportedExtension() above rejects a
+              // wrong pick with a clear message rather than a cryptic parse
+              // failure.
               onChange={handleFile}
               className="sr-only"
             />

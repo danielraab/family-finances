@@ -42,15 +42,20 @@ account without starting over.
 
 ### Requirement: A CSV or JSON file is selected and parsed client-side
 
-The file-selection step SHALL accept a single `.csv` or `.json` file,
-parsed entirely in the browser — no file content is uploaded until the
-import step creates entries from it. The step SHALL display, as
+The file-selection step SHALL let the visitor pick a single file, parsed
+entirely in the browser — no file content is uploaded until the import
+step creates entries from it. The file picker SHALL NOT restrict which
+files are selectable by type (no `accept` filter): a picked file whose
+name does not end in `.csv` or `.json` (case-insensitive) SHALL be
+rejected immediately with an on-screen error, before any parse is
+attempted, and SHALL NOT advance the wizard. The step SHALL display, as
 persistent on-screen guidance (not only in an error state), that a CSV
-file's first row must be column headings. A CSV file SHALL be parsed with
-its first row consumed as headings. A JSON file SHALL be parsed only when
-its top-level value is an array of flat objects (string/number/boolean/
-null values); any other top-level shape SHALL be rejected with an
-on-screen error and SHALL NOT advance the wizard.
+file's first row must be column headings. A `.csv`-named file SHALL be
+parsed with its first row consumed as headings. A `.json`-named file
+SHALL be parsed only when its top-level value is an array of objects;
+any other top-level shape (a bare object, or an array of non-objects)
+SHALL be rejected with an on-screen error and SHALL NOT advance the
+wizard.
 
 #### Scenario: Selecting a valid CSV file
 
@@ -62,17 +67,35 @@ on-screen error and SHALL NOT advance the wizard.
 #### Scenario: Selecting a valid JSON file
 
 - **WHEN** an authenticated visitor selects a `.json` file whose content
-  is a top-level array of flat objects
+  is a top-level array of objects
 - **THEN** the wizard advances to the mapping step, offering the union of
-  the objects' keys as mappable fields
+  the objects' mappable keys as mappable fields (see the next requirement
+  for which keys are mappable)
 
-#### Scenario: Selecting a JSON file with the wrong shape
+#### Scenario: Selecting a JSON file with the wrong top-level shape
 
 - **WHEN** an authenticated visitor selects a `.json` file whose top-level
-  value is not an array of flat objects (for example, an object wrapping
-  the array, or an array containing nested objects)
+  value is not an array of objects (for example, an object wrapping the
+  array, or an array of plain strings)
 - **THEN** the wizard shows an error explaining the expected shape and
   does not advance past file selection
+
+#### Scenario: Selecting a file with an unsupported extension
+
+- **WHEN** an authenticated visitor picks a file whose name does not end
+  in `.csv` or `.json`
+- **THEN** the wizard shows an error asking for a `.csv` or `.json` file,
+  without attempting to parse it, and does not advance past file
+  selection
+
+#### Scenario: The file picker is not filtered by type
+
+- **WHEN** an authenticated visitor opens the file-selection step's native
+  file chooser
+- **THEN** every file is selectable, regardless of extension or reported
+  type — filtering happens after selection, not in the chooser itself
+  (needed for reliable `.csv` selection on Android, where some file
+  providers hide files that don't match the chooser's requested type)
 
 #### Scenario: The CSV header note is always visible
 
@@ -80,6 +103,45 @@ on-screen error and SHALL NOT advance the wizard.
 - **THEN** a note stating that the first row of a CSV file must contain
   column headings is shown, regardless of whether a file has been
   selected yet
+
+### Requirement: A structured amount field is recognized and converted; other complex fields are skipped, not fatal
+
+Within a JSON file's objects, a top-level field whose value is a nested
+object shaped `{ value: number, precision: number, currency?: string }`
+(recognized by shape, under any key name) SHALL be treated as a
+structured amount: converted to a plain decimal value (`value` divided by
+`10^precision`) and offered as a mappable field under its original key,
+exactly as if the source had held that decimal directly. When the object
+also carries `currency`, it SHALL additionally be offered as a mappable
+field named `<key>.currency`. A top-level field whose value is any other
+nested object, or an array, SHALL NOT be offered as a mappable field and
+SHALL NOT cause the file to be rejected; every such field name (across
+all of the file's objects) SHALL instead be collected and shown as a
+single, non-blocking hint on the mapping step, indicating that some
+fields could not be mapped.
+
+#### Scenario: A structured amount field is usable like a plain one
+
+- **WHEN** a `.json` file's objects carry a field shaped
+  `{"value": -3595, "precision": 2, "currency": "EUR"}`
+- **THEN** that field is offered as a mappable field, and mapping it as
+  the amount column produces the decimal amount `-35.95`
+
+#### Scenario: An unrecognized nested field is skipped with a hint, not a rejection
+
+- **WHEN** a `.json` file's objects carry a field whose value is a nested
+  object that is not a `{value, precision}`-shaped amount, or a field
+  whose value is an array
+- **THEN** the file still parses and advances to the mapping step; that
+  field is absent from the mappable fields, and its name appears in a
+  hint on the mapping step noting that some fields could not be mapped
+
+#### Scenario: The ignored-fields hint lists every skipped field once
+
+- **WHEN** a dry run's file has multiple unmappable fields across its
+  objects
+- **THEN** the mapping step's hint lists each distinct field name once,
+  not once per row
 
 ### Requirement: Source columns/fields are mapped to entry fields
 

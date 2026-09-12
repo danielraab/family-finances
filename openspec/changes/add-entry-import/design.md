@@ -79,18 +79,60 @@ header row) and can also generate CSV (`Papa.unparse`), so a future export
 feature reuses the same dependency instead of adding a second one. JSON
 needs no library: `JSON.parse` plus a shape check.
 
-### JSON input shape: a top-level array of flat objects, nothing else
+### JSON input shape: a top-level array of objects; unmappable fields are skipped, not fatal
 
-Only `[{...}, {...}, ...]` is accepted — each element a flat object
-(string/number/boolean/null values only, no nested objects/arrays as
-mappable fields). Anything else (a bare object, a nested/wrapped shape
-like `{ "transactions": [...] }`) is rejected at the file-select step with
-a clear error, rather than guessing which array inside an arbitrary
-structure was meant. The mappable field list is the union of keys across
-a bounded sample of the array (first 200 objects), in first-seen order —
-bounded so one pathological file with thousands of distinct keys can't
-make the mapping UI unusable; large real-world exports are overwhelmingly
-uniform-shaped anyway.
+Only `[{...}, {...}, ...]` is accepted at the top level — a bare object or
+a nested/wrapped shape like `{ "transactions": [...] }` is still rejected
+at the file-select step with a clear error, rather than guessing which
+array inside an arbitrary structure was meant. Within each object,
+however, a field is evaluated independently rather than as an all-or-
+nothing gate on the whole file (revised after real export samples showed
+this was too strict):
+
+- A string/number/boolean/null value is mappable directly, as before.
+- A nested object matching the shape `{ value: number, precision: number,
+  currency?: string }` (e.g. `{"value": -3595, "precision": 2, "currency":
+  "EUR"}`, a common structured-export encoding for `-35.95`) is recognized
+  by shape, not by key name, and exposed as a normal mappable field under
+  its original key — pre-converted to the plain decimal string
+  `(value / 10**precision).toFixed(precision)`, so it slots into the
+  existing single-column amount mapping with no special UI. When the
+  object also carries `currency`, it's additionally exposed as a sibling
+  `<key>.currency` field.
+- Any other nested object, or an array, is skipped for that field only —
+  never rejects the file. Every top-level key skipped this way (across
+  any row) is collected and shown as a one-line, non-blocking hint at the
+  top of the mapping step ("Some fields could not be mapped and were
+  ignored (complex structure): meta, tags_from_bank"), so the visitor
+  knows some source data wasn't offered, without losing the rows that
+  *are* mappable.
+
+The mappable field list is the union of keys across a bounded sample of
+the array (first 200 objects), in first-seen order — bounded so one
+pathological file with thousands of distinct keys can't make the mapping
+UI unusable; large real-world exports are overwhelmingly uniform-shaped
+anyway.
+
+### File input has no `accept` filter, deliberately
+
+The `<input type="file">` on the file-select step sets no `accept`
+attribute at all (revised after real-device testing surfaced a problem
+the original build didn't catch). `accept=".csv,.json"` looked correct
+and worked in every desktop/Playwright check, but on Android, Chrome's
+document picker filters by MIME type via a static, inconsistently
+populated extension→MIME table; several SAF-backed providers (Google
+Drive, various vendor "Files" apps) then hide real `.csv` files whose
+reported MIME doesn't match what that table expects, regardless of what
+`accept` lists. There is no `accept` value that reliably fixes this
+across providers — the only dependable fix is to stop filtering and show
+every file. `hasSupportedExtension()` (`lib/import/parseFile.ts`) then
+checks the picked file's name before attempting to parse it, surfacing a
+plain "Please choose a .csv or .json file." message instead of a
+confusing parse failure when the visitor picks something else. The file
+button itself is a styled `<label>` wrapping a visually hidden
+(`sr-only`) input, matching the app's other secondary buttons, with the
+picked filename shown beside it — the native, unstyled `<input
+type="file">` button was reported as visually out of place.
 
 ### One shared `mapRow` function, used by both the dry run and the real import
 

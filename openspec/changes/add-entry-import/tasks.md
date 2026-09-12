@@ -142,3 +142,32 @@
   - Confirmed both new "Import" links (`/entries` toolbar, account detail
     page) navigate to `/entries/import`, the latter with the account
     preset and locked (file step shown directly, account step skipped).
+
+## 8. Follow-up fixes (post-implementation feedback)
+
+- [x] 8.1 Restyled the file-selection control: a hidden input behind a
+  label styled like the app's other secondary buttons (was a raw,
+  unstyled `<input type="file">`), with the picked filename shown beside
+  it.
+- [x] 8.2 Removed the file input's `accept` filter entirely and added
+  `hasSupportedExtension()` (`lib/import/parseFile.ts`) plus an
+  `unsupportedFileType` error, checked before parsing — fixes `.csv`
+  files being unselectable on Android, where SAF-backed file providers
+  filter inconsistently by MIME type regardless of what `accept` lists
+  (see design.md's "File input has no accept filter" decision). Verified
+  in a real browser that the chooser is now unfiltered and a wrong
+  extension shows a clear error without attempting to parse.
+- [x] 8.3 `parseFile.ts`'s JSON branch no longer rejects the whole file on
+  any nested object/array field: a `{ value, precision, currency? }`
+  -shaped field (any key name) is recognized and converted to a plain
+  mappable decimal field (plus a `<key>.currency` field when currency is
+  present); any other nested object or array is skipped for that field
+  only and collected into `ParsedFile.ignoredFields`, shown as a
+  non-blocking hint at the top of the mapping step
+  (`ImportMappingStep.tsx`) rather than blocking the import. Verified
+  end-to-end against a real backend: a structured `{"value": -350,
+  "precision": 2, "currency": "EUR"}` field mapped and imported as the
+  entry amount `-3.5000` (stored `-35000` at the fixed 4-decimal-place
+  scale), and unrelated nested/array fields on the same file were
+  correctly excluded from the mappable list and listed in the hint,
+  without blocking the rows that did map.
