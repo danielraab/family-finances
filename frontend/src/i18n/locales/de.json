@@ -385,7 +385,9 @@
         "file": {
           "label": "Datei",
           "csvHeaderNote": "Die erste Zeile einer CSV-Datei muss Spaltenüberschriften enthalten.",
-          "parsing": "{{fileName}} wird gelesen…"
+          "parsing": "{{fileName}} wird gelesen…",
+          "chooseFile": "Datei auswählen",
+          "noFileChosen": "Keine Datei ausgewählt"
         },
         "mapping": {
           "fieldsHeading": "Spaltenzuordnung",
