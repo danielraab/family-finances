@@ -149,14 +149,19 @@ The mapping step SHALL let the visitor map, for each importable entry
 field, a source column (CSV) or field (JSON) detected from the selected
 file, or leave it unmapped where the entry field is optional. Title,
 amount, and booking timestamp SHALL be required mappings; description,
-counterparty, and location SHALL be optional mappings.
+counterparty, and location SHALL be optional mappings. Each source
+column/field offered in a mapping control SHALL be shown together with an
+example value for that column/field drawn from the selected file (the
+first row that has a non-empty value for it), so the visitor can tell
+what a column contains without leaving the mapping step to inspect the
+raw file.
 
 #### Scenario: Required fields must be mapped before proceeding
 
 - **WHEN** an authenticated visitor has not mapped a source column/field
   to title, amount, or booking timestamp
-- **THEN** the dry run cannot be run and the unmapped required field(s)
-  are indicated
+- **THEN** the mapping step's "Continue" action is disabled and the
+  unmapped required field(s) are indicated
 
 #### Scenario: Optional fields may be left unmapped
 
@@ -164,6 +169,13 @@ counterparty, and location SHALL be optional mappings.
   location unmapped
 - **THEN** the dry run and subsequent import proceed, creating entries
   with those fields empty
+
+#### Scenario: A column's example value is shown alongside its name
+
+- **WHEN** an authenticated visitor opens a mapping control (for example,
+  the title mapping) after selecting a file
+- **THEN** each offered source column/field is shown with an example
+  value taken from the file, not just its bare name
 
 ### Requirement: Category and tags are chosen once for the whole batch
 
@@ -188,10 +200,10 @@ category or to tags on a per-row basis.
 - **THEN** every created entry carries both tags, and the new tag is
   created exactly once, not once per row
 
-#### Scenario: A category is required to run the dry run
+#### Scenario: A category is required before continuing to the dry run
 
 - **WHEN** an authenticated visitor has not selected a category
-- **THEN** the dry run cannot be run
+- **THEN** the mapping step's "Continue" action is disabled
 
 ### Requirement: Amount mapping supports a single signed column or a split debit/credit pair
 
@@ -246,41 +258,39 @@ auto-detection for every row.
 - **THEN** the dry run parses every row using that format instead of
   guessing
 
-### Requirement: A mapping preview shows one row's result
+### Requirement: The dry run is a distinct wizard step, computed on entry
 
-The mapping step SHALL show, alongside the mapping controls, the result of
-applying the current mapping and settings to one row from the selected
-file (rendered the same way a manually-created entry's fields would read),
-updating live as the mapping changes.
+The dry run SHALL be its own step, reached from the mapping step's
+"Continue" action (enabled only once every required field is mapped and a
+category is selected) and entered before the import step. On entering
+this step, the wizard SHALL parse and validate every row in the file
+against the mapping produced by the mapping step, entirely client-side,
+with no request sent to the backend, with no separate manual trigger
+needed. Each row SHALL be classified as one of: **failed** (a required
+mapped field is missing or does not parse — bad amount, bad date, blank
+title), **suspicious** (parses successfully but looks likely to be wrong —
+an amount of exactly zero, or a date ambiguous between day-first and
+month-first orderings while date format is "auto"), or **ok** (parses
+successfully and is not suspicious). The dry-run results SHALL show the
+total row count and counts per classification, and a list of every row in
+the file — **ok** included, not only failed/suspicious ones — each
+showing its row number and classification. There is no separate
+single-row mapping preview outside this step; its own per-row list is how
+the visitor checks mapped results (see the following requirements).
 
-#### Scenario: The preview updates as the mapping changes
+#### Scenario: Continuing from mapping enters the dry-run step with results already shown
 
-- **WHEN** an authenticated visitor changes which source column is mapped
-  to title
-- **THEN** the preview immediately reflects the new value it would produce
+- **WHEN** an authenticated visitor completes the mapping step and selects
+  "Continue"
+- **THEN** the wizard advances to the dry-run step and the classified
+  results are already present, with no separate action needed to compute
+  them
 
-### Requirement: A dry run validates every row locally before any entry is created
+#### Scenario: A file with no problems still lists every row
 
-The visitor SHALL be able to trigger a dry run once every required field
-is mapped and a category is selected. The dry run SHALL parse and validate
-every row in the file against the current mapping and settings, entirely
-client-side, with no request sent to the backend. Each row SHALL be
-classified as one of: **failed** (a required mapped field is missing or
-does not parse — bad amount, bad date, blank title), **suspicious**
-(parses successfully but looks likely to be wrong — an amount of exactly
-zero, or a date ambiguous between day-first and month-first orderings
-while date format is "auto"), or **ok** (parses successfully and is not
-suspicious). The dry-run results SHALL show, at minimum, the total row
-count and counts per classification, and a list of every failed and
-suspicious row with its reason; **ok** rows SHALL NOT be listed
-individually.
-
-#### Scenario: A file with no problems
-
-- **WHEN** an authenticated visitor runs the dry run on a file where every
-  row maps and parses cleanly
-- **THEN** the results show every row as ok, with no failed/suspicious
-  rows listed
+- **WHEN** an authenticated visitor reaches the dry-run step for a file
+  where every row maps and parses cleanly
+- **THEN** the results list every row, each classified ok
 
 #### Scenario: A failed row is listed with its reason
 
@@ -296,25 +306,111 @@ individually.
   it is still counted among the rows that will be imported if the visitor
   proceeds
 
-#### Scenario: Successful rows are not listed one by one
+### Requirement: Clicking a dry-run row reveals its source data and mapped result
 
-- **WHEN** a dry run completes with 300 ok rows and 2 failed rows
-- **THEN** the results show a count of 300 and the reasons for the 2
-  failed rows, without listing the 300 ok rows
+Each row in the dry-run results SHALL be clickable (independently of every
+other row) to reveal, inline, that row's raw source values for each
+mapped column/field and — for a row classified ok or suspicious — the
+entry it would create (title, amount, booking timestamp, and any mapped
+optional fields), rendered the same way a manually-created entry's fields
+would read. A failed row's expanded detail SHALL show its source values
+but has no mapped entry to show, since none was produced. Expanding one
+row SHALL NOT affect whether any other row is expanded. Re-running the
+dry run SHALL collapse every row back to its unexpanded state.
 
-### Requirement: Mapping and parsing settings can be adjusted and re-validated without leaving the wizard
+#### Scenario: Expanding an ok row shows its mapped result
 
-The visitor SHALL be able to change any mapping or parsing setting
-(including date format and amount separators) and re-run the dry run as
-many times as needed, with each re-run reflecting the current settings, at
-no point requiring a network request or losing the selected file.
+- **WHEN** an authenticated visitor clicks a row classified ok in the
+  dry-run results
+- **THEN** that row expands to show its source values and the entry it
+  would create
+
+#### Scenario: Expanding a failed row shows only its source data
+
+- **WHEN** an authenticated visitor clicks a row classified failed
+- **THEN** that row expands to show its source values, with no mapped
+  entry shown
+
+#### Scenario: Multiple rows can be expanded independently
+
+- **WHEN** an authenticated visitor expands two different rows
+- **THEN** both remain expanded at once, and collapsing one leaves the
+  other expanded
+
+#### Scenario: Returning to the dry-run step fresh collapses every row
+
+- **WHEN** an authenticated visitor has a row expanded, goes back to the
+  mapping step, and continues forward to the dry-run step again
+- **THEN** the new results start with every row collapsed
+
+### Requirement: A failed row's individual fields can be remapped to a different column, scoped to that row alone
+
+A row classified **failed** SHALL, in its expanded detail, offer a remap
+control for each field that caused the failure (title, amount — one
+control in single-column mode or two, debit and credit, in split mode —
+or booking date), each defaulting to the column the mapping step currently
+uses for that field and offering every column/field detected in the file.
+Changing a remap control SHALL immediately re-classify that row alone —
+against the same amount-separator settings resolved for the rest of the
+file — updating its classification, reason, and (once it succeeds) mapped
+entry in place; no other row's classification, and no file-wide mapping
+setting, SHALL be affected. The row-level counts and totals SHALL reflect
+the current classification of every row, remaps included. A row that is
+not classified failed SHALL NOT offer a remap control — an ok or
+suspicious row already produced a valid entry.
+
+#### Scenario: Remapping a failed row's date fixes only that row
+
+- **WHEN** an authenticated visitor expands a row classified failed for an
+  unparseable date and selects a different column in its booking-date
+  remap control, whose value parses successfully
+- **THEN** that row's classification changes to ok (or suspicious, if the
+  parsed value is itself flagged), its mapped entry is shown, and the
+  dry-run counts update to reflect the change
+
+#### Scenario: A remap does not affect other rows
+
+- **WHEN** an authenticated visitor remaps a failed row's amount column
+- **THEN** every other row's classification and mapped entry stay exactly
+  as they were before the remap
+
+#### Scenario: A remapped row is submitted using its remapped values
+
+- **WHEN** an authenticated visitor remaps a failed row into a successful
+  classification and proceeds to import
+- **THEN** the entry created for that row reflects the remapped column's
+  value, not the original mapping's
+
+#### Scenario: Split amount mode offers both debit and credit remap controls
+
+- **WHEN** an authenticated visitor expands a row classified failed for an
+  invalid amount while the mapping uses split debit/credit columns
+- **THEN** the expanded detail offers a remap control for both the debit
+  column and the credit column
+
+#### Scenario: A row with no failure offers no remap control
+
+- **WHEN** an authenticated visitor expands a row classified ok or
+  suspicious
+- **THEN** no remap control is shown for that row
+
+### Requirement: The mapping used for the whole file can be revised by returning to the mapping step
+
+The visitor SHALL be able to go back from the dry-run step to the mapping
+step, change any mapping or parsing setting there (including date format
+and amount separators), and continue forward again to get a fresh dry run
+reflecting the new settings, at no point requiring a network request or
+losing the selected file. This is separate from, and does not require,
+the per-row remap capability above — a change here re-validates the whole
+file, not one row.
 
 #### Scenario: Adjusting the date format after a failed dry run
 
-- **WHEN** a dry run reports date-parsing failures and the visitor sets an
-  explicit date format and re-runs the dry run
-- **THEN** the new results reflect the updated format without re-selecting
-  the file
+- **WHEN** a dry run reports date-parsing failures and the visitor goes
+  back to the mapping step, sets an explicit date format, and continues
+  forward again
+- **THEN** the new dry-run results reflect the updated format without
+  re-selecting the file
 
 ### Requirement: Import creates entries sequentially with live progress and can be canceled
 

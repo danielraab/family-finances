@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { ImportAccountStep } from "../components/import/ImportAccountStep";
+import { ImportDryRunStep } from "../components/import/ImportDryRunStep";
 import { ImportFileStep } from "../components/import/ImportFileStep";
 import { ImportMappingStep } from "../components/import/ImportMappingStep";
 import { ImportResultStep } from "../components/import/ImportResultStep";
@@ -12,8 +13,9 @@ import {
   initialMappingState,
   type MappingState,
   type RunFailure,
+  toRowMapping,
 } from "../components/import/types";
-import type { DryRunSummary } from "../lib/import/dryRun";
+import type { ClassifiedRow } from "../lib/import/mapRow";
 import type { ParsedFile } from "../lib/import/parseFile";
 
 type Account = components["schemas"]["Account"];
@@ -35,7 +37,7 @@ export const Route = createFileRoute("/entries/import")({
   component: ImportEntries,
 });
 
-type Step = "account" | "file" | "mapping" | "run" | "result";
+type Step = "account" | "file" | "mapping" | "dryrun" | "run" | "result";
 
 type RunResult = { created: number; failed: RunFailure[]; canceled: boolean };
 
@@ -54,7 +56,7 @@ function ImportEntries() {
   const [accountId, setAccountId] = useState(presetAccountId ?? "");
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
   const [mapping, setMapping] = useState<MappingState>(initialMappingState);
-  const [dryRun, setDryRun] = useState<DryRunSummary | null>(null);
+  const [finalRows, setFinalRows] = useState<ClassifiedRow[] | null>(null);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
 
   useEffect(() => {
@@ -69,25 +71,20 @@ function ImportEntries() {
     });
   }, []);
 
-  function handleMappingChange(next: MappingState) {
-    setMapping(next);
-    setDryRun(null);
-  }
-
   function startOver() {
     setStep(accountLocked ? "file" : "account");
     if (!accountLocked) setAccountId("");
     setParsed(null);
     setMapping(initialMappingState);
-    setDryRun(null);
+    setFinalRows(null);
     setRunResult(null);
   }
 
   const account = accounts.find((a) => a.id === accountId);
   const submittableRows =
-    dryRun?.rows.filter((r) => r.classification !== "failed") ?? [];
+    finalRows?.filter((r) => r.classification !== "failed") ?? [];
   const dryRunFailedRows =
-    dryRun?.rows.filter((r) => r.classification === "failed") ?? [];
+    finalRows?.filter((r) => r.classification === "failed") ?? [];
 
   return (
     <section className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-12 sm:px-10">
@@ -116,7 +113,6 @@ function ImportEntries() {
           onParsed={(result) => {
             setParsed(result);
             setMapping(initialMappingState);
-            setDryRun(null);
             setStep("mapping");
           }}
           onBack={() => {
@@ -136,13 +132,26 @@ function ImportEntries() {
           ignoredFields={parsed.ignoredFields}
           categories={categories}
           tags={tags}
-          currency={account?.currency ?? ""}
           mapping={mapping}
-          onMappingChange={handleMappingChange}
-          dryRun={dryRun}
-          onDryRun={setDryRun}
-          onContinue={() => setStep("run")}
+          onMappingChange={setMapping}
+          onContinue={() => setStep("dryrun")}
           onBack={() => setStep("file")}
+        />
+      )}
+
+      {step === "dryrun" && parsed && (
+        <ImportDryRunStep
+          sourceRows={parsed.rows}
+          // Non-null: the mapping step only enables "Continue" once
+          // toRowMapping(mapping) is non-null.
+          rowMapping={toRowMapping(mapping)!}
+          fields={parsed.fields}
+          currency={account?.currency ?? ""}
+          onContinue={(rows) => {
+            setFinalRows(rows);
+            setStep("run");
+          }}
+          onBack={() => setStep("mapping")}
         />
       )}
 

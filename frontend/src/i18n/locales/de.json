@@ -407,17 +407,6 @@
           "dateFormat": "Datumsformat",
           "dateFormatHint": "Bei \"auto\" wird automatisch erkannt, oder ein Format wie DD.MM.YYYY eingeben.",
           "batchHeading": "Kategorie & Tags (für alle importierten Buchungen)",
-          "previewHeading": "Vorschau",
-          "previewNoRows": "Die Datei enthält keine Zeilen für eine Vorschau.",
-          "previewIncomplete": "Ordne die Pflichtfelder zu, um eine Vorschau zu sehen.",
-          "runDryRun": "Testlauf starten",
-          "dryRunSummary": "{{ok}} bereit, {{suspicious}} auffällig, {{failed}} fehlgeschlagen",
-          "rowColumn": "Zeile",
-          "statusColumn": "Status",
-          "reasonColumn": "Grund",
-          "failed": "Fehlgeschlagen",
-          "suspicious": "Auffällig",
-          "startImport": "Import starten",
           "ignoredFieldsHint": "Einige Felder konnten nicht zugeordnet werden und wurden ignoriert (komplexe Struktur): {{fields}}."
         },
         "run": {
@@ -431,6 +420,21 @@
           "failedCount_one": "{{count}} Zeile fehlgeschlagen",
           "failedCount_other": "{{count}} Zeilen fehlgeschlagen",
           "startOver": "Weitere Datei importieren"
+        },
+        "dryRun": {
+          "heading": "Testlauf",
+          "summary": "{{ok}} bereit, {{suspicious}} auffällig, {{failed}} fehlgeschlagen",
+          "rowColumn": "Zeile",
+          "statusColumn": "Status",
+          "reasonColumn": "Grund",
+          "failed": "Fehlgeschlagen",
+          "suspicious": "Auffällig",
+          "ready": "Bereit",
+          "sourceDataHeading": "Quelldaten",
+          "mappedEntryHeading": "Zugeordneter Eintrag",
+          "remapHeading": "Dieses Feld korrigieren",
+          "remapNote": "Wähle eine andere Spalte nur für diese Zeile — die Zuordnung aller anderen Zeilen bleibt unverändert.",
+          "startImport": "Import starten"
         }
       }
     }
