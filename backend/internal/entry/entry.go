@@ -106,6 +106,12 @@ func (m CategoryMode) valid() bool {
 // category-sharing). Like CreatedByName, it's omitempty: the memory Store
 // (domain/handler unit tests only, never production) never populates it —
 // see design.md.
+//
+// Counterparty and Location are free-text, transaction-only fields (see
+// validateNew) — rejected on a balance_adjustment. Location is never
+// parsed or validated here beyond that: it may hold a typed address or a
+// JSON-encoded {"lat":…,"lng":…} coordinate string, and deciding which is
+// a frontend concern (see design.md of add-entry-counterparty-location).
 type Entry struct {
 	ID               string     `json:"id"`
 	AccountID        string     `json:"account_id"`
@@ -117,6 +123,8 @@ type Entry struct {
 	Title            string     `json:"title"`
 	Description      string     `json:"description,omitempty"`
 	CategoryID       *string    `json:"category_id,omitempty"`
+	Counterparty     string     `json:"counterparty,omitempty"`
+	Location         string     `json:"location,omitempty"`
 	TagIDs           []string   `json:"tag_ids"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
@@ -198,6 +206,8 @@ type New struct {
 	Title            string
 	Description      string
 	CategoryID       *string
+	Counterparty     string
+	Location         string
 	TagIDs           []string
 }
 
@@ -219,6 +229,8 @@ type Update struct {
 	Title            *string
 	Description      *string
 	CategoryID       OptionalID
+	Counterparty     *string
+	Location         *string
 	TagIDs           *[]string
 }
 
@@ -368,6 +380,9 @@ func validateNew(in New) error {
 		return ErrInvalidValue
 	}
 	if in.Kind == KindTransaction && in.CategoryID == nil {
+		return ErrInvalidValue
+	}
+	if in.Kind != KindTransaction && (in.Counterparty != "" || in.Location != "") {
 		return ErrInvalidValue
 	}
 	if in.Kind == KindTransaction {

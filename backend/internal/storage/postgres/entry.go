@@ -34,7 +34,7 @@ func NewEntryStore(pool *pgxpool.Pool) *EntryStore { return &EntryStore{pool: po
 // caller's permission on that account) — see design.md's
 // "Entry gains account_currency" decision.
 const entryCols = `id::text, created_by::text, account_id::text, kind, amount, balance_reading, booking_timestamp, title,
-	COALESCE(description, ''), category_id::text, created_at, updated_at,
+	COALESCE(description, ''), category_id::text, COALESCE(counterparty, ''), COALESCE(location, ''), created_at, updated_at,
 	COALESCE((SELECT array_agg(tag_id::text) FROM entry_tags WHERE entry_id = entries.id), '{}'),
 	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = entries.created_by), ''),
 	COALESCE((SELECT currency FROM accounts WHERE accounts.id = entries.account_id), '')`
@@ -43,7 +43,7 @@ func scanEntry(row pgx.Row) (entry.Entry, error) {
 	var e entry.Entry
 	var kind string
 	err := row.Scan(&e.ID, &e.CreatedBy, &e.AccountID, &kind, &e.Amount, &e.Balance, &e.BookingTimestamp, &e.Title,
-		&e.Description, &e.CategoryID, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName, &e.AccountCurrency)
+		&e.Description, &e.CategoryID, &e.Counterparty, &e.Location, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName, &e.AccountCurrency)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return entry.Entry{}, entry.ErrNotFound
 	}
@@ -88,10 +88,10 @@ func (s *EntryStore) Create(ctx context.Context, createdBy string, in entry.New)
 	var id int64
 	var bookingTS time.Time
 	err = tx.QueryRow(ctx, `
-		INSERT INTO entries (created_by, account_id, kind, amount, balance_reading, booking_timestamp, title, description, category_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9)
+		INSERT INTO entries (created_by, account_id, kind, amount, balance_reading, booking_timestamp, title, description, category_id, counterparty, location)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF($11, ''))
 		RETURNING id, booking_timestamp`,
-		createdBy, in.AccountID, string(in.Kind), amount, in.Balance, in.BookingTimestamp, in.Title, in.Description, in.CategoryID,
+		createdBy, in.AccountID, string(in.Kind), amount, in.Balance, in.BookingTimestamp, in.Title, in.Description, in.CategoryID, in.Counterparty, in.Location,
 	).Scan(&id, &bookingTS)
 	if isForeignKeyViolation(err) || isCheckViolation(err) {
 		return entry.Entry{}, entry.ErrInvalidValue
@@ -177,9 +177,11 @@ func (s *EntryStore) Update(ctx context.Context, id string, upd entry.Update) (e
 			title             = COALESCE($6, title),
 			description       = COALESCE($7, description),
 			category_id       = CASE WHEN $8 THEN $9 ELSE category_id END,
+			counterparty      = COALESCE($10, counterparty),
+			location          = COALESCE($11, location),
 			updated_at        = now()
 		WHERE id = $1 AND deleted_at IS NULL`,
-		eid, upd.AccountID, upd.Amount, upd.Balance, upd.BookingTimestamp, upd.Title, upd.Description, categorySet, categoryID,
+		eid, upd.AccountID, upd.Amount, upd.Balance, upd.BookingTimestamp, upd.Title, upd.Description, categorySet, categoryID, upd.Counterparty, upd.Location,
 	)
 	if isForeignKeyViolation(err) || isCheckViolation(err) {
 		return entry.Entry{}, entry.ErrInvalidValue
@@ -319,7 +321,7 @@ func buildWhere(f entry.Filter) (where []string, args []any) {
 	}
 	if f.Query != "" {
 		p := arg("%" + f.Query + "%")
-		where = append(where, "(entries.title ILIKE "+p+" OR entries.description ILIKE "+p+")")
+		where = append(where, "(entries.title ILIKE "+p+" OR entries.description ILIKE "+p+" OR entries.counterparty ILIKE "+p+")")
 	}
 	return where, args
 }
@@ -579,6 +581,35 @@ func (s *EntryStore) FlowSummary(ctx context.Context, f entry.FlowFilter) ([]ent
 		return nil, err
 	}
 	return out, nil
+}
+
+// ListInUseCounterparties returns the distinct, non-empty counterparty
+// values on ownerID's own non-deleted entries, sorted case-insensitively
+// ascending — for the entry form's autocomplete. Mirrors
+// AccountStore.ListInUseTypes.
+func (s *EntryStore) ListInUseCounterparties(ctx context.Context, ownerID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT counterparty FROM (
+			SELECT DISTINCT counterparty FROM entries
+			WHERE created_by = $1 AND deleted_at IS NULL AND btrim(counterparty) <> ''
+		) c
+		ORDER BY lower(counterparty), counterparty`,
+		ownerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func isCheckViolation(err error) bool {

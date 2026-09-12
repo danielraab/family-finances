@@ -311,6 +311,14 @@
       "categoryNone": "Keine Kategorie",
       "categoryRequired": "Für eine Transaktion ist eine Kategorie erforderlich.",
       "categoryDisabledOption": "deaktiviert",
+      "counterparty": "Zahlungspartner",
+      "counterpartyPlaceholder": "Mit wem war das?",
+      "location": "Ort",
+      "locationPlaceholder": "Adresse oder Koordinaten",
+      "locationUseGps": "GPS verwenden",
+      "locationPickOnMap": "Auf Karte auswählen",
+      "locationGpsUnsupported": "GPS ist auf diesem Gerät nicht verfügbar.",
+      "locationGpsError": "Standort konnte nicht ermittelt werden. Bitte Berechtigungen prüfen und erneut versuchen.",
       "tags": "Tags",
       "tagsPlaceholder": "Tag hinzufügen…",
       "removeTag": "{{name}} entfernen",
@@ -334,6 +342,15 @@
       "confirmAccountChangeBody": "Diese Buchung wird nach „{{account}}“ verschoben.",
       "confirmAccountChangeConfirm": "Buchung verschieben"
     },
+    "location": {
+      "previewTitle": "Ort",
+      "close": "Schließen",
+      "pickTitle": "Ort auswählen",
+      "pickHint": "Klicke auf die Karte oder ziehe den Pin, um einen Ort festzulegen.",
+      "cancel": "Abbrechen",
+      "confirm": "Diesen Ort verwenden"
+    },
+    "viewLocation": "Ort anzeigen",
     "createdBy": "Erfasst von {{name}}"
   },
   "categories": {

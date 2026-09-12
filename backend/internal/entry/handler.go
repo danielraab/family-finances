@@ -43,6 +43,7 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("GET /api/entries/summary", h.summary)
 	h.mux.HandleFunc("GET /api/entries/flow-summary", h.flowSummary)
 	h.mux.HandleFunc("GET /api/entries/balance-series", h.balanceSeries)
+	h.mux.HandleFunc("GET /api/entries/counterparties", h.listCounterparties)
 	h.mux.HandleFunc("GET /api/entries/{id}", h.get)
 	h.mux.HandleFunc("PATCH /api/entries/{id}", h.update)
 	h.mux.HandleFunc("DELETE /api/entries/{id}", h.delete)
@@ -62,6 +63,8 @@ type entryCreateBody struct {
 	Title            *string    `json:"title"`
 	Description      *string    `json:"description"`
 	CategoryID       *string    `json:"category_id"`
+	Counterparty     *string    `json:"counterparty"`
+	Location         *string    `json:"location"`
 	TagIDs           []string   `json:"tag_ids"`
 }
 
@@ -73,6 +76,8 @@ type entryUpdateBody struct {
 	Title            *string    `json:"title"`
 	Description      *string    `json:"description"`
 	CategoryID       OptionalID `json:"category_id"`
+	Counterparty     *string    `json:"counterparty"`
+	Location         *string    `json:"location"`
 	TagIDs           *[]string  `json:"tag_ids"`
 }
 
@@ -107,6 +112,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Description != nil {
 		in.Description = *body.Description
+	}
+	if body.Counterparty != nil {
+		in.Counterparty = *body.Counterparty
+	}
+	if body.Location != nil {
+		in.Location = *body.Location
 	}
 
 	e, err := h.svc.Create(r.Context(), user.ID, in)
@@ -150,6 +161,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Title:            body.Title,
 		Description:      body.Description,
 		CategoryID:       body.CategoryID,
+		Counterparty:     body.Counterparty,
+		Location:         body.Location,
 		TagIDs:           body.TagIDs,
 	}
 	e, err := h.svc.Update(r.Context(), user.ID, r.PathValue("id"), upd)
@@ -366,6 +379,26 @@ func (h *Handler) balanceSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, balanceSeriesResponse{Points: points})
+}
+
+// listCounterparties returns the caller's distinct in-use counterparty
+// values, for the entry form's autocomplete. Mirrors internal/account's
+// listTypes.
+func (h *Handler) listCounterparties(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	values, err := h.svc.ListInUseCounterparties(r.Context(), user.ID)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	if values == nil {
+		values = []string{}
+	}
+	writeJSON(w, http.StatusOK, values)
 }
 
 func (h *Handler) balance(w http.ResponseWriter, r *http.Request) {

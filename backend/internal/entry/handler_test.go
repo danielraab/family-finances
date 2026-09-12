@@ -548,3 +548,97 @@ func TestHandlerBalanceSeriesIgnoresUnownedAccount(t *testing.T) {
 		}
 	}
 }
+
+func TestHandlerCreateWithCounterpartyAndLocation(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	body := `{"account_id":"acc1","kind":"transaction","amount":1234,"booking_timestamp":"2024-01-01T00:00:00Z","title":"Groceries","category_id":"cat1","counterparty":"Rewe","location":"{\"lat\":48.2,\"lng\":16.3}"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "POST", "/api/entries", rec)
+	var created entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Counterparty != "Rewe" || created.Location != `{"lat":48.2,"lng":16.3}` {
+		t.Fatalf("created = %+v", created)
+	}
+}
+
+func TestHandlerCreateBalanceAdjustmentRejectsCounterparty(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	user := auth.User{ID: "u1"}
+
+	body := `{"account_id":"acc1","kind":"balance_adjustment","balance":10000,"booking_timestamp":"2024-01-01T00:00:00Z","title":"Opening","counterparty":"Bank"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
+	}
+}
+
+func TestHandlerEntryCounterpartiesRequiresAuth(t *testing.T) {
+	h, _, _ := newHandlerFixture()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/entries/counterparties", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestHandlerEntryCounterpartiesListsDistinctInUseValues(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	for _, cp := range []string{"Rewe", "Spar", "Rewe"} {
+		body := `{"account_id":"acc1","kind":"transaction","amount":1,"booking_timestamp":"2024-01-01T00:00:00Z","title":"x","category_id":"cat1","counterparty":"` + cp + `"}`
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create status = %d, body = %s", rec.Code, rec.Body)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/counterparties", nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "GET", "/api/entries/counterparties", rec)
+	var got []string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Rewe", "Spar"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("got = %v, want %v", got, want)
+	}
+}
+
+func TestHandlerEntryCounterpartiesEmptyForUserWithNone(t *testing.T) {
+	h, _, _ := newHandlerFixture()
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/counterparties", nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "GET", "/api/entries/counterparties", rec)
+	var got []string
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got = %v, want empty", got)
+	}
+}

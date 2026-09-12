@@ -60,6 +60,8 @@ func (s *EntryStore) Create(_ context.Context, createdBy string, in entry.New) (
 		Title:            in.Title,
 		Description:      in.Description,
 		CategoryID:       in.CategoryID,
+		Counterparty:     in.Counterparty,
+		Location:         in.Location,
 		TagIDs:           tagIDs,
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -115,6 +117,12 @@ func (s *EntryStore) Update(_ context.Context, id string, upd entry.Update) (ent
 	}
 	if upd.CategoryID.Set {
 		e.CategoryID = upd.CategoryID.Value
+	}
+	if upd.Counterparty != nil {
+		e.Counterparty = *upd.Counterparty
+	}
+	if upd.Location != nil {
+		e.Location = *upd.Location
 	}
 	if upd.TagIDs != nil {
 		tagIDs := make([]string, len(*upd.TagIDs))
@@ -302,7 +310,9 @@ func (s *EntryStore) matchingRows(f entry.Filter) []entryRow {
 		}
 		if f.Query != "" {
 			q := strings.ToLower(f.Query)
-			if !strings.Contains(strings.ToLower(e.Title), q) && !strings.Contains(strings.ToLower(e.Description), q) {
+			if !strings.Contains(strings.ToLower(e.Title), q) &&
+				!strings.Contains(strings.ToLower(e.Description), q) &&
+				!strings.Contains(strings.ToLower(e.Counterparty), q) {
 				continue
 			}
 		}
@@ -499,6 +509,35 @@ func (s *EntryStore) FlowSummary(_ context.Context, f entry.FlowFilter) ([]entry
 	for _, r := range totals {
 		out = append(out, *r)
 	}
+	return out, nil
+}
+
+// ListInUseCounterparties returns the distinct, non-empty counterparty
+// values on ownerID's own non-deleted entries, sorted case-insensitively
+// ascending — mirrors postgres.EntryStore.ListInUseCounterparties.
+func (s *EntryStore) ListInUseCounterparties(_ context.Context, ownerID string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	set := map[string]bool{}
+	for _, row := range s.rows {
+		e := row.e
+		if e.DeletedAt != nil || e.CreatedBy != ownerID || strings.TrimSpace(e.Counterparty) == "" {
+			continue
+		}
+		set[e.Counterparty] = true
+	}
+	out := make([]string, 0, len(set))
+	for c := range set {
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		li, lj := strings.ToLower(out[i]), strings.ToLower(out[j])
+		if li != lj {
+			return li < lj
+		}
+		return out[i] < out[j]
+	})
 	return out, nil
 }
 

@@ -6,6 +6,7 @@ import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
+import { LocationPreviewModal } from "../components/LocationPreviewModal";
 import { TagLabel } from "../components/TagLabel";
 import {
   amountColorClass,
@@ -14,6 +15,7 @@ import {
 } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
+import { type Coordinates, parseLocation } from "../lib/location";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
 
 type Account = components["schemas"]["Account"];
@@ -85,6 +87,9 @@ function EntriesListPage() {
 
   const [items, setItems] = useState<Entry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [previewLocation, setPreviewLocation] = useState<Coordinates | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -406,6 +411,26 @@ function EntriesListPage() {
                   >
                     {entry.title}
                   </Link>
+                  {(() => {
+                    const coords = parseLocation(entry.location);
+                    if (!coords) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewLocation(coords)}
+                        aria-label={t("entries.viewLocation")}
+                        title={t("entries.viewLocation")}
+                        className="ml-1.5 align-middle text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                      >
+                        🌐
+                      </button>
+                    );
+                  })()}
+                  {entry.counterparty && (
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                      {entry.counterparty}
+                    </span>
+                  )}
                   {entry.created_by !== user?.id && entry.created_by_name && (
                     <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                       {t("entries.createdBy", {
@@ -518,6 +543,12 @@ function EntriesListPage() {
       )}
 
       <div ref={sentinelRef} className="h-1" />
+
+      <LocationPreviewModal
+        open={previewLocation !== null}
+        onClose={() => setPreviewLocation(null)}
+        coordinates={previewLocation}
+      />
     </section>
   );
 }
