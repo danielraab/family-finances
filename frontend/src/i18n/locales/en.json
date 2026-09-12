@@ -407,9 +407,7 @@
           "dateFormat": "Date format",
           "dateFormatHint": "Leave as \"auto\" to auto-detect, or enter a format like DD.MM.YYYY.",
           "batchHeading": "Category & tags (applied to every imported entry)",
-          "previewHeading": "Preview",
-          "previewNoRows": "The file has no rows to preview.",
-          "previewIncomplete": "Map the required fields to see a preview.",
+          "previewHeading": "Mapped entry",
           "runDryRun": "Run dry run",
           "dryRunSummary": "{{ok}} ready, {{suspicious}} suspicious, {{failed}} failed",
           "rowColumn": "Row",
@@ -418,7 +416,9 @@
           "failed": "Failed",
           "suspicious": "Suspicious",
           "startImport": "Start import",
-          "ignoredFieldsHint": "Some fields could not be mapped and were ignored (complex structure): {{fields}}."
+          "ignoredFieldsHint": "Some fields could not be mapped and were ignored (complex structure): {{fields}}.",
+          "sourceDataHeading": "Source data",
+          "ready": "Ready"
         },
         "run": {
           "progress": "{{created}} of {{total}} imported",

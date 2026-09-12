@@ -182,7 +182,7 @@ small dedicated function, not a date library — the token set is
 deliberately minimal, covering the formats real exports actually use
 rather than general date parsing.
 
-### Dry run classifies every row as ok, suspicious, or failed — only non-ok rows are ever listed
+### Dry run classifies every row as ok, suspicious, or failed — every row is listed, click to expand
 
 ```
              mapRow() result           additional checks (ok rows only)
@@ -197,11 +197,29 @@ row ──▶ ┌─────────────────────
 
 - **failed**: excluded from the import step entirely — never submitted.
 - **suspicious**: still included in the import step (it did parse) but
-  called out in the dry-run table so the visitor can look before
-  proceeding.
-- **ok**: counted only ("312 rows ready"), never listed row by row — the
-  point of a dry run over a real bank export is to see what's *wrong*,
-  not to re-read every correct row.
+  called out with a reason so the visitor can look before proceeding.
+- **ok**: no issue found.
+
+Revised from an earlier version of this design that only listed
+failed/suspicious rows and showed one row's mapped result in a separate
+"preview" card: real use surfaced a need to actually see the mapped data
+across a file, not just be told a count, so the dry-run table now lists
+**every** row (in a scrolling container, since a large file can be
+hundreds of rows) and the standalone preview card is gone entirely. Each
+row is independently click-to-expand, revealing that row's raw source
+values for every mapped column plus — for ok/suspicious rows — the entry
+it would create, rendered the same way the old preview card rendered its
+one row (title/amount/date/description/counterparty/location). A failed
+row's expansion shows only its source values, since `mapRow` produced no
+entry for it. Multiple rows can be expanded independently; re-running the
+dry run collapses all of them, since the underlying rows are new.
+
+The mapping controls themselves also gained a lighter-weight version of
+"see the data before committing": every source column/field offered in a
+`<select>` shows an example value from the file next to its name (the
+first row with a non-empty value for that column), so a visitor picking,
+say, the title column doesn't have to guess which raw header holds a
+recognizable value.
 
 The visitor can re-run the dry run after changing any mapping/setting, as
 many times as they like, with no network activity — it's a pure function

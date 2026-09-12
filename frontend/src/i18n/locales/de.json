@@ -407,9 +407,7 @@
           "dateFormat": "Datumsformat",
           "dateFormatHint": "Bei \"auto\" wird automatisch erkannt, oder ein Format wie DD.MM.YYYY eingeben.",
           "batchHeading": "Kategorie & Tags (für alle importierten Buchungen)",
-          "previewHeading": "Vorschau",
-          "previewNoRows": "Die Datei enthält keine Zeilen für eine Vorschau.",
-          "previewIncomplete": "Ordne die Pflichtfelder zu, um eine Vorschau zu sehen.",
+          "previewHeading": "Zugeordneter Eintrag",
           "runDryRun": "Testlauf starten",
           "dryRunSummary": "{{ok}} bereit, {{suspicious}} auffällig, {{failed}} fehlgeschlagen",
           "rowColumn": "Zeile",
@@ -418,7 +416,9 @@
           "failed": "Fehlgeschlagen",
           "suspicious": "Auffällig",
           "startImport": "Import starten",
-          "ignoredFieldsHint": "Einige Felder konnten nicht zugeordnet werden und wurden ignoriert (komplexe Struktur): {{fields}}."
+          "ignoredFieldsHint": "Einige Felder konnten nicht zugeordnet werden und wurden ignoriert (komplexe Struktur): {{fields}}.",
+          "sourceDataHeading": "Quelldaten",
+          "ready": "Bereit"
         },
         "run": {
           "progress": "{{created}} von {{total}} importiert",

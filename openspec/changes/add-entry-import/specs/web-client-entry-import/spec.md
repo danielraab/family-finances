@@ -149,7 +149,12 @@ The mapping step SHALL let the visitor map, for each importable entry
 field, a source column (CSV) or field (JSON) detected from the selected
 file, or leave it unmapped where the entry field is optional. Title,
 amount, and booking timestamp SHALL be required mappings; description,
-counterparty, and location SHALL be optional mappings.
+counterparty, and location SHALL be optional mappings. Each source
+column/field offered in a mapping control SHALL be shown together with an
+example value for that column/field drawn from the selected file (the
+first row that has a non-empty value for it), so the visitor can tell
+what a column contains without leaving the mapping step to inspect the
+raw file.
 
 #### Scenario: Required fields must be mapped before proceeding
 
@@ -164,6 +169,13 @@ counterparty, and location SHALL be optional mappings.
   location unmapped
 - **THEN** the dry run and subsequent import proceed, creating entries
   with those fields empty
+
+#### Scenario: A column's example value is shown alongside its name
+
+- **WHEN** an authenticated visitor opens a mapping control (for example,
+  the title mapping) after selecting a file
+- **THEN** each offered source column/field is shown with an example
+  value taken from the file, not just its bare name
 
 ### Requirement: Category and tags are chosen once for the whole batch
 
@@ -246,19 +258,6 @@ auto-detection for every row.
 - **THEN** the dry run parses every row using that format instead of
   guessing
 
-### Requirement: A mapping preview shows one row's result
-
-The mapping step SHALL show, alongside the mapping controls, the result of
-applying the current mapping and settings to one row from the selected
-file (rendered the same way a manually-created entry's fields would read),
-updating live as the mapping changes.
-
-#### Scenario: The preview updates as the mapping changes
-
-- **WHEN** an authenticated visitor changes which source column is mapped
-  to title
-- **THEN** the preview immediately reflects the new value it would produce
-
 ### Requirement: A dry run validates every row locally before any entry is created
 
 The visitor SHALL be able to trigger a dry run once every required field
@@ -270,17 +269,18 @@ does not parse — bad amount, bad date, blank title), **suspicious**
 (parses successfully but looks likely to be wrong — an amount of exactly
 zero, or a date ambiguous between day-first and month-first orderings
 while date format is "auto"), or **ok** (parses successfully and is not
-suspicious). The dry-run results SHALL show, at minimum, the total row
-count and counts per classification, and a list of every failed and
-suspicious row with its reason; **ok** rows SHALL NOT be listed
-individually.
+suspicious). The dry-run results SHALL show the total row count and counts
+per classification, and a list of every row in the file — **ok** included,
+not only failed/suspicious ones — each showing its row number and
+classification. There is no separate single-row mapping preview outside
+the dry run; the dry run's own per-row list is how the visitor checks
+mapped results (see the next requirement).
 
-#### Scenario: A file with no problems
+#### Scenario: A file with no problems still lists every row
 
 - **WHEN** an authenticated visitor runs the dry run on a file where every
   row maps and parses cleanly
-- **THEN** the results show every row as ok, with no failed/suspicious
-  rows listed
+- **THEN** the results list every row, each classified ok
 
 #### Scenario: A failed row is listed with its reason
 
@@ -296,11 +296,42 @@ individually.
   it is still counted among the rows that will be imported if the visitor
   proceeds
 
-#### Scenario: Successful rows are not listed one by one
+### Requirement: Clicking a dry-run row reveals its source data and mapped result
 
-- **WHEN** a dry run completes with 300 ok rows and 2 failed rows
-- **THEN** the results show a count of 300 and the reasons for the 2
-  failed rows, without listing the 300 ok rows
+Each row in the dry-run results SHALL be clickable (independently of every
+other row) to reveal, inline, that row's raw source values for each
+mapped column/field and — for a row classified ok or suspicious — the
+entry it would create (title, amount, booking timestamp, and any mapped
+optional fields), rendered the same way a manually-created entry's fields
+would read. A failed row's expanded detail SHALL show its source values
+but has no mapped entry to show, since none was produced. Expanding one
+row SHALL NOT affect whether any other row is expanded. Re-running the
+dry run SHALL collapse every row back to its unexpanded state.
+
+#### Scenario: Expanding an ok row shows its mapped result
+
+- **WHEN** an authenticated visitor clicks a row classified ok in the
+  dry-run results
+- **THEN** that row expands to show its source values and the entry it
+  would create
+
+#### Scenario: Expanding a failed row shows only its source data
+
+- **WHEN** an authenticated visitor clicks a row classified failed
+- **THEN** that row expands to show its source values, with no mapped
+  entry shown
+
+#### Scenario: Multiple rows can be expanded independently
+
+- **WHEN** an authenticated visitor expands two different rows
+- **THEN** both remain expanded at once, and collapsing one leaves the
+  other expanded
+
+#### Scenario: Re-running the dry run collapses expanded rows
+
+- **WHEN** an authenticated visitor has a row expanded and re-runs the
+  dry run
+- **THEN** the new results start with every row collapsed
 
 ### Requirement: Mapping and parsing settings can be adjusted and re-validated without leaving the wizard
 

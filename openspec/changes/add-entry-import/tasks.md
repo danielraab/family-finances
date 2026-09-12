@@ -171,3 +171,28 @@
   scale), and unrelated nested/array fields on the same file were
   correctly excluded from the mappable list and listed in the hint,
   without blocking the rows that did map.
+
+## 9. Follow-up UX revision (post-implementation feedback)
+
+- [x] 9.1 Each mapping `<select>` (`FieldSelect` in `ImportMappingStep.tsx`)
+  now shows every offered column/field together with an example value
+  from the file (first row with a non-empty value for it), via a
+  `fieldExamples` map computed once per file with `useMemo`.
+- [x] 9.2 Dropped the standalone "Preview" card. The dry-run results table
+  now lists every row (not only failed/suspicious), scrollable
+  (`max-h-[28rem] overflow-y-auto`) for large files, each row
+  independently click-to-expand (local `expandedRows: Set<number>` state,
+  reset on every dry-run re-run) to show its raw source values
+  (`rawFieldsForRow`) and, for an ok/suspicious row, the entry it would
+  create — the same fields the removed preview card used to show for one
+  row, now available per row on demand.
+- [x] 9.3 Updated design.md's dry-run decision and the
+  `web-client-entry-import` delta spec (dropped the old single-row
+  preview requirement; the dry-run requirement now lists every row;
+  added requirements for per-row expansion and per-field examples).
+- [x] 9.4 Verified end-to-end in a real browser: mapping `<select>`
+  options show `"Amount — -45,90"`-style examples; after a dry run all 5
+  rows of a small fixture are listed (3 ready, 1 suspicious, 1 failed,
+  none hidden); clicking a row expands it showing matching source and
+  mapped-entry values; a full import from the same mapping still creates
+  the correct entries.
