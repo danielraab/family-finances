@@ -9,6 +9,7 @@ import { TagInput } from "../components/TagInput";
 import { inputToAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
+import { resolveTagIds } from "../lib/resolveTags";
 
 type Account = components["schemas"]["Account"];
 type Category = components["schemas"]["Category"];
@@ -102,20 +103,6 @@ function NewEntry() {
   // flow, field locked either way) is left as-is rather than filtered.
   const selectableAccounts = accounts.filter((a) => a.permission !== "view");
 
-  async function resolveTagIds(): Promise<string[]> {
-    const ids: string[] = [];
-    for (const name of tagNames) {
-      const existing = tags.find((tag) => tag.name === name);
-      if (existing) {
-        ids.push(existing.id);
-        continue;
-      }
-      const { data } = await api.POST("/api/tags", { body: { name } });
-      if (data) ids.push(data.id);
-    }
-    return ids;
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!accountId) {
@@ -149,7 +136,7 @@ function NewEntry() {
     setSubmitting(true);
     setError(null);
 
-    const tagIds = await resolveTagIds();
+    const tagIds = await resolveTagIds(tagNames, tags);
     const { data, response } = await api.POST("/api/entries", {
       body: {
         account_id: accountId,

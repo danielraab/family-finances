@@ -351,7 +351,85 @@
       "confirm": "Use this location"
     },
     "viewLocation": "View location",
-    "createdBy": "Logged by {{name}}"
+    "createdBy": "Logged by {{name}}",
+    "import": {
+      "linkLabel": "Import",
+      "title": "Import entries",
+      "intoAccount": "Importing into {{account}}",
+      "continue": "Continue",
+      "back": "Back",
+      "cancel": "Cancel",
+      "notMapped": "— Not mapped —",
+      "errors": {
+        "generic": "This file could not be read.",
+        "csvNoHeaderRow": "This CSV file has no header row. The first row must contain column headings.",
+        "fileReadError": "The file could not be read.",
+        "jsonInvalid": "This file is not valid JSON.",
+        "jsonNotArray": "The JSON file must contain a top-level array of objects.",
+        "jsonNotFlatObjects": "Every item in the JSON array must be a flat object — no nested objects or arrays."
+      },
+      "reasons": {
+        "missingTitle": "Title is missing.",
+        "invalidAmount": "Amount could not be parsed.",
+        "invalidDate": "Date could not be parsed.",
+        "missingCategory": "No category selected.",
+        "zeroAmount": "Amount is exactly zero.",
+        "ambiguousDate": "Date is ambiguous between day-first and month-first.",
+        "submitRejected": "Rejected by the server."
+      },
+      "steps": {
+        "account": {
+          "label": "Account",
+          "none": "You have no accounts you can import into."
+        },
+        "file": {
+          "label": "File",
+          "csvHeaderNote": "The first row of a CSV file must contain column headings.",
+          "parsing": "Reading {{fileName}}…"
+        },
+        "mapping": {
+          "fieldsHeading": "Column mapping",
+          "selectColumn": "Select a column",
+          "amountHeading": "Amount",
+          "amountSingle": "Single column (signed)",
+          "amountSplit": "Split debit/credit columns",
+          "amountColumn": "Amount column",
+          "debitColumn": "Debit column",
+          "creditColumn": "Credit column",
+          "flipSign": "Flip sign",
+          "decimalSeparator": "Decimal separator",
+          "thousandsSeparator": "Thousands separator",
+          "auto": "Auto-detect",
+          "none": "None",
+          "dateFormat": "Date format",
+          "dateFormatHint": "Leave as \"auto\" to auto-detect, or enter a format like DD.MM.YYYY.",
+          "batchHeading": "Category & tags (applied to every imported entry)",
+          "previewHeading": "Preview",
+          "previewNoRows": "The file has no rows to preview.",
+          "previewIncomplete": "Map the required fields to see a preview.",
+          "runDryRun": "Run dry run",
+          "dryRunSummary": "{{ok}} ready, {{suspicious}} suspicious, {{failed}} failed",
+          "rowColumn": "Row",
+          "statusColumn": "Status",
+          "reasonColumn": "Reason",
+          "failed": "Failed",
+          "suspicious": "Suspicious",
+          "startImport": "Start import"
+        },
+        "run": {
+          "progress": "{{created}} of {{total}} imported",
+          "cancel": "Cancel import"
+        },
+        "result": {
+          "created_one": "{{count}} entry created",
+          "created_other": "{{count}} entries created",
+          "canceled": "Import was canceled — entries created so far are kept.",
+          "failedCount_one": "{{count}} row failed",
+          "failedCount_other": "{{count}} rows failed",
+          "startOver": "Import another file"
+        }
+      }
+    }
   },
   "categories": {
     "title": "Categories",

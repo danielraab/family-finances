@@ -343,13 +343,22 @@ function AccountDetails() {
               {t("accounts.details.seeAll")}
             </Link>
             {account.permission !== "view" && (
-              <Link
-                to="/entries/new"
-                search={{ account_id: accountId }}
-                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {t("entries.create")}
-              </Link>
+              <>
+                <Link
+                  to="/entries/import"
+                  search={{ account_id: accountId }}
+                  className="rounded-md border border-black/15 px-3 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]"
+                >
+                  {t("entries.import.linkLabel")}
+                </Link>
+                <Link
+                  to="/entries/new"
+                  search={{ account_id: accountId }}
+                  className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                >
+                  {t("entries.create")}
+                </Link>
+              </>
             )}
           </div>
         </div>

@@ -351,7 +351,85 @@
       "confirm": "Diesen Ort verwenden"
     },
     "viewLocation": "Ort anzeigen",
-    "createdBy": "Erfasst von {{name}}"
+    "createdBy": "Erfasst von {{name}}",
+    "import": {
+      "linkLabel": "Importieren",
+      "title": "Buchungen importieren",
+      "intoAccount": "Import nach {{account}}",
+      "continue": "Weiter",
+      "back": "Zurück",
+      "cancel": "Abbrechen",
+      "notMapped": "— Nicht zugeordnet —",
+      "errors": {
+        "generic": "Diese Datei konnte nicht gelesen werden.",
+        "csvNoHeaderRow": "Diese CSV-Datei hat keine Kopfzeile. Die erste Zeile muss Spaltenüberschriften enthalten.",
+        "fileReadError": "Die Datei konnte nicht gelesen werden.",
+        "jsonInvalid": "Diese Datei ist kein gültiges JSON.",
+        "jsonNotArray": "Die JSON-Datei muss ein Array von Objekten auf oberster Ebene enthalten.",
+        "jsonNotFlatObjects": "Jedes Element im JSON-Array muss ein flaches Objekt sein — keine verschachtelten Objekte oder Arrays."
+      },
+      "reasons": {
+        "missingTitle": "Titel fehlt.",
+        "invalidAmount": "Betrag konnte nicht gelesen werden.",
+        "invalidDate": "Datum konnte nicht gelesen werden.",
+        "missingCategory": "Keine Kategorie ausgewählt.",
+        "zeroAmount": "Betrag ist genau null.",
+        "ambiguousDate": "Datum ist zwischen Tag- und Monatsreihenfolge mehrdeutig.",
+        "submitRejected": "Vom Server abgelehnt."
+      },
+      "steps": {
+        "account": {
+          "label": "Konto",
+          "none": "Du hast kein Konto, in das importiert werden kann."
+        },
+        "file": {
+          "label": "Datei",
+          "csvHeaderNote": "Die erste Zeile einer CSV-Datei muss Spaltenüberschriften enthalten.",
+          "parsing": "{{fileName}} wird gelesen…"
+        },
+        "mapping": {
+          "fieldsHeading": "Spaltenzuordnung",
+          "selectColumn": "Spalte auswählen",
+          "amountHeading": "Betrag",
+          "amountSingle": "Einzelne Spalte (vorzeichenbehaftet)",
+          "amountSplit": "Getrennte Soll-/Haben-Spalten",
+          "amountColumn": "Betragsspalte",
+          "debitColumn": "Soll-Spalte",
+          "creditColumn": "Haben-Spalte",
+          "flipSign": "Vorzeichen umkehren",
+          "decimalSeparator": "Dezimaltrennzeichen",
+          "thousandsSeparator": "Tausendertrennzeichen",
+          "auto": "Automatisch erkennen",
+          "none": "Keins",
+          "dateFormat": "Datumsformat",
+          "dateFormatHint": "Bei \"auto\" wird automatisch erkannt, oder ein Format wie DD.MM.YYYY eingeben.",
+          "batchHeading": "Kategorie & Tags (für alle importierten Buchungen)",
+          "previewHeading": "Vorschau",
+          "previewNoRows": "Die Datei enthält keine Zeilen für eine Vorschau.",
+          "previewIncomplete": "Ordne die Pflichtfelder zu, um eine Vorschau zu sehen.",
+          "runDryRun": "Testlauf starten",
+          "dryRunSummary": "{{ok}} bereit, {{suspicious}} auffällig, {{failed}} fehlgeschlagen",
+          "rowColumn": "Zeile",
+          "statusColumn": "Status",
+          "reasonColumn": "Grund",
+          "failed": "Fehlgeschlagen",
+          "suspicious": "Auffällig",
+          "startImport": "Import starten"
+        },
+        "run": {
+          "progress": "{{created}} von {{total}} importiert",
+          "cancel": "Import abbrechen"
+        },
+        "result": {
+          "created_one": "{{count}} Buchung erstellt",
+          "created_other": "{{count}} Buchungen erstellt",
+          "canceled": "Import wurde abgebrochen — bereits erstellte Buchungen bleiben erhalten.",
+          "failedCount_one": "{{count}} Zeile fehlgeschlagen",
+          "failedCount_other": "{{count}} Zeilen fehlgeschlagen",
+          "startOver": "Weitere Datei importieren"
+        }
+      }
+    }
   },
   "categories": {
     "title": "Kategorien",
