@@ -407,18 +407,7 @@
           "dateFormat": "Date format",
           "dateFormatHint": "Leave as \"auto\" to auto-detect, or enter a format like DD.MM.YYYY.",
           "batchHeading": "Category & tags (applied to every imported entry)",
-          "previewHeading": "Mapped entry",
-          "runDryRun": "Run dry run",
-          "dryRunSummary": "{{ok}} ready, {{suspicious}} suspicious, {{failed}} failed",
-          "rowColumn": "Row",
-          "statusColumn": "Status",
-          "reasonColumn": "Reason",
-          "failed": "Failed",
-          "suspicious": "Suspicious",
-          "startImport": "Start import",
-          "ignoredFieldsHint": "Some fields could not be mapped and were ignored (complex structure): {{fields}}.",
-          "sourceDataHeading": "Source data",
-          "ready": "Ready"
+          "ignoredFieldsHint": "Some fields could not be mapped and were ignored (complex structure): {{fields}}."
         },
         "run": {
           "progress": "{{created}} of {{total}} imported",
@@ -431,6 +420,21 @@
           "failedCount_one": "{{count}} row failed",
           "failedCount_other": "{{count}} rows failed",
           "startOver": "Import another file"
+        },
+        "dryRun": {
+          "heading": "Dry run",
+          "summary": "{{ok}} ready, {{suspicious}} suspicious, {{failed}} failed",
+          "rowColumn": "Row",
+          "statusColumn": "Status",
+          "reasonColumn": "Reason",
+          "failed": "Failed",
+          "suspicious": "Suspicious",
+          "ready": "Ready",
+          "sourceDataHeading": "Source data",
+          "mappedEntryHeading": "Mapped entry",
+          "remapHeading": "Fix this field",
+          "remapNote": "Pick a different column for this row only — the mapping for every other row is unchanged.",
+          "startImport": "Start import"
         }
       }
     }

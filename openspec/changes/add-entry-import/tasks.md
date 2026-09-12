@@ -196,3 +196,62 @@
   none hidden); clicking a row expands it showing matching source and
   mapped-entry values; a full import from the same mapping still creates
   the correct entries.
+
+## 10. Dry run as its own step + per-row field remap (post-implementation feedback)
+
+- [x] 10.1 Split the dry run out of `ImportMappingStep.tsx` into its own
+  new component, `ImportDryRunStep.tsx`, and a new wizard step
+  (`entries.import.tsx`'s `Step` union gains `"dryrun"` between
+  `"mapping"` and `"run"`). `ImportMappingStep.tsx` now only maps fields
+  and sets category/tags, with a "Continue" action (reusing the existing
+  `entries.import.continue` key) gated on `toRowMapping(mapping) !==
+  null`; it no longer holds any dry-run state or UI. The route no longer
+  holds `dryRun`/`onDryRun` state; it holds `finalRows: ClassifiedRow[] |
+  null`, set from `ImportDryRunStep`'s `onContinue` callback and used to
+  derive both the run step's submittable rows and the result step's
+  failed-row list.
+- [x] 10.2 `ImportDryRunStep.tsx` computes the dry run once via a lazy
+  `useState(() => runDryRun(sourceRows, rowMapping))` initializer (runs
+  exactly once, on mount — no explicit "run" trigger, no
+  `useExhaustiveDependencies` workaround needed) and keeps the classified
+  rows in its own state, re-derived summary counts via `useMemo`. Carries
+  over the full-row list, per-row click-to-expand, and source-data/
+  mapped-entry display from the previous change unchanged, moved
+  verbatim (`rawFieldsForRow`, the two-column expanded-detail layout).
+- [x] 10.3 Added the per-row, per-field remap capability: a **failed**
+  row's expanded detail now shows a `RemapSelect` per issue field (title;
+  amount — one or two selects depending on single/split mode; booking
+  date), defaulting to the mapping's current column for that field and
+  offering every detected column. `applyOverride(rowMapping, override)`
+  builds an effective `RowMapping` with just that row's override(s)
+  applied; on change, `classifyRow` re-runs for that one row only (against
+  the amount separators resolved once for the whole file, captured from
+  the initial dry run), replacing its entry in local state — every other
+  row, and the running counts, update accordingly with no full re-scan.
+  Overrides live in a step-local `Record<rowIndex, RowOverride>`; "Continue"
+  hands the current (remap-inclusive) classified rows up to the route.
+- [x] 10.4 i18n: moved the dry-run-specific keys from
+  `entries.import.steps.mapping.*` to a new `entries.import.steps.dryRun.*`
+  namespace (`summary`, `rowColumn`, `statusColumn`, `reasonColumn`,
+  `failed`, `suspicious`, `ready`, `sourceDataHeading`, renamed
+  `previewHeading` → `mappedEntryHeading`, `startImport`), dropped the
+  now-unused `runDryRun` key, added `heading` and the new
+  `remapHeading`/`remapNote` strings, in both `en.json` and `de.json`.
+  The mapping step's own action button reuses the existing
+  `entries.import.continue` key instead of a dry-run-flavored label.
+- [x] 10.5 Updated proposal.md, design.md, and the `web-client-entry-import`
+  delta spec: the dry run is now documented as its own step (entered
+  automatically, no manual "run" trigger), and new requirements/scenarios
+  cover the per-row remap capability and the revised "change the whole
+  file's mapping" flow (back to mapping, then continue forward again,
+  rather than an in-step re-run button).
+- [x] 10.6 Verified end-to-end in a real browser: mapping step shows no
+  dry-run UI and its action button reads "Continue"; continuing lands on
+  a distinct "Dry run" step whose results are already computed; expanding
+  a row classified failed (an intentionally-bad date, with a second,
+  correctly-formatted date column present in the fixture) shows a
+  booking-date remap select; picking the alternate column immediately
+  flips that row to ready with its mapped entry shown, updates the
+  summary counts live, and leaves every other row unchanged; completing
+  the import creates an entry for the remapped row using the remapped
+  column's value, confirmed via `GET /api/entries`.

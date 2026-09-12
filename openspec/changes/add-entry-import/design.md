@@ -221,9 +221,67 @@ first row with a non-empty value for that column), so a visitor picking,
 say, the title column doesn't have to guess which raw header holds a
 recognizable value.
 
-The visitor can re-run the dry run after changing any mapping/setting, as
-many times as they like, with no network activity — it's a pure function
-over already-parsed, in-memory rows.
+### The dry run is its own wizard step, not embedded in mapping
+
+Revised again after the dry run grew a per-row remap control (next
+section) — cramming file-wide mapping, a possibly-long results table, and
+per-row remap controls into one screen was too much at once, and
+conceptually the dry run *reacts to* a completed mapping rather than being
+part of building it. `ImportDryRunStep.tsx` is now its own step
+(`ImportMappingStep.tsx` → `ImportDryRunStep.tsx` → `ImportRunStep.tsx`),
+entered only once the mapping step's required fields and category are set
+(its "Continue" is gated exactly the way the old "Run dry run" button
+was). The dry run computes once, from a lazy `useState` initializer, when
+the step mounts; there is no in-step "re-run" action any more — changing
+the file-wide mapping means going Back to the mapping step and forward
+again, which remounts this step and computes a fresh dry run (and drops
+any per-row remaps from the previous attempt, along with any that were
+never applied). This is a deliberate simplification: the two triggers for
+"the dry run needs to change" (a file-wide mapping edit, or a per-row
+remap) now have clearly different scopes — one restarts the step, the
+other patches one row in place — rather than one "re-run" affordance
+having to mean both.
+
+### A failed row can be remapped, per field, for that row alone
+
+Real files sometimes have a single field on a single row that doesn't fit
+the file-wide mapping — a date typo, a row exported in a different format
+than the rest. Re-mapping the *whole file's* date column to fix one row
+would just break every other row that was already parsing correctly, and
+manually editing raw file content before re-uploading is a worse
+experience than the tool should ask for. So a **failed** row's expansion
+(only failed — a suspicious or ok row already produced a valid entry, so
+there's nothing to fix) additionally shows one `RemapSelect` per issue the
+row actually has:
+
+- `title` issue → a select for which column feeds this row's title.
+- `amount` issue → one select (single-amount mode) or two (split debit/
+  credit mode) for which column(s) feed this row's amount.
+- `booking_timestamp` issue → a select for which column feeds this row's
+  date.
+
+(A `category_id` issue is never reachable here — the mapping step already
+requires a category before "Continue" enables, so `mapRow` can't produce
+that error by the time a row is on screen; no remap control exists for
+it.) Each select defaults to the file-wide column already used for that
+field, offers every column the file has, and on change calls
+`applyOverride(rowMapping, override)` — a small helper that copies the
+step's base `RowMapping` and substitutes just the overridden column(s) —
+then re-runs `classifyRow` for *that one row* against the file's
+already-resolved amount separators (captured once, from the initial dry
+run, so a remap can't accidentally pick a different separator reading
+than the rest of the file used). The result replaces that row's entry in
+local state; every other row, and the summary counts, update from that
+one row's new classification with no re-scan of the file. Overrides are
+kept in a small `Record<rowIndex, RowOverride>` alongside the rows
+themselves, both step-local — "Continue" hands the *current* classified
+rows (remaps included) up to the wizard, which is what decides what
+actually gets submitted in the run step.
+
+This intentionally doesn't handle every possible failure — a value that's
+wrong in every column (not just mis-mapped) still needs a fixed file — but
+it directly targets the failure mode a large file most commonly has:
+right data, wrong column, on just one or two rows.
 
 ### Import step: resolve tags once, then submit rows sequentially with live progress and a cancel action
 

@@ -1,9 +1,7 @@
-import { Fragment, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "../../api/schema";
 import { flattenCategoryTree } from "../../lib/categoryTree";
-import { type DryRunSummary, runDryRun } from "../../lib/import/dryRun";
-import type { RowMapping } from "../../lib/import/mapRow";
 import type {
   DecimalSeparator,
   ThousandsSeparator,
@@ -81,70 +79,13 @@ function FieldSelect({
   );
 }
 
-/** The raw source values behind one row's mapped fields, for the dry-run
- * table's per-row expansion — labeled reuse of the same field labels the
- * mapping controls use, so "why did this become that" is traceable. */
-function rawFieldsForRow(
-  t: (key: string) => string,
-  rowMapping: RowMapping,
-  row: ParsedRow,
-): { label: string; value: string }[] {
-  const out: { label: string; value: string }[] = [
-    {
-      label: t("entries.form.title"),
-      value: row[rowMapping.titleColumn] ?? "",
-    },
-  ];
-  if (rowMapping.amount.mode === "single") {
-    out.push({
-      label: t("entries.import.steps.mapping.amountColumn"),
-      value: row[rowMapping.amount.column] ?? "",
-    });
-  } else {
-    out.push({
-      label: t("entries.import.steps.mapping.debitColumn"),
-      value: row[rowMapping.amount.debitColumn] ?? "",
-    });
-    out.push({
-      label: t("entries.import.steps.mapping.creditColumn"),
-      value: row[rowMapping.amount.creditColumn] ?? "",
-    });
-  }
-  out.push({
-    label: t("entries.form.bookingTimestamp"),
-    value: row[rowMapping.bookingColumn] ?? "",
-  });
-  if (rowMapping.descriptionColumn) {
-    out.push({
-      label: t("entries.form.description"),
-      value: row[rowMapping.descriptionColumn] ?? "",
-    });
-  }
-  if (rowMapping.counterpartyColumn) {
-    out.push({
-      label: t("entries.form.counterparty"),
-      value: row[rowMapping.counterpartyColumn] ?? "",
-    });
-  }
-  if (rowMapping.locationColumn) {
-    out.push({
-      label: t("entries.form.location"),
-      value: row[rowMapping.locationColumn] ?? "",
-    });
-  }
-  return out;
-}
-
 /**
  * Step 3: map source columns/fields to entry fields (each option showing an
  * example value from the file, for orientation), set the batch category/
- * tags, tune amount and date parsing, and run the offline dry run over the
- * whole file. The dry run's results list every row, each expandable on
- * click to show its source values and (when it mapped successfully) the
- * resulting entry — there is no separate single-row preview. "Continue"
- * only unlocks once a dry run has completed against the *current* mapping —
- * any further mapping change clears the dry run result, forcing a re-run
- * (see design.md's "settings can be adjusted and re-validated" decision).
+ * tags, and tune amount and date parsing. "Continue" moves to the dry-run
+ * step (`ImportDryRunStep`), which computes and shows results — this step
+ * only gates that transition on every required field being mapped and a
+ * category being selected.
  */
 export function ImportMappingStep({
   fields,
@@ -152,11 +93,8 @@ export function ImportMappingStep({
   ignoredFields,
   categories,
   tags,
-  currency,
   mapping,
   onMappingChange,
-  dryRun,
-  onDryRun,
   onContinue,
   onBack,
 }: {
@@ -168,31 +106,18 @@ export function ImportMappingStep({
   ignoredFields: string[];
   categories: Category[];
   tags: Tag[];
-  currency: string;
   mapping: MappingState;
   onMappingChange: (next: MappingState) => void;
-  dryRun: DryRunSummary | null;
-  onDryRun: (result: DryRunSummary) => void;
   onContinue: () => void;
   onBack: () => void;
 }) {
   const { t } = useTranslation();
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   function update<K extends keyof MappingState>(
     key: K,
     value: MappingState[K],
   ) {
     onMappingChange({ ...mapping, [key]: value });
-  }
-
-  function toggleExpanded(index: number) {
-    setExpandedRows((current) => {
-      const next = new Set(current);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
   }
 
   const fieldExamples = useMemo(() => {
@@ -219,15 +144,7 @@ export function ImportMappingStep({
       }),
   );
 
-  const rowMapping = toRowMapping(mapping);
-
-  function handleRunDryRun() {
-    if (!rowMapping) return;
-    setExpandedRows(new Set());
-    onDryRun(runDryRun(rows, rowMapping));
-  }
-
-  const canRunDryRun = rowMapping !== null && rows.length > 0;
+  const canContinue = toRowMapping(mapping) !== null && rows.length > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -440,171 +357,6 @@ export function ImportMappingStep({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div>
-          <button
-            type="button"
-            onClick={handleRunDryRun}
-            disabled={!canRunDryRun}
-            className="rounded-md border border-black/15 px-4 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] disabled:opacity-60 dark:border-white/15 dark:hover:bg-white/[.06]"
-          >
-            {t("entries.import.steps.mapping.runDryRun")}
-          </button>
-        </div>
-
-        {dryRun && (
-          <div className="flex flex-col gap-3 rounded-md border border-black/10 p-4 dark:border-white/10">
-            <p className="text-sm">
-              {t("entries.import.steps.mapping.dryRunSummary", {
-                ok: dryRun.okCount,
-                suspicious: dryRun.suspiciousCount,
-                failed: dryRun.failedCount,
-              })}
-            </p>
-            <div className="max-h-[28rem] overflow-y-auto overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                    <th className="pr-4 py-1">
-                      {t("entries.import.steps.mapping.rowColumn")}
-                    </th>
-                    <th className="pr-4 py-1">
-                      {t("entries.import.steps.mapping.statusColumn")}
-                    </th>
-                    <th className="py-1">
-                      {t("entries.import.steps.mapping.reasonColumn")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dryRun.rows.map((r) => {
-                    const expanded = expandedRows.has(r.index);
-                    return (
-                      <Fragment key={r.index}>
-                        <tr
-                          onClick={() => toggleExpanded(r.index)}
-                          className="cursor-pointer border-t border-black/5 hover:bg-black/[.03] dark:border-white/5 dark:hover:bg-white/[.05]"
-                        >
-                          <td className="pr-4 py-1">
-                            <span className="mr-1 inline-block w-3 text-zinc-400">
-                              {expanded ? "▾" : "▸"}
-                            </span>
-                            {r.index + 1}
-                          </td>
-                          <td className="pr-4 py-1">
-                            {r.classification === "failed" ? (
-                              <span className="text-red-600 dark:text-red-400">
-                                {t("entries.import.steps.mapping.failed")}
-                              </span>
-                            ) : r.classification === "suspicious" ? (
-                              <span className="text-amber-600 dark:text-amber-400">
-                                {t("entries.import.steps.mapping.suspicious")}
-                              </span>
-                            ) : (
-                              <span className="text-emerald-600 dark:text-emerald-400">
-                                {t("entries.import.steps.mapping.ready")}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-1">
-                            {r.issues.length > 0
-                              ? r.issues
-                                  .map((issue) =>
-                                    t(`entries.import.reasons.${issue.reason}`),
-                                  )
-                                  .join(", ")
-                              : "—"}
-                          </td>
-                        </tr>
-                        {expanded && rowMapping && (
-                          <tr className="border-t border-black/5 dark:border-white/5">
-                            <td
-                              colSpan={3}
-                              className="bg-black/[.02] px-2 py-3 dark:bg-white/[.03]"
-                            >
-                              <div className="flex flex-col gap-4 text-xs sm:flex-row sm:gap-8">
-                                <div className="flex flex-col gap-1">
-                                  <span className="font-semibold text-zinc-500 dark:text-zinc-400">
-                                    {t(
-                                      "entries.import.steps.mapping.sourceDataHeading",
-                                    )}
-                                  </span>
-                                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-                                    {rawFieldsForRow(t, rowMapping, r.row).map(
-                                      (f) => (
-                                        <Fragment key={f.label}>
-                                          <dt className="text-zinc-500 dark:text-zinc-400">
-                                            {f.label}
-                                          </dt>
-                                          <dd>{f.value || "—"}</dd>
-                                        </Fragment>
-                                      ),
-                                    )}
-                                  </dl>
-                                </div>
-                                {r.entry && (
-                                  <div className="flex flex-col gap-1">
-                                    <span className="font-semibold text-zinc-500 dark:text-zinc-400">
-                                      {t(
-                                        "entries.import.steps.mapping.previewHeading",
-                                      )}
-                                    </span>
-                                    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-                                      <dt className="text-zinc-500 dark:text-zinc-400">
-                                        {t("entries.form.title")}
-                                      </dt>
-                                      <dd>{r.entry.title}</dd>
-                                      <dt className="text-zinc-500 dark:text-zinc-400">
-                                        {t("entries.form.amount", { currency })}
-                                      </dt>
-                                      <dd>
-                                        {(r.entry.amount / 10000).toFixed(4)}
-                                      </dd>
-                                      <dt className="text-zinc-500 dark:text-zinc-400">
-                                        {t("entries.form.bookingTimestamp")}
-                                      </dt>
-                                      <dd>{r.entry.booking_timestamp}</dd>
-                                      {r.entry.description && (
-                                        <>
-                                          <dt className="text-zinc-500 dark:text-zinc-400">
-                                            {t("entries.form.description")}
-                                          </dt>
-                                          <dd>{r.entry.description}</dd>
-                                        </>
-                                      )}
-                                      {r.entry.counterparty && (
-                                        <>
-                                          <dt className="text-zinc-500 dark:text-zinc-400">
-                                            {t("entries.form.counterparty")}
-                                          </dt>
-                                          <dd>{r.entry.counterparty}</dd>
-                                        </>
-                                      )}
-                                      {r.entry.location && (
-                                        <>
-                                          <dt className="text-zinc-500 dark:text-zinc-400">
-                                            {t("entries.form.location")}
-                                          </dt>
-                                          <dd>{r.entry.location}</dd>
-                                        </>
-                                      )}
-                                    </dl>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
       <div className="flex gap-3">
         <button
           type="button"
@@ -616,10 +368,10 @@ export function ImportMappingStep({
         <button
           type="button"
           onClick={onContinue}
-          disabled={!dryRun || dryRun.okCount + dryRun.suspiciousCount === 0}
+          disabled={!canContinue}
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
-          {t("entries.import.steps.mapping.startImport")}
+          {t("entries.import.continue")}
         </button>
       </div>
     </div>

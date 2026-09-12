@@ -26,16 +26,21 @@ it silently creates a year's worth of misdated transactions.
      in this change). Amount mapping supports either a single signed
      column or a split debit/credit column pair, with configurable
      decimal/thousands separators and a flip-sign option, to cover the
-     different shapes bank exports use. A live preview shows one mapped
-     row so the visitor can sanity-check the mapping before going further.
-  4. **Dry run** — the whole file is parsed and validated locally (no
-     network calls) against the current mapping. Rows that fail (bad date,
-     bad amount, missing a required mapped field) or look suspicious (an
-     ambiguous date, a zero amount) are listed with a reason; successfully
-     parsed rows are only counted, never listed one by one. The visitor
-     can adjust the date format or amount separator settings and re-run
-     the dry run, as many times as needed, entirely offline, before
-     committing to anything.
+     different shapes bank exports use. Each mapping control shows an
+     example value from the file next to every column/field it offers, so
+     the visitor can tell what's in a column before picking it.
+  4. **Dry run** — its own step. The whole file is parsed and validated
+     locally (no network calls) against the mapping from step 3. Every row
+     is listed — not only the problem ones — with its classification
+     (ready, suspicious, or failed) and, for suspicious/failed rows, a
+     reason; each row is independently expandable (click) to see its raw
+     source values and, once it maps successfully, the entry it would
+     create. A **failed** row's expansion additionally offers a remap
+     control per failing field (title, amount, or booking date): picking a
+     different source column re-classifies *only that row*, immediately,
+     entirely offline — the mapping used for every other row is
+     untouched. The visitor can also go back to step 3 to change the
+     mapping/settings for the whole file and return for a fresh dry run.
   5. **Import** — creates each non-failed row as a real entry
      (`POST /api/entries`, one call per row, in file order), with a live
      progress indicator and a cancel action. A row that fails at this
