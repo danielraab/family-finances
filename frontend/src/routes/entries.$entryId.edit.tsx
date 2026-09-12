@@ -16,6 +16,7 @@ import { TagInput } from "../components/TagInput";
 import { amountToInput, inputToAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
+import { resolveTagIds } from "../lib/resolveTags";
 
 type Account = components["schemas"]["Account"];
 type Category = components["schemas"]["Category"];
@@ -116,27 +117,13 @@ function EditEntry() {
     };
   }, [entryId]);
 
-  async function resolveTagIds(): Promise<string[]> {
-    const ids: string[] = [];
-    for (const name of tagNames) {
-      const existing = tags.find((tag) => tag.name === name);
-      if (existing) {
-        ids.push(existing.id);
-        continue;
-      }
-      const { data } = await api.POST("/api/tags", { body: { name } });
-      if (data) ids.push(data.id);
-    }
-    return ids;
-  }
-
   async function performSubmit(parsedAmount: number) {
     if (!entry) return;
     setConfirmingAccountChange(false);
     setSubmitting(true);
     setError(null);
 
-    const tagIds = await resolveTagIds();
+    const tagIds = await resolveTagIds(tagNames, tags);
     const { data, response } = await api.PATCH("/api/entries/{id}", {
       params: { path: { id: entryId } },
       body: {

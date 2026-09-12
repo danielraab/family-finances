@@ -192,13 +192,22 @@ function EntriesListPage() {
         <h1 className="text-2xl font-semibold tracking-tight">
           {t("entries.title")}
         </h1>
-        <Link
-          to="/entries/new"
-          search={search.account_id ? { account_id: search.account_id } : {}}
-          className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
-          {t("entries.create")}
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/entries/import"
+            search={search.account_id ? { account_id: search.account_id } : {}}
+            className="rounded-md border border-black/15 px-3 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]"
+          >
+            {t("entries.import.linkLabel")}
+          </Link>
+          <Link
+            to="/entries/new"
+            search={search.account_id ? { account_id: search.account_id } : {}}
+            className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            {t("entries.create")}
+          </Link>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-end gap-3">

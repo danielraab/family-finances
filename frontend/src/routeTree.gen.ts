@@ -22,6 +22,7 @@ import { Route as AccountsIndexRouteImport } from './routes/accounts.index'
 import { Route as AccountsAccountIdRouteImport } from './routes/accounts.$accountId'
 import { Route as AccountsNewRouteImport } from './routes/accounts.new'
 import { Route as EntriesIndexRouteImport } from './routes/entries.index'
+import { Route as EntriesImportRouteImport } from './routes/entries.import'
 import { Route as EntriesNewRouteImport } from './routes/entries.new'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsInvitationsRouteImport } from './routes/settings.invitations'
@@ -98,6 +99,11 @@ const EntriesIndexRoute = EntriesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => EntriesRoute,
 } as any)
+const EntriesImportRoute = EntriesImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => EntriesRoute,
+} as any)
 const EntriesNewRoute = EntriesNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -163,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/tags': typeof TagsRoute
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
+  '/entries/import': typeof EntriesImportRoute
   '/entries/new': typeof EntriesNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
@@ -184,6 +191,7 @@ export interface FileRoutesByTo {
   '/reports': typeof ReportsRoute
   '/tags': typeof TagsRoute
   '/accounts/new': typeof AccountsNewRoute
+  '/entries/import': typeof EntriesImportRoute
   '/entries/new': typeof EntriesNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
@@ -210,6 +218,7 @@ export interface FileRoutesById {
   '/tags': typeof TagsRoute
   '/accounts/$accountId': typeof AccountsAccountIdRouteWithChildren
   '/accounts/new': typeof AccountsNewRoute
+  '/entries/import': typeof EntriesImportRoute
   '/entries/new': typeof EntriesNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
     | '/tags'
     | '/accounts/$accountId'
     | '/accounts/new'
+    | '/entries/import'
     | '/entries/new'
     | '/settings/invitations'
     | '/settings/users'
@@ -258,6 +268,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/tags'
     | '/accounts/new'
+    | '/entries/import'
     | '/entries/new'
     | '/settings/invitations'
     | '/settings/users'
@@ -283,6 +294,7 @@ export interface FileRouteTypes {
     | '/tags'
     | '/accounts/$accountId'
     | '/accounts/new'
+    | '/entries/import'
     | '/entries/new'
     | '/settings/invitations'
     | '/settings/users'
@@ -404,6 +416,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntriesIndexRouteImport
       parentRoute: typeof EntriesRoute
     }
+    '/entries/import': {
+      id: '/entries/import'
+      path: '/import'
+      fullPath: '/entries/import'
+      preLoaderRoute: typeof EntriesImportRouteImport
+      parentRoute: typeof EntriesRoute
+    }
     '/entries/new': {
       id: '/entries/new'
       path: '/new'
@@ -509,12 +528,14 @@ const AccountsRouteWithChildren = AccountsRoute._addFileChildren(
 )
 
 interface EntriesRouteChildren {
+  EntriesImportRoute: typeof EntriesImportRoute
   EntriesNewRoute: typeof EntriesNewRoute
   EntriesIndexRoute: typeof EntriesIndexRoute
   EntriesEntryIdEditRoute: typeof EntriesEntryIdEditRoute
 }
 
 const EntriesRouteChildren: EntriesRouteChildren = {
+  EntriesImportRoute: EntriesImportRoute,
   EntriesNewRoute: EntriesNewRoute,
   EntriesIndexRoute: EntriesIndexRoute,
   EntriesEntryIdEditRoute: EntriesEntryIdEditRoute,
