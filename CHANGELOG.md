@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-12
+
+### Added
+
+- Counterparty and location fields on transaction entries: a
+  counterparty text input with autocomplete suggestions (backed by a
+  new `GET /api/entries/counterparties` endpoint), and a location
+  input with "Use GPS" and "Pick on map" pickers backed by
+  Leaflet/OpenStreetMap. The ledger shows a globe icon and
+  counterparty line on entries that carry them, with a read-only map
+  preview on click.
+
 ## [0.1.1] - 2026-09-11
 
 ### Added
@@ -67,7 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/danielraab/family-finances/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/danielraab/family-finances/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/danielraab/family-finances/compare/v0.0.0...v0.1.0
 [0.0.0]: https://github.com/danielraab/family-finances/releases/tag/v0.0.0
