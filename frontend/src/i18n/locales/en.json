@@ -366,7 +366,8 @@
         "fileReadError": "The file could not be read.",
         "jsonInvalid": "This file is not valid JSON.",
         "jsonNotArray": "The JSON file must contain a top-level array of objects.",
-        "jsonNotFlatObjects": "Every item in the JSON array must be a flat object — no nested objects or arrays."
+        "jsonNotFlatObjects": "Every item in the JSON array must be a flat object — no nested objects or arrays.",
+        "unsupportedFileType": "Please choose a .csv or .json file."
       },
       "reasons": {
         "missingTitle": "Title is missing.",
@@ -416,7 +417,8 @@
           "reasonColumn": "Reason",
           "failed": "Failed",
           "suspicious": "Suspicious",
-          "startImport": "Start import"
+          "startImport": "Start import",
+          "ignoredFieldsHint": "Some fields could not be mapped and were ignored (complex structure): {{fields}}."
         },
         "run": {
           "progress": "{{created}} of {{total}} imported",

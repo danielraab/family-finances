@@ -82,6 +82,7 @@ function FieldSelect({
 export function ImportMappingStep({
   fields,
   rows,
+  ignoredFields,
   categories,
   tags,
   currency,
@@ -94,6 +95,10 @@ export function ImportMappingStep({
 }: {
   fields: string[];
   rows: ParsedRow[];
+  /** Top-level JSON fields skipped because their value was a complex
+   * structure we don't know how to map — see `ParsedFile.ignoredFields`.
+   * Always empty for a CSV import. */
+  ignoredFields: string[];
   categories: Category[];
   tags: Tag[];
   currency: string;
@@ -145,6 +150,14 @@ export function ImportMappingStep({
 
   return (
     <div className="flex flex-col gap-6">
+      {ignoredFields.length > 0 && (
+        <p className="rounded-md border border-amber-600/30 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-400/30 dark:bg-amber-950/40 dark:text-amber-300">
+          {t("entries.import.steps.mapping.ignoredFieldsHint", {
+            fields: ignoredFields.join(", "),
+          })}
+        </p>
+      )}
+
       <div className="flex flex-col gap-4">
         <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
           {t("entries.import.steps.mapping.fieldsHeading")}

@@ -133,6 +133,7 @@ function ImportEntries() {
         <ImportMappingStep
           fields={parsed.fields}
           rows={parsed.rows}
+          ignoredFields={parsed.ignoredFields}
           categories={categories}
           tags={tags}
           currency={account?.currency ?? ""}
