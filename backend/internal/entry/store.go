@@ -140,4 +140,10 @@ type Store interface {
 	// entry. Service.FlowSummary fills in periods with no matching entries
 	// and resolves each account id to its currency.
 	FlowSummary(ctx context.Context, filter FlowFilter) ([]FlowRow, error)
+
+	// ListInUseCounterparties returns the distinct, non-empty Counterparty
+	// values on ownerID's own non-deleted entries, sorted
+	// case-insensitively ascending — for the entry form's autocomplete.
+	// Mirrors account.Store's ListInUseTypes.
+	ListInUseCounterparties(ctx context.Context, ownerID string) ([]string, error)
 }

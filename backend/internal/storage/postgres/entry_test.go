@@ -988,3 +988,104 @@ func TestPGEntryFlowSummaryUsesGivenTimezone(t *testing.T) {
 		t.Fatalf("rows = %+v, want a single January row (America/New_York local date)", rows)
 	}
 }
+
+func TestPGEntryCounterpartyAndLocationRoundTrip(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	e, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(100),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Groceries", CategoryID: &f.catID,
+		Counterparty: "Rewe", Location: `{"lat":48.2082,"lng":16.3738}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Counterparty != "Rewe" || e.Location != `{"lat":48.2082,"lng":16.3738}` {
+		t.Fatalf("e = %+v", e)
+	}
+
+	got, err := f.entries.Get(ctx, e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Counterparty != "Rewe" || got.Location != `{"lat":48.2082,"lng":16.3738}` {
+		t.Fatalf("got = %+v", got)
+	}
+
+	cleared := ""
+	updated, err := f.entries.Update(ctx, e.ID, entry.Update{Counterparty: &cleared, Location: &cleared})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Counterparty != "" || updated.Location != "" {
+		t.Fatalf("updated = %+v", updated)
+	}
+}
+
+func TestPGEntryListSearchMatchesCounterparty(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(1),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Weekly shop", CategoryID: &f.catID,
+		Counterparty: "Rewe",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(1),
+		BookingTimestamp: at("2024-01-02T00:00:00Z"), Title: "Other", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, _, err := f.entries.List(ctx, entry.Filter{AccountIDs: []string{f.accID}, Query: "rewe", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Counterparty != "Rewe" {
+		t.Fatalf("items = %+v", items)
+	}
+}
+
+func TestPGListInUseCounterparties(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	for _, cp := range []string{"Rewe", "Spar", "Rewe"} {
+		if _, err := f.entries.Create(ctx, f.owner, entry.New{
+			AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(1),
+			BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "x", CategoryID: &f.catID,
+			Counterparty: cp,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gone, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(1),
+		BookingTimestamp: at("2024-01-02T00:00:00Z"), Title: "x", CategoryID: &f.catID,
+		Counterparty: "Billa",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.entries.SoftDelete(ctx, gone.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.entries.ListInUseCounterparties(ctx, f.owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Rewe", "Spar"}
+	if len(got) != len(want) {
+		t.Fatalf("ListInUseCounterparties = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ListInUseCounterparties = %v, want %v", got, want)
+		}
+	}
+}

@@ -1579,7 +1579,7 @@ paths:
         - name: q
           in: query
           required: false
-          description: Case-insensitive substring match against title or description.
+          description: Case-insensitive substring match against title, description, or counterparty.
           schema:
             type: string
         - name: sort
@@ -1706,7 +1706,7 @@ paths:
         - name: q
           in: query
           required: false
-          description: Case-insensitive substring match against title or description.
+          description: Case-insensitive substring match against title, description, or counterparty.
           schema:
             type: string
       responses:
@@ -1855,6 +1855,29 @@ paths:
                       $ref: "#/components/schemas/BalancePoint"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/entries/counterparties:
+    get:
+      operationId: getEntryCounterparties
+      summary: List the caller's distinct in-use counterparty labels
+      description: >-
+        The distinct, non-empty `counterparty` values on the caller's own
+        non-deleted entries, compared verbatim (case-sensitive), sorted
+        case-insensitively ascending. For client autocomplete only; there
+        is no endpoint to create, rename, or delete a counterparty value —
+        it exists by being written on an entry.
+      tags: [entries]
+      responses:
+        "200":
+          description: The caller's distinct in-use counterparty labels.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -2857,6 +2880,21 @@ components:
           type: string
           description: >-
             Required for a transaction, optional for a balance_adjustment.
+        counterparty:
+          type: string
+          description: >-
+            The other party in the transaction (who was paid, or who paid)
+            — accepted only when kind is transaction, rejected (400) on a
+            balance_adjustment. Suggested values for client autocomplete
+            come from GET /api/entries/counterparties.
+        location:
+          type: string
+          description: >-
+            A free-text location — accepted only when kind is transaction,
+            rejected (400) on a balance_adjustment. Never parsed or
+            validated by the backend: it may hold a typed address, or a
+            JSON string `{"lat":<number>,"lng":<number>}` produced by
+            device GPS or a map pin, at the client's discretion.
         tag_ids:
           type: array
           items:
@@ -2887,7 +2925,9 @@ components:
         amount is required when kind is transaction and rejected when kind
         is balance_adjustment; balance is required when kind is
         balance_adjustment and rejected when kind is transaction — exactly
-        one of the two, per kind (400).
+        one of the two, per kind (400). counterparty and location are
+        likewise accepted only when kind is transaction, rejected (400)
+        otherwise.
       properties:
         account_id:
           type: string
@@ -2910,6 +2950,12 @@ components:
           type: string
         category_id:
           type: string
+        counterparty:
+          type: string
+          description: Accepted only for kind=transaction; must be omitted otherwise.
+        location:
+          type: string
+          description: Accepted only for kind=transaction; must be omitted otherwise.
         tag_ids:
           type: array
           items:
@@ -2924,7 +2970,9 @@ components:
         applies. No currency conversion or validation is performed. amount
         is only settable when the entry's kind is transaction, balance only
         when it is balance_adjustment — supplying the other one is
-        rejected (400).
+        rejected (400). counterparty and location are likewise only
+        settable when the entry's kind is transaction (400 otherwise); an
+        empty string clears either field.
       properties:
         account_id:
           type: string
@@ -2940,6 +2988,10 @@ components:
         title:
           type: string
         description:
+          type: string
+        counterparty:
+          type: string
+        location:
           type: string
         category_id:
           type: string

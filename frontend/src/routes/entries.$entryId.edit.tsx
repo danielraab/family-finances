@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
+import { LocationField } from "../components/LocationField";
 import { SignedAmountInput } from "../components/SignedAmountInput";
 import { TagInput } from "../components/TagInput";
 import { amountToInput, inputToAmount } from "../lib/amount";
@@ -53,6 +54,9 @@ function EditEntry() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [counterparty, setCounterparty] = useState("");
+  const [counterparties, setCounterparties] = useState<string[]>([]);
+  const [location, setLocation] = useState("");
   const [tagNames, setTagNames] = useState<string[]>([]);
   const [accountUnlocked, setAccountUnlocked] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
@@ -71,12 +75,14 @@ function EditEntry() {
       api.GET("/api/categories"),
       api.GET("/api/tags"),
       api.GET("/api/accounts"),
-    ]).then(([entryRes, categoriesRes, tagsRes, accountsRes]) => {
+      api.GET("/api/entries/counterparties"),
+    ]).then(([entryRes, categoriesRes, tagsRes, accountsRes, cpRes]) => {
       if (cancelled) return;
       setCategories(categoriesRes.data ?? []);
       const allTags = tagsRes.data ?? [];
       setTags(allTags);
       setAccounts(accountsRes.data ?? []);
+      setCounterparties(cpRes.data ?? []);
       const e = entryRes.data ?? null;
       setEntry(e);
       if (e) {
@@ -90,6 +96,8 @@ function EditEntry() {
         setTitle(e.title);
         setDescription(e.description ?? "");
         setCategoryId(e.category_id ?? "");
+        setCounterparty(e.counterparty ?? "");
+        setLocation(e.location ?? "");
         setSelectedAccountId(e.account_id);
         setTagNames(
           e.tag_ids
@@ -140,7 +148,15 @@ function EditEntry() {
         ...(entry.kind === "transaction"
           ? { amount: parsedAmount }
           : { balance: parsedAmount }),
-        ...compact({ description: description.trim() || undefined }),
+        ...compact({
+          description: description.trim() || undefined,
+          ...(entry.kind === "transaction"
+            ? {
+                counterparty: counterparty.trim(),
+                location: location.trim(),
+              }
+            : {}),
+        }),
       },
     });
     setSubmitting(false);
@@ -456,6 +472,35 @@ function EditEntry() {
               </span>
             )}
           </label>
+
+          {entry.kind === "transaction" && (
+            <>
+              <label className="flex flex-col gap-1.5 text-sm font-medium">
+                {t("entries.form.counterparty")}
+                <input
+                  list="counterparty-suggestions"
+                  value={counterparty}
+                  onChange={(e) => setCounterparty(e.target.value)}
+                  placeholder={t("entries.form.counterpartyPlaceholder")}
+                  className={inputClass}
+                />
+                <datalist id="counterparty-suggestions">
+                  {counterparties.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </label>
+
+              <div className="flex flex-col gap-1.5 text-sm font-medium">
+                {t("entries.form.location")}
+                <LocationField
+                  value={location}
+                  onChange={setLocation}
+                  inputClassName={inputClass}
+                />
+              </div>
+            </>
+          )}
 
           <div className="flex flex-col gap-1.5 text-sm font-medium">
             {t("entries.form.tags")}

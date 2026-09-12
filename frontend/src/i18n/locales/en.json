@@ -311,6 +311,14 @@
       "categoryNone": "No category",
       "categoryRequired": "Category is required for a transaction.",
       "categoryDisabledOption": "disabled",
+      "counterparty": "Counterparty",
+      "counterpartyPlaceholder": "Who was this with?",
+      "location": "Location",
+      "locationPlaceholder": "Address or coordinates",
+      "locationUseGps": "Use GPS",
+      "locationPickOnMap": "Pick on map",
+      "locationGpsUnsupported": "GPS isn't available on this device.",
+      "locationGpsError": "Couldn't get your location. Check permissions and try again.",
       "tags": "Tags",
       "tagsPlaceholder": "Add tag…",
       "removeTag": "Remove {{name}}",
@@ -334,6 +342,15 @@
       "confirmAccountChangeBody": "This entry will move to \"{{account}}\".",
       "confirmAccountChangeConfirm": "Move entry"
     },
+    "location": {
+      "previewTitle": "Location",
+      "close": "Close",
+      "pickTitle": "Pick a location",
+      "pickHint": "Click the map, or drag the pin, to set a location.",
+      "cancel": "Cancel",
+      "confirm": "Use this location"
+    },
+    "viewLocation": "View location",
     "createdBy": "Logged by {{name}}"
   },
   "categories": {

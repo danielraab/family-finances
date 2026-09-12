@@ -652,6 +652,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/entries/counterparties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's distinct in-use counterparty labels
+         * @description The distinct, non-empty `counterparty` values on the caller's own non-deleted entries, compared verbatim (case-sensitive), sorted case-insensitively ascending. For client autocomplete only; there is no endpoint to create, rename, or delete a counterparty value — it exists by being written on an entry.
+         */
+        get: operations["getEntryCounterparties"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/entries/flow-summary": {
         parameters: {
             query?: never;
@@ -1097,6 +1117,8 @@ export interface components {
             booking_timestamp: string;
             /** @description Required for a transaction, optional for a balance_adjustment. */
             category_id?: string;
+            /** @description The other party in the transaction (who was paid, or who paid) — accepted only when kind is transaction, rejected (400) on a balance_adjustment. Suggested values for client autocomplete come from GET /api/entries/counterparties. */
+            counterparty?: string;
             /** Format: date-time */
             created_at: string;
             /** @description The id of the user who logged this entry — immutable after creation, not necessarily the account's real owner once it has been shared (see account-sharing). */
@@ -1106,12 +1128,14 @@ export interface components {
             description?: string;
             id: string;
             kind: components["schemas"]["EntryKind"];
+            /** @description A free-text location — accepted only when kind is transaction, rejected (400) on a balance_adjustment. Never parsed or validated by the backend: it may hold a typed address, or a JSON string `{"lat":<number>,"lng":<number>}` produced by device GPS or a map pin, at the client's discretion. */
+            location?: string;
             tag_ids: string[];
             title: string;
             /** Format: date-time */
             updated_at: string;
         };
-        /** @description amount is required when kind is transaction and rejected when kind is balance_adjustment; balance is required when kind is balance_adjustment and rejected when kind is transaction — exactly one of the two, per kind (400). */
+        /** @description amount is required when kind is transaction and rejected when kind is balance_adjustment; balance is required when kind is balance_adjustment and rejected when kind is transaction — exactly one of the two, per kind (400). counterparty and location are likewise accepted only when kind is transaction, rejected (400) otherwise. */
         EntryCreate: {
             account_id: string;
             /**
@@ -1127,8 +1151,12 @@ export interface components {
             /** Format: date-time */
             booking_timestamp: string;
             category_id?: string;
+            /** @description Accepted only for kind=transaction; must be omitted otherwise. */
+            counterparty?: string;
             description?: string;
             kind: components["schemas"]["EntryKind"];
+            /** @description Accepted only for kind=transaction; must be omitted otherwise. */
+            location?: string;
             tag_ids?: string[];
             title: string;
         };
@@ -1143,7 +1171,7 @@ export interface components {
             count: number;
             sums: components["schemas"]["CurrencySum"][];
         };
-        /** @description No kind field — it is immutable after creation. account_id may be set to move the entry to a different account the caller owns (see account-entries); it must not be disabled, the same rule creation applies. No currency conversion or validation is performed. amount is only settable when the entry's kind is transaction, balance only when it is balance_adjustment — supplying the other one is rejected (400). */
+        /** @description No kind field — it is immutable after creation. account_id may be set to move the entry to a different account the caller owns (see account-entries); it must not be disabled, the same rule creation applies. No currency conversion or validation is performed. amount is only settable when the entry's kind is transaction, balance only when it is balance_adjustment — supplying the other one is rejected (400). counterparty and location are likewise only settable when the entry's kind is transaction (400 otherwise); an empty string clears either field. */
         EntryUpdate: {
             account_id?: string;
             /** Format: int64 */
@@ -1154,7 +1182,9 @@ export interface components {
             booking_timestamp?: string;
             /** @description Explicit null clears it (only valid when the entry's kind is balance_adjustment). */
             category_id?: string | null;
+            counterparty?: string;
             description?: string;
+            location?: string;
             /** @description Replaces the full set, including clearing it with []. */
             tag_ids?: string[];
             title?: string;
@@ -2446,7 +2476,7 @@ export interface operations {
                 from?: string;
                 kind?: components["schemas"]["EntryKind"];
                 limit?: number;
-                /** @description Case-insensitive substring match against title or description. */
+                /** @description Case-insensitive substring match against title, description, or counterparty. */
                 q?: string;
                 sort?: "booking_timestamp" | "amount";
                 tag_id?: string;
@@ -2607,6 +2637,27 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    getEntryCounterparties: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's distinct in-use counterparty labels. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     getEntriesFlowSummary: {
         parameters: {
             query: {
@@ -2648,7 +2699,7 @@ export interface operations {
                 category_mode?: "subtree" | "exact";
                 /** @description Inclusive booking_timestamp lower bound, RFC3339. */
                 from?: string;
-                /** @description Case-insensitive substring match against title or description. */
+                /** @description Case-insensitive substring match against title, description, or counterparty. */
                 q?: string;
                 tag_id?: string;
                 /** @description Inclusive booking_timestamp upper bound, RFC3339. */

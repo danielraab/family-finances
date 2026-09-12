@@ -1353,3 +1353,199 @@ func TestBalanceSeriesRequiresMonth(t *testing.T) {
 		t.Fatalf("err = %v, want ErrInvalidValue", err)
 	}
 }
+
+func TestCreateTransactionWithCounterpartyAndLocation(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	e, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Groceries", CategoryID: ptr("cat1"),
+		Counterparty: "Rewe", Location: `{"lat":48.2082,"lng":16.3738}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Counterparty != "Rewe" {
+		t.Fatalf("Counterparty = %q, want Rewe", e.Counterparty)
+	}
+	if e.Location != `{"lat":48.2082,"lng":16.3738}` {
+		t.Fatalf("Location = %q", e.Location)
+	}
+}
+
+func TestCreateBalanceAdjustmentRejectsCounterparty(t *testing.T) {
+	svc, accounts, _, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+
+	_, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindBalanceAdjustment, Balance: ptr(int64(10000)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Opening balance",
+		Counterparty: "Bank",
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestCreateBalanceAdjustmentRejectsLocation(t *testing.T) {
+	svc, accounts, _, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+
+	_, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindBalanceAdjustment, Balance: ptr(int64(10000)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Opening balance",
+		Location: `{"lat":1,"lng":2}`,
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateSetsAndClearsCounterpartyAndLocation(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	e := mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2024-01-01T00:00:00Z", ptr("cat1"))
+
+	updated, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{
+		Counterparty: ptr("Rewe"), Location: ptr(`{"lat":1,"lng":2}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Counterparty != "Rewe" || updated.Location != `{"lat":1,"lng":2}` {
+		t.Fatalf("updated = %+v", updated)
+	}
+
+	cleared, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{
+		Counterparty: ptr(""), Location: ptr(""),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Counterparty != "" || cleared.Location != "" {
+		t.Fatalf("cleared = %+v", cleared)
+	}
+}
+
+func TestUpdateBalanceAdjustmentRejectsCounterpartyAndLocation(t *testing.T) {
+	svc, accounts, _, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	e := mustCreate(t, svc, "u1", "acc1", entry.KindBalanceAdjustment, 10000, "2024-01-01T00:00:00Z", nil)
+
+	if _, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{Counterparty: ptr("Bank")}); !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+	if _, err := svc.Update(context.Background(), "u1", e.ID, entry.Update{Location: ptr(`{"lat":1,"lng":2}`)}); !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestListSearchMatchesCounterpartyAlone(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	if _, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(1)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Weekly shop", CategoryID: ptr("cat1"),
+		Counterparty: "Rewe",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 2, "2024-01-02T00:00:00Z", ptr("cat1"))
+
+	items, _, err := svc.List(context.Background(), "u1", entry.Filter{Query: "rewe"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Counterparty != "Rewe" {
+		t.Fatalf("items = %v", items)
+	}
+}
+
+func TestListInUseCounterpartiesIsDistinctSortedAndOwnerScoped(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u2", "EUR")
+	categories.add("cat1")
+	categories.addOwnedBy("cat2", "u2")
+
+	for _, cp := range []string{"Rewe", "Spar", "Rewe"} {
+		if _, err := svc.Create(context.Background(), "u1", entry.New{
+			AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(1)),
+			BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "x", CategoryID: ptr("cat1"),
+			Counterparty: cp,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := svc.Create(context.Background(), "u2", entry.New{
+		AccountID: "acc2", Kind: entry.KindTransaction, Amount: ptr(int64(1)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "x", CategoryID: ptr("cat2"),
+		Counterparty: "Billa",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.ListInUseCounterparties(context.Background(), "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Rewe", "Spar"}
+	if len(got) != len(want) {
+		t.Fatalf("ListInUseCounterparties = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ListInUseCounterparties = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestListInUseCounterpartiesEmptyForUserWithNoEntries(t *testing.T) {
+	svc, _, _, _ := newFixture()
+	got, err := svc.ListInUseCounterparties(context.Background(), "nobody")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ListInUseCounterparties = %v, want empty", got)
+	}
+}
+
+func TestListInUseCounterpartiesExcludesSoftDeletedEntries(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	keep, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(1)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "x", CategoryID: ptr("cat1"),
+		Counterparty: "Rewe",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(1)),
+		BookingTimestamp: at("2024-01-02T00:00:00Z"), Title: "x", CategoryID: ptr("cat1"),
+		Counterparty: "Spar",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = keep
+	if err := svc.Delete(context.Background(), "u1", gone.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.ListInUseCounterparties(context.Background(), "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != "Rewe" {
+		t.Fatalf("ListInUseCounterparties = %v, want [Rewe]", got)
+	}
+}

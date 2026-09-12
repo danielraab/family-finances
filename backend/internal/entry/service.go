@@ -167,6 +167,9 @@ func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (
 	if current.Kind == KindBalanceAdjustment && upd.Amount != nil {
 		return Entry{}, ErrInvalidValue
 	}
+	if current.Kind != KindTransaction && (upd.Counterparty != nil || upd.Location != nil) {
+		return Entry{}, ErrInvalidValue
+	}
 
 	newCategoryID := current.CategoryID
 	if upd.CategoryID.Set {
@@ -598,6 +601,13 @@ func (s *Service) BalanceSeries(ctx context.Context, callerID string, f BalanceF
 		points = append(points, p)
 	}
 	return points, nil
+}
+
+// ListInUseCounterparties returns callerID's own distinct, non-empty
+// counterparty values, for the entry form's autocomplete. Mirrors
+// account.Service.ListInUseTypes.
+func (s *Service) ListInUseCounterparties(ctx context.Context, callerID string) ([]string, error) {
+	return s.store.ListInUseCounterparties(ctx, callerID)
 }
 
 // intersect returns the elements of a that also appear in b.

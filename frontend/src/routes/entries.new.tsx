@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
+import { LocationField } from "../components/LocationField";
 import { SignedAmountInput } from "../components/SignedAmountInput";
 import { TagInput } from "../components/TagInput";
 import { inputToAmount } from "../lib/amount";
@@ -54,6 +55,9 @@ function NewEntry() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [counterparty, setCounterparty] = useState("");
+  const [counterparties, setCounterparties] = useState<string[]>([]);
+  const [location, setLocation] = useState("");
   const [tagNames, setTagNames] = useState<string[]>([]);
 
   const [invalidField, setInvalidField] = useState<string | null>(null);
@@ -65,10 +69,12 @@ function NewEntry() {
       api.GET("/api/accounts"),
       api.GET("/api/categories"),
       api.GET("/api/tags"),
-    ]).then(([a, c, tg]) => {
+      api.GET("/api/entries/counterparties"),
+    ]).then(([a, c, tg, cp]) => {
       setAccounts(a.data ?? []);
       setCategories(c.data ?? []);
       setTags(tg.data ?? []);
+      setCounterparties(cp.data ?? []);
     });
   }, []);
 
@@ -157,6 +163,12 @@ function NewEntry() {
         ...compact({
           description: description.trim() || undefined,
           category_id: categoryId || undefined,
+          ...(kind === "transaction"
+            ? {
+                counterparty: counterparty.trim() || undefined,
+                location: location.trim() || undefined,
+              }
+            : {}),
         }),
       },
     });
@@ -321,6 +333,35 @@ function NewEntry() {
             </span>
           )}
         </label>
+
+        {kind === "transaction" && (
+          <>
+            <label className="flex flex-col gap-1.5 text-sm font-medium">
+              {t("entries.form.counterparty")}
+              <input
+                list="counterparty-suggestions"
+                value={counterparty}
+                onChange={(e) => setCounterparty(e.target.value)}
+                placeholder={t("entries.form.counterpartyPlaceholder")}
+                className={inputClass}
+              />
+              <datalist id="counterparty-suggestions">
+                {counterparties.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </label>
+
+            <div className="flex flex-col gap-1.5 text-sm font-medium">
+              {t("entries.form.location")}
+              <LocationField
+                value={location}
+                onChange={setLocation}
+                inputClassName={inputClass}
+              />
+            </div>
+          </>
+        )}
 
         <div className="flex flex-col gap-1.5 text-sm font-medium">
           {t("entries.form.tags")}
