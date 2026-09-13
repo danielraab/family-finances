@@ -530,7 +530,13 @@ already created.
 
 A row whose `POST /api/entries` call fails during the import step SHALL
 be recorded as failed with the backend's reason and SHALL NOT stop the
-import from continuing with the remaining rows.
+import from continuing with the remaining rows. "The backend's reason"
+means the actual error message the rejection response carried, not only a
+generic "rejected" label — the results view (see below) SHALL show it
+alongside the generic reason so the cause of a rejection that client-side
+validation could never have caught (a category disabled moments earlier;
+an account no longer accessible) is visible without inspecting network
+traffic.
 
 #### Scenario: One row's backend rejection does not stop the import
 
@@ -539,6 +545,14 @@ import from continuing with the remaining rows.
   moments earlier)
 - **THEN** that row is recorded as failed and every subsequent row is
   still submitted
+
+#### Scenario: A rejected row's result shows the backend's actual error message
+
+- **WHEN** a row is rejected by `POST /api/entries` with an error response
+  carrying a message (for example, `"invalid value"` for a category that
+  was disabled after the mapping step)
+- **THEN** the results view's reason for that row includes that message,
+  not only the generic "rejected by the server" label
 
 ### Requirement: The results view reports created and failed counts, without listing every success
 

@@ -333,3 +333,47 @@
   checking "Hide successful rows" drops the list to the 3 non-ok rows
   while the summary text still reads "1 ready, 2 suspicious, 1 failed";
   unchecking restores all 4 rows in their original order.
+
+## 13. Surface the backend's own rejection reason during the import run (bug report)
+
+- [x] 13.1 Investigated a report of every row failing the real import
+  step with a generic "Rejected by the server" and no visible backend
+  log line. Confirmed via the actual Go source
+  (`internal/httpapi/middleware.go`) that the request-logging middleware
+  wraps auth and routing, not the other way around, so any request that
+  actually reaches the backend's `http.Server` is logged regardless of
+  its response status — a normal 400/401/403/422 is never silent. Ruled
+  out a client/server field-shape mismatch: `MappedEntryDraft` (built by
+  `mapRow`) plus the `account_id`/`tag_ids` `ImportRunStep.tsx` adds is an
+  exact match for `EntryCreate`'s fields (no unknown keys, so the
+  backend's `DisallowUnknownFields` decoder never trips), and
+  `amount`/`booking_timestamp` are already in the integer-minor-units/
+  RFC3339 shape the schema requires.
+- [x] 13.2 Reproduced "every row rejected, identically" directly: picked a
+  category in the mapping step, then disabled that category via a raw
+  API call before continuing (simulating the exact race design.md's
+  import-step section already calls out — "a race like the chosen
+  category having just been disabled"). Every row's dry run still showed
+  ok/ready (client-side validation has no way to know the category
+  became unusable), but every real `POST /api/entries` came back `400
+  {"error":"invalid value", ...}` — a normal, backend-logged response.
+  This is almost certainly the shape of the reported bug (a category, or
+  similarly an account, that isn't actually usable by the caller) — but
+  `ImportRunStep.tsx` discarded the response's `error` body entirely
+  before this task, showing only the generic
+  `entries.import.reasons.submitRejected` string, so there was no way to
+  tell *why* short of the browser's own network tab.
+- [x] 13.3 Fixed the blind spot rather than only the specific case: a
+  rejected row's `RunFailure` now carries the backend's own `error`
+  message (from the `Error` response body's `error` field) as an
+  optional `detail`, and `ImportResultStep.tsx` appends it in parens
+  after the generic reason (e.g. "Rejected by the server. (invalid
+  value)"). This makes every future rejection immediately diagnosable
+  from the result screen itself, whatever caused it, instead of requiring
+  a repro session to find out.
+- [x] 13.4 Verified end-to-end in a real browser: a clean, valid CSV
+  import creates every row as before (unaffected — confirmed via
+  captured `POST /api/entries` responses, all `201`). The
+  disabled-category repro from 13.2 now shows "Rejected by the server.
+  (invalid value)" for each of the 3 rows on the result screen, instead
+  of the previous bare "Rejected by the server."

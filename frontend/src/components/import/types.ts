@@ -87,7 +87,11 @@ export function toRowMapping(state: MappingState): RowMapping | null {
   };
 }
 
-export type RunFailure = { index: number; reason: string };
+/** `detail` carries the backend's own error message, when the rejection
+ * response had one — shown alongside the generic `reason` translation so a
+ * visitor (and whoever they ask for help) can see *why* the server rejected
+ * the row instead of just that it did. */
+export type RunFailure = { index: number; reason: string; detail?: string };
 
 export type RunState =
   | { status: "idle" }

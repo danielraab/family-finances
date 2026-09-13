@@ -33,7 +33,11 @@ export function ImportResultStep({
     })),
     ...runFailures.map((f) => ({
       index: f.index,
-      reasons: [t(`entries.import.reasons.${f.reason}`)],
+      reasons: [
+        f.detail
+          ? `${t(`entries.import.reasons.${f.reason}`)} (${f.detail})`
+          : t(`entries.import.reasons.${f.reason}`),
+      ],
     })),
   ].sort((a, b) => a.index - b.index);
 
