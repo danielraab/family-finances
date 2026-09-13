@@ -278,6 +278,12 @@ showing its row number and classification. There is no separate
 single-row mapping preview outside this step; its own per-row list is how
 the visitor checks mapped results (see the following requirements).
 
+A visitor SHALL be able to hide **ok**-classified rows from the list via a
+toggle, to focus on the rows that need attention in a large file; toggling
+it back SHALL restore them. Hiding **ok** rows SHALL NOT change the
+summary counts (still reflecting every row) or which rows are submitted
+if the visitor proceeds — it only affects which rows are listed.
+
 #### Scenario: Continuing from mapping enters the dry-run step with results already shown
 
 - **WHEN** an authenticated visitor completes the mapping step and selects
@@ -305,6 +311,20 @@ the visitor checks mapped results (see the following requirements).
 - **THEN** the dry run lists that row as suspicious, with the reason, and
   it is still counted among the rows that will be imported if the visitor
   proceeds
+
+#### Scenario: Hiding successful rows narrows the list to what needs attention
+
+- **WHEN** an authenticated visitor on the dry-run step enables "Hide
+  successful rows"
+- **THEN** every row classified ok is removed from the list while
+  suspicious and failed rows remain, and the summary counts stay
+  unchanged
+
+#### Scenario: Un-hiding restores the full row list
+
+- **WHEN** an authenticated visitor disables "Hide successful rows" after
+  enabling it
+- **THEN** every ok row reappears in the list in its original position
 
 ### Requirement: Clicking a dry-run row reveals its source data and mapped result
 

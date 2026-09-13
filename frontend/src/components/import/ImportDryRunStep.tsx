@@ -163,6 +163,7 @@ export function ImportDryRunStep({
   const [rows, setRows] = useState<ClassifiedRow[]>(initial.rows);
   const [overrides, setOverrides] = useState<Record<number, RowOverride>>({});
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [hideSuccessful, setHideSuccessful] = useState(false);
 
   const counts = useMemo(() => {
     let ok = 0;
@@ -199,19 +200,32 @@ export function ImportDryRunStep({
   }
 
   const canContinue = counts.ok + counts.suspicious > 0;
+  const visibleRows = hideSuccessful
+    ? rows.filter((r) => r.classification !== "ok")
+    : rows;
 
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
         {t("entries.import.steps.dryRun.heading")}
       </h2>
-      <p className="text-sm">
-        {t("entries.import.steps.dryRun.summary", {
-          ok: counts.ok,
-          suspicious: counts.suspicious,
-          failed: counts.failed,
-        })}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm">
+          {t("entries.import.steps.dryRun.summary", {
+            ok: counts.ok,
+            suspicious: counts.suspicious,
+            failed: counts.failed,
+          })}
+        </p>
+        <label className="flex items-center gap-1.5 text-sm font-normal">
+          <input
+            type="checkbox"
+            checked={hideSuccessful}
+            onChange={(e) => setHideSuccessful(e.target.checked)}
+          />
+          {t("entries.import.steps.dryRun.hideSuccessful")}
+        </label>
+      </div>
 
       <div className="max-h-[32rem] overflow-y-auto overflow-x-auto rounded-md border border-black/10 dark:border-white/10">
         <table className="w-full text-left text-sm">
@@ -229,7 +243,7 @@ export function ImportDryRunStep({
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {visibleRows.map((r) => {
               const expanded = expandedRows.has(r.index);
               const override = overrides[r.index] ?? {};
               return (

@@ -434,6 +434,7 @@
           "mappedEntryHeading": "Zugeordneter Eintrag",
           "remapHeading": "Dieses Feld korrigieren",
           "remapNote": "Wähle eine andere Spalte nur für diese Zeile — die Zuordnung aller anderen Zeilen bleibt unverändert.",
+          "hideSuccessful": "Erfolgreiche Zeilen ausblenden",
           "startImport": "Import starten"
         }
       }

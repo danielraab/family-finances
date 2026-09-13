@@ -311,3 +311,25 @@
   Confirmed a failed row's remap `<select>` shows that row's own value
   (e.g. `"AltDate — 05.03.2026"` for row 2) rather than a different row's
   file-wide example value (row 1's `"04.03.2026"`).
+
+## 12. Hide successful rows in the dry-run list (post-implementation feedback)
+
+- [x] 12.1 Added a "Hide successful rows" checkbox to `ImportDryRunStep.tsx`,
+  next to the summary line. When checked, the row list filters out every
+  `classification === "ok"` row (`rows.filter(...)`, computed at render
+  time from the existing `rows` state — no new row-level state); when
+  unchecked, every row reappears in its original position. Suspicious and
+  failed rows are never hidden by this toggle. The summary counts and
+  what "Continue" submits are unaffected — both still read the full,
+  unfiltered `rows` state; the checkbox only changes which rows are
+  listed.
+- [x] 12.2 Added the `entries.import.steps.dryRun.hideSuccessful` i18n key
+  to `en.json` and `de.json`.
+- [x] 12.3 Updated design.md and the `web-client-entry-import` delta spec
+  with the new requirement/scenarios for hiding and un-hiding successful
+  rows.
+- [x] 12.4 Verified end-to-end in a real browser with a 4-row fixture (1
+  ready, 2 suspicious, 1 failed): before toggling, all 4 rows are listed;
+  checking "Hide successful rows" drops the list to the 3 non-ok rows
+  while the summary text still reads "1 ready, 2 suspicious, 1 failed";
+  unchecking restores all 4 rows in their original order.

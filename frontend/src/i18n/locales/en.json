@@ -434,6 +434,7 @@
           "mappedEntryHeading": "Mapped entry",
           "remapHeading": "Fix this field",
           "remapNote": "Pick a different column for this row only — the mapping for every other row is unchanged.",
+          "hideSuccessful": "Hide successful rows",
           "startImport": "Start import"
         }
       }
