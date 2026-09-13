@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -22,29 +22,70 @@ type Account = components["schemas"]["Account"];
 type Category = components["schemas"]["Category"];
 type Tag = components["schemas"]["Tag"];
 
-type ImportSearch = { account_id?: string | undefined };
+// The steps a visitor can reach via forward/back navigation — each one is a
+// URL search param so the browser's own Back button steps back through them
+// (see the module-level comment above ImportEntries). "run"/"result"
+// deliberately aren't part of this: they're local-only (`runPhase`) so
+// back/forward can never remount the run step and resubmit entries.
+type NavigableStep = "account" | "file" | "mapping" | "dryrun";
+const NAVIGABLE_STEPS: NavigableStep[] = [
+  "account",
+  "file",
+  "mapping",
+  "dryrun",
+];
+
+type ImportSearch = {
+  account_id?: string | undefined;
+  step?: NavigableStep | undefined;
+};
 
 // Nested under /entries (entries.tsx), so it already inherits that layout's
 // authenticated-only redirect-to-/login gate — no separate gate needed here,
 // same as entries.new.tsx.
 export const Route = createFileRoute("/entries/import")({
-  validateSearch: (search: Record<string, unknown>): ImportSearch => ({
-    account_id:
+  validateSearch: (search: Record<string, unknown>): ImportSearch => {
+    const account_id =
       typeof search["account_id"] === "string"
         ? search["account_id"]
-        : undefined,
-  }),
+        : undefined;
+    const defaultStep: NavigableStep = account_id ? "file" : "account";
+    const rawStep = search["step"];
+    const step =
+      typeof rawStep === "string" &&
+      (NAVIGABLE_STEPS as string[]).includes(rawStep)
+        ? (rawStep as NavigableStep)
+        : defaultStep;
+    return { account_id, step };
+  },
   component: ImportEntries,
 });
 
-type Step = "account" | "file" | "mapping" | "dryrun" | "run" | "result";
+type RunPhase = "run" | "result";
 
 type RunResult = { created: number; failed: RunFailure[]; canceled: boolean };
 
+/**
+ * The wizard's "account"/"file"/"mapping"/"dryrun" steps live in the URL
+ * (`?step=`) so the browser's physical Back button steps back exactly one
+ * wizard step instead of leaving the page — while all the in-memory state
+ * (parsed file, mapping, overrides) survives untouched, since a search-param
+ * -only navigation re-renders this same route component rather than
+ * remounting it. In-page "Back" links call `window.history.back()` for the
+ * same effect, so both paths are exactly symmetric.
+ *
+ * "run" and "result" are deliberately kept out of the URL as local state
+ * (`runPhase`): they take rendering priority over the URL step, and a
+ * `useEffect` clears `runPhase` whenever the URL step changes from under
+ * it (i.e. on a real back/forward navigation) so a stale run/result view
+ * can't get stuck on screen — but nothing in history can ever cause
+ * `runPhase` to become "run" again on its own, so `ImportRunStep` can never
+ * be remounted (and its entries resubmitted) via back/forward.
+ */
 function ImportEntries() {
-  const { account_id: presetAccountId } = Route.useSearch();
+  const { account_id: presetAccountId, step } = Route.useSearch();
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const navigate = Route.useNavigate();
 
   const accountLocked = presetAccountId !== undefined;
 
@@ -52,11 +93,11 @@ function ImportEntries() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
 
-  const [step, setStep] = useState<Step>(accountLocked ? "file" : "account");
   const [accountId, setAccountId] = useState(presetAccountId ?? "");
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
   const [mapping, setMapping] = useState<MappingState>(initialMappingState);
   const [finalRows, setFinalRows] = useState<ClassifiedRow[] | null>(null);
+  const [runPhase, setRunPhase] = useState<RunPhase | null>(null);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
 
   useEffect(() => {
@@ -71,13 +112,40 @@ function ImportEntries() {
     });
   }, []);
 
+  // A real back/forward navigation changed the URL step out from under an
+  // in-progress/finished run — drop back to the step-driven view instead of
+  // leaving a stale run/result screen showing.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally keyed on step alone, to re-run on every step change even though the body doesn't read it
+  useEffect(() => {
+    setRunPhase(null);
+  }, [step]);
+
+  // A hard reload can land on step=mapping/dryrun with no in-memory parsed
+  // file to show (that state doesn't survive a reload) — fall back to the
+  // file step rather than rendering blank.
+  useEffect(() => {
+    if ((step === "mapping" || step === "dryrun") && parsed === null) {
+      navigate({
+        search: (prev) => ({ ...prev, step: "file" }),
+        replace: true,
+      });
+    }
+  }, [step, parsed, navigate]);
+
   function startOver() {
-    setStep(accountLocked ? "file" : "account");
+    setRunPhase(null);
     if (!accountLocked) setAccountId("");
     setParsed(null);
     setMapping(initialMappingState);
     setFinalRows(null);
     setRunResult(null);
+    navigate({
+      search: (prev) => ({
+        ...prev,
+        step: accountLocked ? "file" : "account",
+      }),
+      replace: true,
+    });
   }
 
   const account = accounts.find((a) => a.id === accountId);
@@ -99,33 +167,35 @@ function ImportEntries() {
         )}
       </header>
 
-      {step === "account" && (
+      {!runPhase && step === "account" && (
         <ImportAccountStep
           accounts={accounts}
           value={accountId}
           onChange={setAccountId}
-          onContinue={() => setStep("file")}
+          onContinue={() =>
+            navigate({ search: (prev) => ({ ...prev, step: "file" }) })
+          }
         />
       )}
 
-      {step === "file" && (
+      {!runPhase && step === "file" && (
         <ImportFileStep
           onParsed={(result) => {
             setParsed(result);
             setMapping(initialMappingState);
-            setStep("mapping");
+            navigate({ search: (prev) => ({ ...prev, step: "mapping" }) });
           }}
           onBack={() => {
             if (accountLocked) {
               navigate({ to: "/entries" });
             } else {
-              setStep("account");
+              window.history.back();
             }
           }}
         />
       )}
 
-      {step === "mapping" && parsed && (
+      {!runPhase && step === "mapping" && parsed && (
         <ImportMappingStep
           fields={parsed.fields}
           rows={parsed.rows}
@@ -134,12 +204,14 @@ function ImportEntries() {
           tags={tags}
           mapping={mapping}
           onMappingChange={setMapping}
-          onContinue={() => setStep("dryrun")}
-          onBack={() => setStep("file")}
+          onContinue={() =>
+            navigate({ search: (prev) => ({ ...prev, step: "dryrun" }) })
+          }
+          onBack={() => window.history.back()}
         />
       )}
 
-      {step === "dryrun" && parsed && (
+      {!runPhase && step === "dryrun" && parsed && (
         <ImportDryRunStep
           sourceRows={parsed.rows}
           // Non-null: the mapping step only enables "Continue" once
@@ -149,13 +221,13 @@ function ImportEntries() {
           currency={account?.currency ?? ""}
           onContinue={(rows) => {
             setFinalRows(rows);
-            setStep("run");
+            setRunPhase("run");
           }}
-          onBack={() => setStep("mapping")}
+          onBack={() => window.history.back()}
         />
       )}
 
-      {step === "run" && (
+      {runPhase === "run" && (
         <ImportRunStep
           accountId={accountId}
           rows={submittableRows}
@@ -167,12 +239,12 @@ function ImportEntries() {
               failed: result.failed,
               canceled: result.canceled,
             });
-            setStep("result");
+            setRunPhase("result");
           }}
         />
       )}
 
-      {step === "result" && runResult && (
+      {runPhase === "result" && runResult && (
         <ImportResultStep
           created={runResult.created}
           dryRunFailedRows={dryRunFailedRows}

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "../../api/schema";
 import { flattenCategoryTree } from "../../lib/categoryTree";
+import { truncateExample } from "../../lib/import/formatExample";
 import type {
   DecimalSeparator,
   ThousandsSeparator,
@@ -25,14 +26,6 @@ const THOUSANDS_OPTIONS: ThousandsSeparator[] = [
   " ",
   "'",
 ];
-
-const EXAMPLE_MAX_LENGTH = 28;
-
-function truncate(value: string): string {
-  return value.length > EXAMPLE_MAX_LENGTH
-    ? `${value.slice(0, EXAMPLE_MAX_LENGTH)}…`
-    : value;
-}
 
 function FieldSelect({
   label,
@@ -70,7 +63,7 @@ function FieldSelect({
           const example = fieldExamples[f];
           return (
             <option key={f} value={f}>
-              {example ? `${f} — ${truncate(example)}` : f}
+              {example ? `${f} — ${truncateExample(example)}` : f}
             </option>
           );
         })}
