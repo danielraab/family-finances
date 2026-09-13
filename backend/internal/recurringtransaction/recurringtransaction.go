@@ -113,28 +113,34 @@ func (u Unit) valid() bool {
 // IntervalCount/EndsOn; NextSuggestedDate additionally depends on the
 // latest linked entry's booking date, resolved via EntryLookup.
 type RecurringTransaction struct {
-	ID                string     `json:"id"`
-	AccountID         string     `json:"account_id"`
-	AccountCurrency   string     `json:"account_currency,omitempty"`
-	Title             string     `json:"title"`
-	Description       string     `json:"description,omitempty"`
-	CategoryID        *string    `json:"category_id,omitempty"`
-	Counterparty      string     `json:"counterparty,omitempty"`
-	Location          string     `json:"location,omitempty"`
-	TagIDs            []string   `json:"tag_ids"`
-	Amount            int64      `json:"amount"`
-	IntervalUnit      Unit       `json:"interval_unit"`
-	IntervalCount     int        `json:"interval_count"`
-	StartsOn          Date       `json:"starts_on"`
-	EndsOn            *Date      `json:"ends_on,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
-	CreatedBy         string     `json:"created_by"`
-	CreatedByName     string     `json:"created_by_name,omitempty"`
-	PerYearAmount     int64      `json:"per_year_amount"`
-	Ended             bool       `json:"ended"`
-	NextSuggestedDate Date       `json:"next_suggested_date"`
-	DeletedAt         *time.Time `json:"-"`
+	ID                string    `json:"id"`
+	AccountID         string    `json:"account_id"`
+	AccountCurrency   string    `json:"account_currency,omitempty"`
+	Title             string    `json:"title"`
+	Description       string    `json:"description,omitempty"`
+	CategoryID        *string   `json:"category_id,omitempty"`
+	Counterparty      string    `json:"counterparty,omitempty"`
+	Location          string    `json:"location,omitempty"`
+	TagIDs            []string  `json:"tag_ids"`
+	Amount            int64     `json:"amount"`
+	IntervalUnit      Unit      `json:"interval_unit"`
+	IntervalCount     int       `json:"interval_count"`
+	StartsOn          Date      `json:"starts_on"`
+	EndsOn            *Date     `json:"ends_on,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	CreatedBy         string    `json:"created_by"`
+	CreatedByName     string    `json:"created_by_name,omitempty"`
+	PerYearAmount     int64     `json:"per_year_amount"`
+	Ended             bool      `json:"ended"`
+	NextSuggestedDate Date      `json:"next_suggested_date"`
+	// LinkedEntryCount is the number of non-deleted entries currently
+	// linked to this recurring transaction — computed by Service.decorate
+	// via EntryLookup, never stored. Lets the client disable the delete
+	// action before ever attempting it; a 409 is still the authoritative
+	// guard server-side (see design.md).
+	LinkedEntryCount int        `json:"linked_entry_count"`
+	DeletedAt        *time.Time `json:"-"`
 }
 
 // New is the input to creating a recurring transaction.

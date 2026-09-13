@@ -10,6 +10,7 @@ const NAV = [
   { to: "/home", labelKey: "nav.home", glyph: "home" },
   { to: "/accounts", labelKey: "nav.accounts", glyph: "accounts" },
   { to: "/entries", labelKey: "nav.entries", glyph: "entries" },
+  { to: "/recurring", labelKey: "nav.recurring", glyph: "recurring" },
   { to: "/categories", labelKey: "nav.categories", glyph: "categories" },
   { to: "/tags", labelKey: "nav.tags", glyph: "tags" },
   { to: "/reports", labelKey: "nav.reports", glyph: "reports" },
@@ -76,6 +77,28 @@ function EntriesGlyph() {
       <path d="M3 6h.01" />
       <path d="M3 12h.01" />
       <path d="M3 18h.01" />
+    </svg>
+  );
+}
+
+function RecurringGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={20}
+      height={20}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M17 2.1 21 6l-4 3.9" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+      <path d="M7 21.9 3 18l4-3.9" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
     </svg>
   );
 }
@@ -149,6 +172,7 @@ const GLYPHS = {
   home: HomeGlyph,
   accounts: AccountsGlyph,
   entries: EntriesGlyph,
+  recurring: RecurringGlyph,
   categories: CategoriesGlyph,
   tags: TagsGlyph,
   reports: ReportsGlyph,

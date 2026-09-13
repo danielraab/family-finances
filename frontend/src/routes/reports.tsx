@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
+import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
 import { amountColorClass, formatAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
@@ -418,7 +419,12 @@ function ReportsPage() {
                         i18n.resolvedLanguage,
                       )}
                     </td>
-                    <td className="px-3 py-2 font-medium">{entry.title}</td>
+                    <td className="px-3 py-2 font-medium">
+                      {entry.title}
+                      <RecurringTransactionBadge
+                        recurringTransactionId={entry.recurring_transaction_id}
+                      />
+                    </td>
                     <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
                       {(() => {
                         const account = accounts.find(

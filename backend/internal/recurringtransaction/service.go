@@ -135,8 +135,11 @@ func (s *Service) today(ctx context.Context, callerID string) Date {
 }
 
 // decorate fills in a recurring transaction's computed, never-stored
-// fields: PerYearAmount and Ended (pure), and NextSuggestedDate (needs
-// EntryLookup for the latest linked entry's booking date).
+// fields: PerYearAmount and Ended (pure), and NextSuggestedDate and
+// LinkedEntryCount (both need EntryLookup). LinkedEntryCount lets the
+// client disable its delete action up front, the same
+// know-before-you-try precedent category.Category's entry_count already
+// establishes for categories' own in-use delete guard.
 func (s *Service) decorate(ctx context.Context, callerID string, rt RecurringTransaction) (RecurringTransaction, error) {
 	rt.PerYearAmount = PerYearAmount(rt.Amount, rt.IntervalUnit, rt.IntervalCount)
 	rt.Ended = Ended(rt.EndsOn, s.today(ctx, callerID))
@@ -151,6 +154,11 @@ func (s *Service) decorate(ctx context.Context, callerID string, rt RecurringTra
 		} else {
 			rt.NextSuggestedDate = NewDate(Advance(*latest, rt.IntervalUnit, rt.IntervalCount))
 		}
+		count, err := s.entries.LinkedCount(ctx, rt.ID)
+		if err != nil {
+			return RecurringTransaction{}, err
+		}
+		rt.LinkedEntryCount = count
 	} else {
 		rt.NextSuggestedDate = rt.StartsOn
 	}

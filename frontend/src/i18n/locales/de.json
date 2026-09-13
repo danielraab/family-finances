@@ -3,6 +3,7 @@
     "home": "Start",
     "accounts": "Konten",
     "entries": "Buchungen",
+    "recurring": "Wiederkehrend",
     "categories": "Kategorien",
     "tags": "Tags",
     "reports": "Auswertungen"
@@ -328,8 +329,11 @@
       "accountCurrencyWarning": "Die Währung dieses Kontos ({{currency}}) unterscheidet sich vom ursprünglichen Konto der Buchung ({{originalCurrency}}). Es findet keine Umrechnung statt.",
       "create": "Buchung erstellen",
       "save": "Änderungen speichern",
-      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut."
+      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut.",
+      "linkedRecurringTransaction": "Verknüpfte wiederkehrende Buchung",
+      "linkedRecurringTransactionNone": "Nicht verknüpft"
     },
+    "recurringBadge": "Mit einer wiederkehrenden Buchung verknüpft",
     "new": {
       "title": "Neue Buchung"
     },
@@ -438,6 +442,65 @@
           "startImport": "Import starten"
         }
       }
+    }
+  },
+  "recurring": {
+    "title": "Wiederkehrende Buchungen",
+    "create": "Neue wiederkehrende Buchung",
+    "createTransaction": "Buchung erstellen",
+    "empty": "Noch keine wiederkehrenden Buchungen.",
+    "ended": "Beendet",
+    "totalPerYear": "Summe pro Jahr",
+    "customFrequency": "Alle {{count}} {{unit}}",
+    "columns": {
+      "title": "Titel",
+      "category": "Kategorie",
+      "frequency": "Häufigkeit",
+      "amount": "Betrag",
+      "perYearAmount": "Pro Jahr"
+    },
+    "units": {
+      "day": "Tag(e)",
+      "week": "Woche(n)",
+      "month": "Monat(e)",
+      "year": "Jahr(e)"
+    },
+    "presets": {
+      "weekly": "Wöchentlich",
+      "everyTwoWeeks": "Alle 2 Wochen",
+      "monthly": "Monatlich",
+      "everyTwoMonths": "Alle 2 Monate",
+      "quarterly": "Vierteljährlich",
+      "everySixMonths": "Alle 6 Monate",
+      "yearly": "Jährlich",
+      "custom": "Benutzerdefiniert…"
+    },
+    "form": {
+      "recurrenceLegend": "Wiederholung",
+      "frequency": "Häufigkeit",
+      "everyLabel": "Alle",
+      "intervalUnitLabel": "Einheit",
+      "intervalCountInvalid": "Gib eine ganze Zahl größer als 0 ein.",
+      "startsOn": "Beginnt am",
+      "startsOnRequired": "Startdatum ist erforderlich.",
+      "endsOn": "Endet am (optional)",
+      "endsOnBeforeStarts": "Enddatum darf nicht vor dem Startdatum liegen.",
+      "create": "Wiederkehrende Buchung erstellen",
+      "save": "Änderungen speichern",
+      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut."
+    },
+    "new": {
+      "title": "Neue wiederkehrende Buchung"
+    },
+    "edit": {
+      "title": "Wiederkehrende Buchung bearbeiten",
+      "dangerZone": "Gefahrenzone",
+      "delete": "Löschen",
+      "deleteError": "Löschen fehlgeschlagen — bitte versuche es erneut.",
+      "deleteBlockedHint_one": "Löschen nicht möglich — {{count}} Buchung ist mit dieser wiederkehrenden Buchung verknüpft. Entferne zuerst die Verknüpfung auf der Bearbeitungsseite der Buchung.",
+      "deleteBlockedHint_other": "Löschen nicht möglich — {{count}} Buchungen sind mit dieser wiederkehrenden Buchung verknüpft. Entferne zuerst die Verknüpfungen auf den jeweiligen Bearbeitungsseiten.",
+      "confirmDeleteTitle": "Diese wiederkehrende Buchung löschen?",
+      "confirmDeleteBody": "Dies kann hier nicht rückgängig gemacht werden."
     }
   },
   "categories": {

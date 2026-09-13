@@ -1334,6 +1334,8 @@ export interface components {
             /** @description Positive integer — "every interval_count interval_units". */
             interval_count: number;
             interval_unit: components["schemas"]["IntervalUnit"];
+            /** @description The number of non-deleted entries currently linked to this recurring transaction, computed server-side. A non-zero value means DELETE will be rejected (409) until every linked entry is unlinked. */
+            linked_entry_count: number;
             location?: string;
             /**
              * Format: date

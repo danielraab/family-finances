@@ -3,6 +3,7 @@
     "home": "Home",
     "accounts": "Accounts",
     "entries": "Entries",
+    "recurring": "Recurring",
     "categories": "Categories",
     "tags": "Tags",
     "reports": "Reports"
@@ -328,8 +329,11 @@
       "accountCurrencyWarning": "This account's currency ({{currency}}) differs from the entry's original account ({{originalCurrency}}). No conversion is applied.",
       "create": "Create entry",
       "save": "Save changes",
-      "saveError": "Couldn't save — please check the form and try again."
+      "saveError": "Couldn't save — please check the form and try again.",
+      "linkedRecurringTransaction": "Linked recurring transaction",
+      "linkedRecurringTransactionNone": "Not linked"
     },
+    "recurringBadge": "Linked to a recurring transaction",
     "new": {
       "title": "New entry"
     },
@@ -438,6 +442,65 @@
           "startImport": "Start import"
         }
       }
+    }
+  },
+  "recurring": {
+    "title": "Recurring transactions",
+    "create": "New recurring transaction",
+    "createTransaction": "Create transaction",
+    "empty": "No recurring transactions yet.",
+    "ended": "Ended",
+    "totalPerYear": "Total per year",
+    "customFrequency": "Every {{count}} {{unit}}",
+    "columns": {
+      "title": "Title",
+      "category": "Category",
+      "frequency": "Frequency",
+      "amount": "Amount",
+      "perYearAmount": "Per year"
+    },
+    "units": {
+      "day": "day(s)",
+      "week": "week(s)",
+      "month": "month(s)",
+      "year": "year(s)"
+    },
+    "presets": {
+      "weekly": "Weekly",
+      "everyTwoWeeks": "Every 2 weeks",
+      "monthly": "Monthly",
+      "everyTwoMonths": "Every 2 months",
+      "quarterly": "Quarterly",
+      "everySixMonths": "Every 6 months",
+      "yearly": "Yearly",
+      "custom": "Custom…"
+    },
+    "form": {
+      "recurrenceLegend": "Recurrence",
+      "frequency": "Frequency",
+      "everyLabel": "Every",
+      "intervalUnitLabel": "Unit",
+      "intervalCountInvalid": "Enter a whole number greater than 0.",
+      "startsOn": "Starts on",
+      "startsOnRequired": "Start date is required.",
+      "endsOn": "Ends on (optional)",
+      "endsOnBeforeStarts": "End date can't be before the start date.",
+      "create": "Create recurring transaction",
+      "save": "Save changes",
+      "saveError": "Couldn't save — please check the form and try again."
+    },
+    "new": {
+      "title": "New recurring transaction"
+    },
+    "edit": {
+      "title": "Edit recurring transaction",
+      "dangerZone": "Danger zone",
+      "delete": "Delete",
+      "deleteError": "Couldn't delete — please try again.",
+      "deleteBlockedHint_one": "Can't delete — {{count}} entry is linked to this recurring transaction. Unlink it first from the entry's edit page.",
+      "deleteBlockedHint_other": "Can't delete — {{count}} entries are linked to this recurring transaction. Unlink them first from each entry's edit page.",
+      "confirmDeleteTitle": "Delete this recurring transaction?",
+      "confirmDeleteBody": "This cannot be undone here."
     }
   },
   "categories": {

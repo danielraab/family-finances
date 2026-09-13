@@ -3259,6 +3259,7 @@ components:
         - per_year_amount
         - ended
         - next_suggested_date
+        - linked_entry_count
       properties:
         id:
           type: string
@@ -3334,6 +3335,13 @@ components:
             Computed server-side, never stored: the latest non-deleted
             linked entry's booking_timestamp advanced by one recurrence
             interval, or starts_on when there is no linked entry yet.
+        linked_entry_count:
+          type: integer
+          description: >-
+            The number of non-deleted entries currently linked to this
+            recurring transaction, computed server-side. A non-zero value
+            means DELETE will be rejected (409) until every linked entry
+            is unlinked.
 
     RecurringTransactionCreate:
       type: object

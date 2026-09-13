@@ -15,6 +15,7 @@ import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as EntriesRouteImport } from './routes/entries'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as RecurringRouteImport } from './routes/recurring'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TagsRouteImport } from './routes/tags'
@@ -24,6 +25,8 @@ import { Route as AccountsNewRouteImport } from './routes/accounts.new'
 import { Route as EntriesIndexRouteImport } from './routes/entries.index'
 import { Route as EntriesImportRouteImport } from './routes/entries.import'
 import { Route as EntriesNewRouteImport } from './routes/entries.new'
+import { Route as RecurringIndexRouteImport } from './routes/recurring.index'
+import { Route as RecurringNewRouteImport } from './routes/recurring.new'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsInvitationsRouteImport } from './routes/settings.invitations'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
@@ -32,6 +35,7 @@ import { Route as AccountsAccountIdEditRouteImport } from './routes/accounts.$ac
 import { Route as AccountsAccountIdSharingRouteImport } from './routes/accounts.$accountId.sharing'
 import { Route as CategoriesCategoryIdSharingRouteImport } from './routes/categories_.$categoryId.sharing'
 import { Route as EntriesEntryIdEditRouteImport } from './routes/entries.$entryId.edit'
+import { Route as RecurringIdEditRouteImport } from './routes/recurring.$id.edit'
 import { Route as TagsTagIdSharingRouteImport } from './routes/tags_.$tagId.sharing'
 
 const IndexRoute = IndexRouteImport.update({
@@ -62,6 +66,11 @@ const HomeRoute = HomeRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecurringRoute = RecurringRouteImport.update({
+  id: '/recurring',
+  path: '/recurring',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportsRoute = ReportsRouteImport.update({
@@ -109,6 +118,16 @@ const EntriesNewRoute = EntriesNewRouteImport.update({
   path: '/new',
   getParentRoute: () => EntriesRoute,
 } as any)
+const RecurringIndexRoute = RecurringIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => RecurringRoute,
+} as any)
+const RecurringNewRoute = RecurringNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => RecurringRoute,
+} as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -151,6 +170,11 @@ const EntriesEntryIdEditRoute = EntriesEntryIdEditRouteImport.update({
   path: '/$entryId/edit',
   getParentRoute: () => EntriesRoute,
 } as any)
+const RecurringIdEditRoute = RecurringIdEditRouteImport.update({
+  id: '/$id/edit',
+  path: '/$id/edit',
+  getParentRoute: () => RecurringRoute,
+} as any)
 const TagsTagIdSharingRoute = TagsTagIdSharingRouteImport.update({
   id: '/tags_/$tagId/sharing',
   path: '/tags/$tagId/sharing',
@@ -164,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/entries': typeof EntriesRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/recurring': typeof RecurringRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/tags': typeof TagsRoute
@@ -171,15 +196,18 @@ export interface FileRoutesByFullPath {
   '/accounts/new': typeof AccountsNewRoute
   '/entries/import': typeof EntriesImportRoute
   '/entries/new': typeof EntriesNewRoute
+  '/recurring/new': typeof RecurringNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts/': typeof AccountsIndexRoute
   '/entries/': typeof EntriesIndexRoute
+  '/recurring/': typeof RecurringIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/categories/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/recurring/$id/edit': typeof RecurringIdEditRoute
   '/tags/$tagId/sharing': typeof TagsTagIdSharingRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
@@ -193,15 +221,18 @@ export interface FileRoutesByTo {
   '/accounts/new': typeof AccountsNewRoute
   '/entries/import': typeof EntriesImportRoute
   '/entries/new': typeof EntriesNewRoute
+  '/recurring/new': typeof RecurringNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts': typeof AccountsIndexRoute
   '/entries': typeof EntriesIndexRoute
+  '/recurring': typeof RecurringIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/categories/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/recurring/$id/edit': typeof RecurringIdEditRoute
   '/tags/$tagId/sharing': typeof TagsTagIdSharingRoute
   '/accounts/$accountId': typeof AccountsAccountIdIndexRoute
 }
@@ -213,6 +244,7 @@ export interface FileRoutesById {
   '/entries': typeof EntriesRouteWithChildren
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/recurring': typeof RecurringRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/tags': typeof TagsRoute
@@ -220,15 +252,18 @@ export interface FileRoutesById {
   '/accounts/new': typeof AccountsNewRoute
   '/entries/import': typeof EntriesImportRoute
   '/entries/new': typeof EntriesNewRoute
+  '/recurring/new': typeof RecurringNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts/': typeof AccountsIndexRoute
   '/entries/': typeof EntriesIndexRoute
+  '/recurring/': typeof RecurringIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/accounts/$accountId/edit': typeof AccountsAccountIdEditRoute
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/categories_/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/recurring/$id/edit': typeof RecurringIdEditRoute
   '/tags_/$tagId/sharing': typeof TagsTagIdSharingRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
 }
@@ -241,6 +276,7 @@ export interface FileRouteTypes {
     | '/entries'
     | '/home'
     | '/login'
+    | '/recurring'
     | '/reports'
     | '/settings'
     | '/tags'
@@ -248,15 +284,18 @@ export interface FileRouteTypes {
     | '/accounts/new'
     | '/entries/import'
     | '/entries/new'
+    | '/recurring/new'
     | '/settings/invitations'
     | '/settings/users'
     | '/accounts/'
     | '/entries/'
+    | '/recurring/'
     | '/settings/'
     | '/accounts/$accountId/edit'
     | '/accounts/$accountId/sharing'
     | '/categories/$categoryId/sharing'
     | '/entries/$entryId/edit'
+    | '/recurring/$id/edit'
     | '/tags/$tagId/sharing'
     | '/accounts/$accountId/'
   fileRoutesByTo: FileRoutesByTo
@@ -270,15 +309,18 @@ export interface FileRouteTypes {
     | '/accounts/new'
     | '/entries/import'
     | '/entries/new'
+    | '/recurring/new'
     | '/settings/invitations'
     | '/settings/users'
     | '/accounts'
     | '/entries'
+    | '/recurring'
     | '/settings'
     | '/accounts/$accountId/edit'
     | '/accounts/$accountId/sharing'
     | '/categories/$categoryId/sharing'
     | '/entries/$entryId/edit'
+    | '/recurring/$id/edit'
     | '/tags/$tagId/sharing'
     | '/accounts/$accountId'
   id:
@@ -289,6 +331,7 @@ export interface FileRouteTypes {
     | '/entries'
     | '/home'
     | '/login'
+    | '/recurring'
     | '/reports'
     | '/settings'
     | '/tags'
@@ -296,15 +339,18 @@ export interface FileRouteTypes {
     | '/accounts/new'
     | '/entries/import'
     | '/entries/new'
+    | '/recurring/new'
     | '/settings/invitations'
     | '/settings/users'
     | '/accounts/'
     | '/entries/'
+    | '/recurring/'
     | '/settings/'
     | '/accounts/$accountId/edit'
     | '/accounts/$accountId/sharing'
     | '/categories_/$categoryId/sharing'
     | '/entries/$entryId/edit'
+    | '/recurring/$id/edit'
     | '/tags_/$tagId/sharing'
     | '/accounts/$accountId/'
   fileRoutesById: FileRoutesById
@@ -316,6 +362,7 @@ export interface RootRouteChildren {
   EntriesRoute: typeof EntriesRouteWithChildren
   HomeRoute: typeof HomeRoute
   LoginRoute: typeof LoginRoute
+  RecurringRoute: typeof RecurringRouteWithChildren
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   TagsRoute: typeof TagsRoute
@@ -365,6 +412,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recurring': {
+      id: '/recurring'
+      path: '/recurring'
+      fullPath: '/recurring'
+      preLoaderRoute: typeof RecurringRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reports': {
@@ -430,6 +484,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntriesNewRouteImport
       parentRoute: typeof EntriesRoute
     }
+    '/recurring/': {
+      id: '/recurring/'
+      path: '/'
+      fullPath: '/recurring/'
+      preLoaderRoute: typeof RecurringIndexRouteImport
+      parentRoute: typeof RecurringRoute
+    }
+    '/recurring/new': {
+      id: '/recurring/new'
+      path: '/new'
+      fullPath: '/recurring/new'
+      preLoaderRoute: typeof RecurringNewRouteImport
+      parentRoute: typeof RecurringRoute
+    }
     '/settings/': {
       id: '/settings/'
       path: '/'
@@ -485,6 +553,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/entries/$entryId/edit'
       preLoaderRoute: typeof EntriesEntryIdEditRouteImport
       parentRoute: typeof EntriesRoute
+    }
+    '/recurring/$id/edit': {
+      id: '/recurring/$id/edit'
+      path: '/$id/edit'
+      fullPath: '/recurring/$id/edit'
+      preLoaderRoute: typeof RecurringIdEditRouteImport
+      parentRoute: typeof RecurringRoute
     }
     '/tags_/$tagId/sharing': {
       id: '/tags_/$tagId/sharing'
@@ -544,6 +619,22 @@ const EntriesRouteChildren: EntriesRouteChildren = {
 const EntriesRouteWithChildren =
   EntriesRoute._addFileChildren(EntriesRouteChildren)
 
+interface RecurringRouteChildren {
+  RecurringNewRoute: typeof RecurringNewRoute
+  RecurringIndexRoute: typeof RecurringIndexRoute
+  RecurringIdEditRoute: typeof RecurringIdEditRoute
+}
+
+const RecurringRouteChildren: RecurringRouteChildren = {
+  RecurringNewRoute: RecurringNewRoute,
+  RecurringIndexRoute: RecurringIndexRoute,
+  RecurringIdEditRoute: RecurringIdEditRoute,
+}
+
+const RecurringRouteWithChildren = RecurringRoute._addFileChildren(
+  RecurringRouteChildren,
+)
+
 interface SettingsRouteChildren {
   SettingsInvitationsRoute: typeof SettingsInvitationsRoute
   SettingsUsersRoute: typeof SettingsUsersRoute
@@ -567,6 +658,7 @@ const rootRouteChildren: RootRouteChildren = {
   EntriesRoute: EntriesRouteWithChildren,
   HomeRoute: HomeRoute,
   LoginRoute: LoginRoute,
+  RecurringRoute: RecurringRouteWithChildren,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRouteWithChildren,
   TagsRoute: TagsRoute,

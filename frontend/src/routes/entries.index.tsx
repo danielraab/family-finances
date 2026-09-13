@@ -7,6 +7,7 @@ import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
 import { LocationPreviewModal } from "../components/LocationPreviewModal";
+import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
 import { TagLabel } from "../components/TagLabel";
 import {
   amountColorClass,
@@ -435,6 +436,9 @@ function EntriesListPage() {
                       </button>
                     );
                   })()}
+                  <RecurringTransactionBadge
+                    recurringTransactionId={entry.recurring_transaction_id}
+                  />
                   {entry.counterparty && (
                     <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                       {entry.counterparty}

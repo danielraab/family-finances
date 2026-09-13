@@ -98,30 +98,30 @@
 
 ## 7. Frontend: routes and nav
 
-- [ ] 7.1 Add `src/routes/recurring.tsx` (auth-gated layout, redirect
+- [x] 7.1 Add `src/routes/recurring.tsx` (auth-gated layout, redirect
       anonymous visitors to `/login`, mirroring `entries.tsx`) and
       `src/routes/recurring.index.tsx` (list page) — verify `pnpm dev`
       renders `/recurring` for an authenticated user
-- [ ] 7.2 Add "Recurring" to `Sidebar.tsx`'s `NAV` array (own glyph, own
+- [x] 7.2 Add "Recurring" to `Sidebar.tsx`'s `NAV` array (own glyph, own
       i18n key, positioned alongside "Entries") — verify it renders and
       navigates correctly, both expanded and collapsed
-- [ ] 7.3 Add `nav.recurring` and the page's i18n keys to
+- [x] 7.3 Add `nav.recurring` and the page's i18n keys to
       `src/i18n/locales/en.json` (and best-effort `de.json`)
 
 ## 8. Frontend: list page
 
-- [ ] 8.1 Build the `/recurring` list: fetch
+- [x] 8.1 Build the `/recurring` list: fetch
       `GET /api/recurring-transactions` and
       `GET /api/recurring-transactions/summary`, render each row's title,
       category, entered amount, `per_year_amount`, an ended-state visual
       treatment, and the per-currency total row — verify visually via
       `pnpm dev` against seeded data
-- [ ] 8.2 Add a "Create transaction" action per row (see task 10.1) and an
+- [x] 8.2 Add a "Create transaction" action per row (see task 10.1) and an
       Edit link to `/recurring/{id}/edit`
 
 ## 9. Frontend: create/edit forms
 
-- [ ] 9.1 Build the shared recurring-transaction form component (account,
+- [x] 9.1 Build the shared recurring-transaction form component (account,
       title, description, category, counterparty, location, tags, signed
       amount — reusing existing entry-form field components where
       possible) plus the recurrence section: preset `<select>` (Weekly,
@@ -130,10 +130,10 @@
       Custom-only raw unit+count input pair, `starts_on`, and optional
       `ends_on` — verify preset-to-field and field-to-preset mapping with a
       unit test or manual check for every preset
-- [ ] 9.2 Add `src/routes/recurring.new.tsx` using the form, `POST
+- [x] 9.2 Add `src/routes/recurring.new.tsx` using the form, `POST
       /api/recurring-transactions` on submit — verify a new recurring
       transaction appears in the list after creation
-- [ ] 9.3 Add `src/routes/recurring.$id.edit.tsx` using the form
+- [x] 9.3 Add `src/routes/recurring.$id.edit.tsx` using the form
       pre-populated from `GET /api/recurring-transactions/{id}`, `PATCH` on
       submit, and a delete action disabled (with hint) when the fetched
       recurring transaction has any linked entries — verify editing and
@@ -141,7 +141,7 @@
 
 ## 10. Frontend: create-transaction prefill flow
 
-- [ ] 10.1 Wire "Create transaction" to navigate to `/entries/new` with the
+- [x] 10.1 Wire "Create transaction" to navigate to `/entries/new` with the
       template's fields (account, title, description, category,
       counterparty, location, tags, amount) and `next_suggested_date`
       passed through (query params or router state), and
@@ -149,17 +149,17 @@
       `POST /api/entries` body — verify the created entry is linked and
       matches the template's fields, with the date defaulted to
       `next_suggested_date`
-- [ ] 10.2 Verify every prefilled field remains editable on `/entries/new`
+- [x] 10.2 Verify every prefilled field remains editable on `/entries/new`
       before submission (manual check)
 
 ## 11. Frontend: linking existing entries and badges
 
-- [ ] 11.1 Add a recurring-transaction link field to
+- [x] 11.1 Add a recurring-transaction link field to
       `entries.$entryId.edit.tsx`, offering only recurring transactions on
       the entry's current account, calling `PATCH /api/entries/{id}` with
       `recurring_transaction_id` (set or `null`) — verify linking and
       unlinking an existing entry
-- [ ] 11.2 Add a small badge component (icon + link to
+- [x] 11.2 Add a small badge component (icon + link to
       `/recurring/{id}/edit`) shown wherever an entry with a non-null
       `recurring_transaction_id` is rendered; wire it into
       `entries.index.tsx`'s ledger rows and `reports.tsx`'s results table —
@@ -167,10 +167,10 @@
 
 ## 12. Frontend: validation
 
-- [ ] 12.1 Run `pnpm lint`, `pnpm exec tsc`, `pnpm build` in `frontend/`
+- [x] 12.1 Run `pnpm lint`, `pnpm exec tsc`, `pnpm build` in `frontend/`
       and verify all three succeed
 
 ## 13. Final checks
 
-- [ ] 13.1 Run `openspec validate add-recurring-transactions --strict` and
+- [x] 13.1 Run `openspec validate add-recurring-transactions --strict` and
       resolve any reported issues
