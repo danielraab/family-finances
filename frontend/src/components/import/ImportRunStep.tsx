@@ -54,14 +54,18 @@ export function ImportRunStep({
       for (const row of rows) {
         if (canceledRef.current) break;
         if (!row.entry) continue;
-        const { data } = await api.POST("/api/entries", {
+        const { data, error } = await api.POST("/api/entries", {
           body: { ...row.entry, account_id: accountId, tag_ids: tagIds },
         });
         if (data) {
           createdCount++;
           if (!unmounted) setCreated(createdCount);
         } else {
-          failures.push({ index: row.index, reason: "submitRejected" });
+          failures.push({
+            index: row.index,
+            reason: "submitRejected",
+            ...(error?.error ? { detail: error.error } : {}),
+          });
         }
       }
 

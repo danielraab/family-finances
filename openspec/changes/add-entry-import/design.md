@@ -362,6 +362,21 @@ disabled) is added to the same failed-rows list the dry run's failures
 appear in, so the results view has one unified list regardless of which
 stage caught the problem.
 
+A rejection at this stage always comes from a real, backend-logged HTTP
+response — the request-logging middleware wraps auth and routing rather
+than the reverse (`internal/httpapi/middleware.go`), so there's no status
+code a completed request can come back with that skips the access log.
+The row's failure record carries the response body's own `error` message
+(the same message the backend's log line for that request shows) as an
+optional `detail`, shown alongside the generic "rejected" reason in the
+results view — a debugging report of "every row rejected, no server log
+visible" is far more likely to mean the request never reached the backend
+at all (a proxy or network issue outside this feature's scope) than that
+the backend accepted and silently swallowed it; either way, showing the
+backend's own message turns the next occurrence into something
+diagnosable from the results screen alone, rather than requiring a
+repro session to even find out what the backend said.
+
 ## Risks / Trade-offs
 
 - **[Risk]** Sequential one-request-per-row import is slow for a large
