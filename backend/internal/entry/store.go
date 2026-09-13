@@ -80,6 +80,22 @@ type TagLookup interface {
 	Usable(ctx context.Context, owner string, tagIDs []string) (bool, error)
 }
 
+// RecurringTransactionLookup is the narrow view of internal/
+// recurringtransaction that entry needs: confirming a recurring
+// transaction id names one on a specific account. Consulted only when
+// recurring_transaction_id is being newly set (creation, or an update that
+// explicitly supplies it) — never for a value merely carried over
+// unchanged, the same "only newly-set values are checked" pattern
+// CategoryLookup/TagLookup already use. Optional: a nil lookup (never
+// wired) makes any attempt to set recurring_transaction_id fail closed
+// (ErrInvalidValue) rather than panic — see Service.SetRecurringTransactionLookup.
+// *recurringtransaction.Service satisfies this structurally.
+type RecurringTransactionLookup interface {
+	// SameAccount reports whether id names a non-deleted recurring
+	// transaction whose account_id equals accountID.
+	SameAccount(ctx context.Context, id, accountID string) (bool, error)
+}
+
 // TimezoneLookup resolves an authenticated caller's resolved timezone
 // setting (default "UTC" when unset), used to bucket
 // GET /api/entries/flow-summary by the caller's own calendar rather than
@@ -146,4 +162,15 @@ type Store interface {
 	// case-insensitively ascending — for the entry form's autocomplete.
 	// Mirrors account.Store's ListInUseTypes.
 	ListInUseCounterparties(ctx context.Context, ownerID string) ([]string, error)
+
+	// LatestBookingTimeByRecurringTransaction returns the highest
+	// booking_timestamp among recurringTransactionID's non-deleted linked
+	// entries, or nil if it has none — backs Service's
+	// recurringtransaction.EntryLookup satisfaction (NextSuggestedDate).
+	LatestBookingTimeByRecurringTransaction(ctx context.Context, recurringTransactionID string) (*time.Time, error)
+	// CountByRecurringTransaction returns the number of
+	// recurringTransactionID's non-deleted linked entries — backs
+	// Service's recurringtransaction.EntryLookup satisfaction
+	// (delete-blocked-while-linked).
+	CountByRecurringTransaction(ctx context.Context, recurringTransactionID string) (int, error)
 }

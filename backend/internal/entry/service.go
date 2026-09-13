@@ -10,11 +10,12 @@ import (
 // Service is the entry use-case layer. It depends on Store plus the three
 // narrow lookup interfaces it declares.
 type Service struct {
-	store      Store
-	accounts   AccountLookup
-	categories CategoryLookup
-	tags       TagLookup
-	timezones  TimezoneLookup // nil when not wired — FlowSummary then buckets in UTC
+	store                 Store
+	accounts              AccountLookup
+	categories            CategoryLookup
+	tags                  TagLookup
+	timezones             TimezoneLookup             // nil when not wired — FlowSummary then buckets in UTC
+	recurringTransactions RecurringTransactionLookup // nil until SetRecurringTransactionLookup is called
 }
 
 // Option customizes a Service (used by main.go and tests).
@@ -24,6 +25,17 @@ type Option func(*Service)
 // bucket entries. package main passes internal/settings' Service. Optional —
 // without it, FlowSummary buckets every caller in UTC.
 func WithTimezoneLookup(l TimezoneLookup) Option { return func(s *Service) { s.timezones = l } }
+
+// SetRecurringTransactionLookup wires the recurring-transaction-link
+// validation source after construction — package main builds entry.Service
+// and recurringtransaction.Service independently (each optionally depends
+// on the other: recurringtransaction needs entry for its EntryLookup,
+// entry needs recurringtransaction for this), so neither can be a required
+// constructor argument of the other. A nil lookup (never called) makes
+// setting recurring_transaction_id always fail with ErrInvalidValue.
+func (s *Service) SetRecurringTransactionLookup(l RecurringTransactionLookup) {
+	s.recurringTransactions = l
+}
 
 // NewService builds the entry service.
 func NewService(store Store, accounts AccountLookup, categories CategoryLookup, tags TagLookup, opts ...Option) *Service {
@@ -46,6 +58,24 @@ func (s *Service) checkAccount(ctx context.Context, callerID, accountID string) 
 	}
 	if disabled {
 		return ErrAccountDisabled
+	}
+	return nil
+}
+
+// checkRecurringTransaction confirms recurringTransactionID names a
+// recurring transaction on accountID — consulted only when
+// recurring_transaction_id is being newly set (see
+// RecurringTransactionLookup's doc comment).
+func (s *Service) checkRecurringTransaction(ctx context.Context, recurringTransactionID, accountID string) error {
+	if s.recurringTransactions == nil {
+		return ErrInvalidValue
+	}
+	ok, err := s.recurringTransactions.SameAccount(ctx, recurringTransactionID, accountID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrInvalidValue
 	}
 	return nil
 }
@@ -113,6 +143,11 @@ func (s *Service) Create(ctx context.Context, callerID string, in New) (Entry, e
 		}
 		if !ok {
 			return Entry{}, ErrInvalidValue
+		}
+	}
+	if in.RecurringTransactionID != nil {
+		if err := s.checkRecurringTransaction(ctx, *in.RecurringTransactionID, in.AccountID); err != nil {
+			return Entry{}, err
 		}
 	}
 
@@ -213,6 +248,16 @@ func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (
 			if !ok {
 				return Entry{}, ErrInvalidValue
 			}
+		}
+	}
+
+	if upd.RecurringTransactionID.Set && upd.RecurringTransactionID.Value != nil {
+		accountID := current.AccountID
+		if upd.AccountID != nil {
+			accountID = *upd.AccountID
+		}
+		if err := s.checkRecurringTransaction(ctx, *upd.RecurringTransactionID.Value, accountID); err != nil {
+			return Entry{}, err
 		}
 	}
 
@@ -608,6 +653,18 @@ func (s *Service) BalanceSeries(ctx context.Context, callerID string, f BalanceF
 // account.Service.ListInUseTypes.
 func (s *Service) ListInUseCounterparties(ctx context.Context, callerID string) ([]string, error) {
 	return s.store.ListInUseCounterparties(ctx, callerID)
+}
+
+// LatestLinkedBookingTime satisfies recurringtransaction.EntryLookup — see
+// that interface's doc comment.
+func (s *Service) LatestLinkedBookingTime(ctx context.Context, recurringTransactionID string) (*time.Time, error) {
+	return s.store.LatestBookingTimeByRecurringTransaction(ctx, recurringTransactionID)
+}
+
+// LinkedCount satisfies recurringtransaction.EntryLookup — see that
+// interface's doc comment.
+func (s *Service) LinkedCount(ctx context.Context, recurringTransactionID string) (int, error) {
+	return s.store.CountByRecurringTransaction(ctx, recurringTransactionID)
 }
 
 // intersect returns the elements of a that also appear in b.

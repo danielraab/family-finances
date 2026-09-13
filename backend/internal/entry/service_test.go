@@ -71,6 +71,27 @@ func (s *stubAccounts) VisibleIDs(_ context.Context, callerID string) ([]string,
 
 var errNotFound = errors.New("account not found")
 
+// stubRecurringTransactions satisfies entry.RecurringTransactionLookup — a
+// minimal fake so linking tests can exercise the same-account rule without
+// depending on the real internal/recurringtransaction package.
+type stubRecurringTransactions struct {
+	accountByID map[string]string
+}
+
+func newStubRecurringTransactions() *stubRecurringTransactions {
+	return &stubRecurringTransactions{accountByID: map[string]string{}}
+}
+
+func (r *stubRecurringTransactions) add(id, accountID string) { r.accountByID[id] = accountID }
+
+func (r *stubRecurringTransactions) SameAccount(_ context.Context, id, accountID string) (bool, error) {
+	acc, ok := r.accountByID[id]
+	if !ok {
+		return false, nil
+	}
+	return acc == accountID, nil
+}
+
 // stubTimezones satisfies entry.TimezoneLookup — a minimal fake so
 // FlowSummary tests can exercise a non-UTC caller timezone without
 // depending on the real internal/settings package.

@@ -50,21 +50,22 @@ func (s *EntryStore) Create(_ context.Context, createdBy string, in entry.New) (
 		amount = *in.Amount
 	}
 	e := entry.Entry{
-		ID:               strconv.FormatInt(s.seq, 10),
-		CreatedBy:        createdBy,
-		AccountID:        in.AccountID,
-		Kind:             in.Kind,
-		Amount:           amount,
-		Balance:          in.Balance,
-		BookingTimestamp: in.BookingTimestamp,
-		Title:            in.Title,
-		Description:      in.Description,
-		CategoryID:       in.CategoryID,
-		Counterparty:     in.Counterparty,
-		Location:         in.Location,
-		TagIDs:           tagIDs,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:                     strconv.FormatInt(s.seq, 10),
+		CreatedBy:              createdBy,
+		AccountID:              in.AccountID,
+		Kind:                   in.Kind,
+		Amount:                 amount,
+		Balance:                in.Balance,
+		BookingTimestamp:       in.BookingTimestamp,
+		Title:                  in.Title,
+		Description:            in.Description,
+		CategoryID:             in.CategoryID,
+		Counterparty:           in.Counterparty,
+		Location:               in.Location,
+		TagIDs:                 tagIDs,
+		CreatedAt:              now,
+		UpdatedAt:              now,
+		RecurringTransactionID: in.RecurringTransactionID,
 	}
 	s.rows[e.ID] = entryRow{e: e, seq: s.seq}
 	s.recomputeFromLocked(e.AccountID, e.BookingTimestamp, s.seq, 0)
@@ -128,6 +129,9 @@ func (s *EntryStore) Update(_ context.Context, id string, upd entry.Update) (ent
 		tagIDs := make([]string, len(*upd.TagIDs))
 		copy(tagIDs, *upd.TagIDs)
 		e.TagIDs = tagIDs
+	}
+	if upd.RecurringTransactionID.Set {
+		e.RecurringTransactionID = upd.RecurringTransactionID.Value
 	}
 	e.UpdatedAt = time.Now().UTC()
 	row.e = e
@@ -539,6 +543,45 @@ func (s *EntryStore) ListInUseCounterparties(_ context.Context, ownerID string) 
 		return out[i] < out[j]
 	})
 	return out, nil
+}
+
+// LatestBookingTimeByRecurringTransaction implements entry.Store's
+// LatestBookingTimeByRecurringTransaction: the highest booking_timestamp
+// among recurringTransactionID's non-deleted linked entries, or nil.
+func (s *EntryStore) LatestBookingTimeByRecurringTransaction(_ context.Context, recurringTransactionID string) (*time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var latest *time.Time
+	for _, row := range s.rows {
+		e := row.e
+		if e.DeletedAt != nil || e.RecurringTransactionID == nil || *e.RecurringTransactionID != recurringTransactionID {
+			continue
+		}
+		if latest == nil || e.BookingTimestamp.After(*latest) {
+			ts := e.BookingTimestamp
+			latest = &ts
+		}
+	}
+	return latest, nil
+}
+
+// CountByRecurringTransaction implements entry.Store's
+// CountByRecurringTransaction: the number of recurringTransactionID's
+// non-deleted linked entries.
+func (s *EntryStore) CountByRecurringTransaction(_ context.Context, recurringTransactionID string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	count := 0
+	for _, row := range s.rows {
+		e := row.e
+		if e.DeletedAt != nil || e.RecurringTransactionID == nil || *e.RecurringTransactionID != recurringTransactionID {
+			continue
+		}
+		count++
+	}
+	return count, nil
 }
 
 func toSet(ids []string) map[string]bool {

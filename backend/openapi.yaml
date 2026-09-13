@@ -38,6 +38,11 @@ tags:
       Transactions and balance adjustments recorded against an account,
       including live balance computation and a filterable/searchable/
       sortable, cursor-paginated listing.
+  - name: recurring-transactions
+    description: >-
+      Recurring transaction templates recorded against an account — a
+      recurrence rule (interval unit/count), computed per-year amount and
+      next-suggested-date, and the entries created from or linked to them.
   - name: browser-flow
     description: >-
       Endpoints a browser reaches by full-page navigation, not fetch. Documented
@@ -1946,6 +1951,161 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/recurring-transactions:
+    get:
+      operationId: getRecurringTransactions
+      summary: List the caller's recurring transactions
+      tags: [recurring-transactions]
+      parameters:
+        - name: account_id
+          in: query
+          required: false
+          description: >-
+            Repeatable. Omitted means every non-deleted account the caller
+            has any permission on.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Every matching recurring transaction.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecurringTransaction"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: postRecurringTransactions
+      summary: Create a recurring transaction
+      description: >-
+        422 when account_id does not name an account the caller can append
+        to, or names a disabled account.
+      tags: [recurring-transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecurringTransactionCreate"
+      responses:
+        "201":
+          description: The created recurring transaction.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecurringTransaction"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /api/recurring-transactions/summary:
+    get:
+      operationId: getRecurringTransactionsSummary
+      summary: >-
+        Sum the caller's matching recurring transactions' per-year amounts,
+        per currency
+      description: >-
+        Accepts the same account_id filter as GET /api/recurring-transactions.
+        Excludes any recurring transaction whose ends_on is before the
+        current date (in the caller's resolved timezone) from the total.
+      tags: [recurring-transactions]
+      parameters:
+        - name: account_id
+          in: query
+          required: false
+          description: >-
+            Repeatable. Omitted means every non-deleted account the caller
+            has any permission on.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: The matching, non-ended recurring transactions' per_year_amount, summed per currency.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntrySummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/recurring-transactions/{id}:
+    get:
+      operationId: getRecurringTransaction
+      summary: Get a recurring transaction
+      tags: [recurring-transactions]
+      parameters:
+        - $ref: "#/components/parameters/RecurringTransactionId"
+      responses:
+        "200":
+          description: The recurring transaction.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecurringTransaction"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: patchRecurringTransaction
+      summary: Update a recurring transaction
+      tags: [recurring-transactions]
+      parameters:
+        - $ref: "#/components/parameters/RecurringTransactionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecurringTransactionUpdate"
+      responses:
+        "200":
+          description: The updated recurring transaction.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecurringTransaction"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    delete:
+      operationId: deleteRecurringTransaction
+      summary: Soft-delete a recurring transaction
+      description: >-
+        409 while one or more non-deleted entries reference this recurring
+        transaction (recurring_transaction_id) — it must be unlinked from
+        every entry first. One-way — there is no undelete endpoint.
+      tags: [recurring-transactions]
+      parameters:
+        - $ref: "#/components/parameters/RecurringTransactionId"
+      responses:
+        "204":
+          description: The recurring transaction is soft-deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/auth/email/callback:
     get:
       operationId: getAuthEmailCallback
@@ -2107,6 +2267,12 @@ components:
       schema:
         type: string
     EntryId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    RecurringTransactionId:
       name: id
       in: path
       required: true
@@ -2917,6 +3083,13 @@ components:
             The creator's display name (or email, as a fallback), resolved
             server-side so a viewer can see who logged an entry without a
             separate lookup.
+        recurring_transaction_id:
+          type: string
+          nullable: true
+          description: >-
+            The recurring transaction this entry was created from or has
+            been linked to, or null. Always on the same account_id as this
+            entry.
 
     EntryCreate:
       type: object
@@ -2960,6 +3133,11 @@ components:
           type: array
           items:
             type: string
+        recurring_transaction_id:
+          type: string
+          description: >-
+            Must name a recurring transaction on the same account_id as
+            account_id above.
 
     EntryUpdate:
       type: object
@@ -3004,6 +3182,13 @@ components:
           items:
             type: string
           description: Replaces the full set, including clearing it with [].
+        recurring_transaction_id:
+          type: string
+          nullable: true
+          description: >-
+            Must name a recurring transaction on the same account_id as this
+            entry (its current one, or the account_id also set in this same
+            request). Explicit null clears the link.
 
     EntryPage:
       type: object
@@ -3046,6 +3231,186 @@ components:
         count:
           type: integer
           format: int64
+
+    IntervalUnit:
+      type: string
+      enum: [day, week, month, year]
+      description: >-
+        Combined with interval_count to mean "every interval_count
+        interval_units" — there is no separate named frequency value.
+        Quarterly is interval_unit=month, interval_count=3; yearly is
+        interval_unit=year, interval_count=1.
+
+    RecurringTransaction:
+      type: object
+      required:
+        - id
+        - account_id
+        - title
+        - category_id
+        - amount
+        - interval_unit
+        - interval_count
+        - starts_on
+        - tag_ids
+        - created_at
+        - updated_at
+        - created_by
+        - per_year_amount
+        - ended
+        - next_suggested_date
+      properties:
+        id:
+          type: string
+        account_id:
+          type: string
+        account_currency:
+          type: string
+          description: >-
+            The currency of account_id, resolved server-side — mirrors
+            Entry's account_currency.
+        title:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+        counterparty:
+          type: string
+        location:
+          type: string
+        tag_ids:
+          type: array
+          items:
+            type: string
+        amount:
+          type: integer
+          format: int64
+          description: >-
+            The signed amount at the same fixed 4-decimal-place scale as an
+            Entry's amount — what is booked each occurrence, before the
+            per_year_amount multiplier.
+        interval_unit:
+          $ref: "#/components/schemas/IntervalUnit"
+        interval_count:
+          type: integer
+          description: Positive integer — "every interval_count interval_units".
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        created_by_name:
+          type: string
+        per_year_amount:
+          type: integer
+          format: int64
+          description: >-
+            Computed server-side from amount and the recurrence rule, never
+            stored: 12/interval_count for month, 1/interval_count for year
+            (both exact), 365.25/(7*interval_count) for week, and
+            365.25/interval_count for day.
+        ended:
+          type: boolean
+          description: >-
+            True when ends_on is at or before the current date, in the
+            caller's resolved timezone. Never blocks reads or writes — only
+            affects this flag and exclusion from
+            GET /api/recurring-transactions/summary's total.
+        next_suggested_date:
+          type: string
+          format: date
+          description: >-
+            Computed server-side, never stored: the latest non-deleted
+            linked entry's booking_timestamp advanced by one recurrence
+            interval, or starts_on when there is no linked entry yet.
+
+    RecurringTransactionCreate:
+      type: object
+      required:
+        - account_id
+        - title
+        - category_id
+        - amount
+        - interval_unit
+        - interval_count
+        - starts_on
+      properties:
+        account_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+        counterparty:
+          type: string
+        location:
+          type: string
+        tag_ids:
+          type: array
+          items:
+            type: string
+        amount:
+          type: integer
+          format: int64
+        interval_unit:
+          $ref: "#/components/schemas/IntervalUnit"
+        interval_count:
+          type: integer
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+          description: Must not be before starts_on.
+
+    RecurringTransactionUpdate:
+      type: object
+      properties:
+        account_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+        counterparty:
+          type: string
+        location:
+          type: string
+        tag_ids:
+          type: array
+          items:
+            type: string
+        amount:
+          type: integer
+          format: int64
+        interval_unit:
+          $ref: "#/components/schemas/IntervalUnit"
+        interval_count:
+          type: integer
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+          nullable: true
+          description: Explicit null clears it.
 
     FlowBucket:
       type: object

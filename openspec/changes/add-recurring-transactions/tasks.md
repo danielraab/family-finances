@@ -1,48 +1,48 @@
 ## 1. API contract
 
-- [ ] 1.1 Add `RecurringTransaction` schema (account_id, title, description,
+- [x] 1.1 Add `RecurringTransaction` schema (account_id, title, description,
       category_id, counterparty, location, tag_ids, amount, interval_unit,
       interval_count, starts_on, ends_on, created_by, created_by_name,
       account_currency, plus computed `per_year_amount`, `ended`,
       `next_suggested_date`) and an `IntervalUnit` enum (`day`/`week`/
       `month`/`year`) to `openapi/openapi.yaml`
-- [ ] 1.2 Add `GET`/`POST /api/recurring-transactions`,
+- [x] 1.2 Add `GET`/`POST /api/recurring-transactions`,
       `GET`/`PATCH`/`DELETE /api/recurring-transactions/{id}`, and
       `GET /api/recurring-transactions/summary` paths to
       `openapi/openapi.yaml`, mirroring the existing entries paths'
       parameter/response shapes and error responses
-- [ ] 1.3 Add `recurring_transaction_id` (nullable) to the `Entry` schema in
+- [x] 1.3 Add `recurring_transaction_id` (nullable) to the `Entry` schema in
       `openapi/openapi.yaml`, settable in the create/update request bodies
-- [ ] 1.4 Run `cd backend && go generate ./...` to sync
+- [x] 1.4 Run `cd backend && go generate ./...` to sync
       `backend/openapi.yaml` and verify it matches the root spec
-- [ ] 1.5 Run `cd frontend && pnpm generate:api` and verify
+- [x] 1.5 Run `cd frontend && pnpm generate:api` and verify
       `frontend/src/api/schema.d.ts` regenerates with no manual edits needed
 
 ## 2. Backend: `internal/recurringtransaction` domain package
 
-- [ ] 2.1 Create `recurringtransaction.go`: domain type, `Unit` enum
+- [x] 2.1 Create `recurringtransaction.go`: domain type, `Unit` enum
       (`day`/`week`/`month`/`year`) with validation, `New`/`Update` input
       types, and field validation (title required, category required,
       interval_count positive, ends_on >= starts_on) — verify with unit
       tests requiring no store
-- [ ] 2.2 Implement `PerYearAmount(amount, unit, count) int64` and
+- [x] 2.2 Implement `PerYearAmount(amount, unit, count) int64` and
       `Ended(endsOn, now) bool` as pure functions — verify with table-driven
       unit tests covering month/year (exact) and week/day (365.25-based)
       per the spec's worked examples
-- [ ] 2.3 Implement `Advance(t time.Time, unit Unit, count int) time.Time`
+- [x] 2.3 Implement `Advance(t time.Time, unit Unit, count int) time.Time`
       (calendar-month/year stepping with end-of-month clamping; fixed
       day-count for week/day) — verify with unit tests including the
       Jan-31-plus-one-month-clamps-to-Feb-28 scenario from the spec
-- [ ] 2.4 Declare `AccountLookup`, `CategoryLookup`, `TagLookup` interfaces
+- [x] 2.4 Declare `AccountLookup`, `CategoryLookup`, `TagLookup` interfaces
       (mirroring `internal/entry`'s shape) and a new `EntryLookup` interface
       (`LatestLinkedBookingTime`, `LinkedCount`) in `store.go`, plus sentinel
       errors (`ErrNotFound`, `ErrInvalidValue`, `ErrForbidden`, `ErrInUse`)
-- [ ] 2.5 Implement `service.go`: `Create`, `Get`, `Update`, `Delete`
+- [x] 2.5 Implement `service.go`: `Create`, `Get`, `Update`, `Delete`
       (rejecting `ErrInUse` when `EntryLookup.LinkedCount > 0`), `List`,
       `Summary` — permission checks mirroring `internal/entry`'s
       `append`/`entry_admin`/`owner` tiers — verify with `storage/memory`-
       backed service tests covering each permission scenario from the spec
-- [ ] 2.6 Implement `handler.go`: `http.Handler` for
+- [x] 2.6 Implement `handler.go`: `http.Handler` for
       `/api/recurring-transactions...`, mapping requests/responses per the
       OpenAPI contract, including `NextSuggestedDate` resolution via
       `EntryLookup` — verify with `httptest`-based handler tests asserting
@@ -52,20 +52,20 @@
 
 ## 3. Backend: storage
 
-- [ ] 3.1 Add migration `backend/internal/storage/postgres/migrations/0025_recurring_transactions.sql`
+- [x] 3.1 Add migration `backend/internal/storage/postgres/migrations/0025_recurring_transactions.sql`
       creating `recurring_transactions` (mirroring `entries`' relevant
       columns minus kind/balance/booking_timestamp, plus interval_unit,
       interval_count, starts_on, ends_on, deleted_at) and adding
       `entries.recurring_transaction_id` (nullable FK) — verify migration
       applies cleanly against a fresh database
-- [ ] 3.2 Implement `internal/storage/memory`'s `RecurringTransactionStore`
+- [x] 3.2 Implement `internal/storage/memory`'s `RecurringTransactionStore`
       (in-memory, matching the `Store` interface) — verify existing
       `go test ./...` still passes with it wired into service tests
-- [ ] 3.3 Implement `internal/storage/postgres`'s `RecurringTransactionStore`,
+- [x] 3.3 Implement `internal/storage/postgres`'s `RecurringTransactionStore`,
       including the `LatestLinkedBookingTime`/`LinkedCount` queries against
       `entries` — verify with `internal/storage/postgres` integration tests
       (behind `DATABASE_URL`, per existing convention)
-- [ ] 3.4 Extend `internal/storage/memory` and `internal/storage/postgres`'s
+- [x] 3.4 Extend `internal/storage/memory` and `internal/storage/postgres`'s
       existing `EntryStore` implementations to persist/read
       `recurring_transaction_id` on create/update, and to validate it
       references a recurring transaction on the same account — verify with
@@ -73,10 +73,10 @@
 
 ## 4. Backend: entry package changes
 
-- [ ] 4.1 Add `RecurringTransactionID *string` to `entry.Entry`, `entry.New`,
+- [x] 4.1 Add `RecurringTransactionID *string` to `entry.Entry`, `entry.New`,
       and `entry.Update` (using the existing `OptionalID` pattern for
       clearability), with `omitempty` JSON tag — verify `go vet`/`go build`
-- [ ] 4.2 Add a narrow `RecurringTransactionLookup` interface to
+- [x] 4.2 Add a narrow `RecurringTransactionLookup` interface to
       `internal/entry` (`SameAccount(ctx, id, accountID) (bool, error)`),
       satisfied structurally by `*recurringtransaction.Service`, consulted
       only when `recurring_transaction_id` is newly set — verify with a
@@ -84,7 +84,7 @@
 
 ## 5. Backend: wiring
 
-- [ ] 5.1 Wire `recurringtransaction.Service`/`Handler` in `main.go`
+- [x] 5.1 Wire `recurringtransaction.Service`/`Handler` in `main.go`
       (`storage/postgres` store, mounted at `/api/recurring-transactions/`),
       and wire `entry.WithRecurringTransactionLookup` /
       `recurringtransaction.WithEntryLookup` for the two cross-package
@@ -93,7 +93,7 @@
 
 ## 6. Backend: validation
 
-- [ ] 6.1 Run `gofmt -l .`, `go vet ./...`, `go test ./...` in `backend/`
+- [x] 6.1 Run `gofmt -l .`, `go vet ./...`, `go test ./...` in `backend/`
       and verify all pass with no output from `gofmt -l`
 
 ## 7. Frontend: routes and nav

@@ -20,6 +20,7 @@ import (
 	"at.draab/familyfinances/internal/httpapi"
 	"at.draab/familyfinances/internal/mailer"
 	"at.draab/familyfinances/internal/oidcauth"
+	"at.draab/familyfinances/internal/recurringtransaction"
 	"at.draab/familyfinances/internal/settings"
 	"at.draab/familyfinances/internal/storage/postgres"
 	"at.draab/familyfinances/internal/tag"
@@ -96,20 +97,32 @@ func main() {
 	categorySvc.SetUserLookup(authSvc)
 	tagSvc.SetUserLookup(authSvc)
 
-	entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc, settingsSvc)
+	entrySvc, entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc, settingsSvc)
+	recurringSvc, recurringHandler := buildRecurringTransaction(pool, accountSvc, categorySvc, tagSvc, settingsSvc)
+
+	// entry and recurringtransaction each optionally depend on the other
+	// (entry validates a newly-set recurring_transaction_id against it;
+	// recurringtransaction resolves next_suggested_date and the
+	// delete-blocked-while-linked rule from entry) — a wiring cycle no
+	// constructor argument on either side can resolve, so both are built
+	// independently above and cross-wired here, mirroring
+	// accountSvc.SetUserLookup(authSvc) below.
+	entrySvc.SetRecurringTransactionLookup(recurringSvc)
+	recurringSvc.SetEntryLookup(entrySvc)
 
 	srv := httpapi.New(cfg, httpapi.Deps{
-		Static:          staticFS,
-		DB:              pool,
-		Auth:            authSvc,
-		AuthHandler:     authHandler,
-		SettingsHandler: settingsHandler,
-		AccountHandler:  accountHandler,
-		CategoryHandler: categoryHandler,
-		TagHandler:      tagHandler,
-		EntryHandler:    entryHandler,
-		OpenAPISpec:     openAPISpec,
-		AnalyticsScript: cfg.AnalyticsScript,
+		Static:                      staticFS,
+		DB:                          pool,
+		Auth:                        authSvc,
+		AuthHandler:                 authHandler,
+		SettingsHandler:             settingsHandler,
+		AccountHandler:              accountHandler,
+		CategoryHandler:             categoryHandler,
+		TagHandler:                  tagHandler,
+		EntryHandler:                entryHandler,
+		RecurringTransactionHandler: recurringHandler,
+		OpenAPISpec:                 openAPISpec,
+		AnalyticsScript:             cfg.AnalyticsScript,
 	})
 
 	if err := run(srv); err != nil {
@@ -169,10 +182,22 @@ func buildTag(pool *postgres.Pool, mail *mailer.Mailer, baseURL string) (*tag.Se
 // AccountLookup/CategoryLookup/TagLookup dependencies (see design.md's
 // package-boundaries decision) and settingsSvc as the timezone source
 // GET /api/entries/flow-summary buckets by.
-func buildEntry(pool *postgres.Pool, accountSvc *account.Service, categorySvc *category.Service, tagSvc *tag.Service, settingsSvc *settings.Service) http.Handler {
+func buildEntry(pool *postgres.Pool, accountSvc *account.Service, categorySvc *category.Service, tagSvc *tag.Service, settingsSvc *settings.Service) (*entry.Service, http.Handler) {
 	store := postgres.NewEntryStore(pool)
 	svc := entry.NewService(store, accountSvc, categorySvc, tagSvc, entry.WithTimezoneLookup(settingsSvc))
-	return entry.NewHandler(svc, entry.HandlerOptions{RenderError: httpapi.WriteError})
+	return svc, entry.NewHandler(svc, entry.HandlerOptions{RenderError: httpapi.WriteError})
+}
+
+// buildRecurringTransaction constructs the recurring transaction service
+// and its HTTP handler over the Postgres store, wiring
+// accountSvc/categorySvc/tagSvc in the same way buildEntry does.
+// settingsSvc backs the timezone resolution used for its "ended" and
+// summary-exclusion computations. Its EntryLookup (entrySvc) is wired
+// separately in main(), once both services exist — see that call site.
+func buildRecurringTransaction(pool *postgres.Pool, accountSvc *account.Service, categorySvc *category.Service, tagSvc *tag.Service, settingsSvc *settings.Service) (*recurringtransaction.Service, http.Handler) {
+	store := postgres.NewRecurringTransactionStore(pool)
+	svc := recurringtransaction.NewService(store, accountSvc, categorySvc, tagSvc, recurringtransaction.WithTimezoneLookup(settingsSvc))
+	return svc, recurringtransaction.NewHandler(svc, recurringtransaction.HandlerOptions{RenderError: httpapi.WriteError})
 }
 
 // buildAuth constructs the auth service and its HTTP handler: the Postgres
