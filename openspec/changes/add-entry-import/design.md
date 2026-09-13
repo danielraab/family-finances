@@ -214,6 +214,15 @@ row's expansion shows only its source values, since `mapRow` produced no
 entry for it. Multiple rows can be expanded independently; re-running the
 dry run collapses all of them, since the underlying rows are new.
 
+Listing every row (not just problem ones) made a large, mostly-clean file
+tedious to scan for the handful of rows that need attention — so a "Hide
+successful rows" checkbox filters the *displayed* list down to
+suspicious/failed rows only (`rows.filter((r) => r.classification !==
+"ok")`, computed at render time, not stored back into `rows`). It's
+deliberately display-only: the summary counts and what gets submitted on
+"Continue" both still come from the full, unfiltered `rows` state — hiding
+a row from view never removes it from the import.
+
 The mapping controls themselves also gained a lighter-weight version of
 "see the data before committing": every source column/field offered in a
 `<select>` shows an example value from the file next to its name (the
