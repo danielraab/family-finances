@@ -283,6 +283,60 @@ wrong in every column (not just mis-mapped) still needs a fixed file — but
 it directly targets the failure mode a large file most commonly has:
 right data, wrong column, on just one or two rows.
 
+Each `RemapSelect` option also shows an example value next to the column
+name — but sourced from *this row's own* value for that column, not the
+file-wide first-non-empty-value example the mapping step's pickers use.
+The two examples answer different questions: the mapping step's asks "what
+kind of data is generally in this column," which any row's value answers
+equally well; a remap on one specific failing row asks "what does *this*
+row actually have in this column," where a different row's value would be
+actively misleading (e.g. suggesting a well-formed date when this row's own
+value in that column is the very thing that needs checking). The shared
+truncation behavior (`lib/import/formatExample.ts`'s `truncateExample`)
+is factored out for both call sites to share, rather than duplicated.
+
+### Wizard steps live in the URL, so the browser Back button works
+
+Originally the wizard's step was pure local `useState`, with no
+corresponding browser-history entry — so the physical Back button
+navigated away from `/entries/import` entirely rather than stepping back
+one wizard step, discarding all progress. Fixed by moving the
+"account"/"file"/"mapping"/"dryrun" step into a `?step=` search param
+(`entries.import.tsx`'s `validateSearch`, defaulting to `"file"` when
+`?account_id=` is preset, else `"account"`, and rejecting anything else
+back to that default). Forward transitions `navigate({ search: (prev) =>
+({ ...prev, step: next }) })` (a push); every in-page "Back" link calls
+`window.history.back()` instead of setting local state, so the physical
+button and the in-page link are exactly symmetric — both step back
+through the same history.
+
+This works only because a search-param-only navigation re-renders
+`ImportEntries` in place rather than remounting it: every other piece of
+wizard state (the parsed file, the mapping, per-row overrides) is
+ordinary local `useState` on that same component, so it survives a step
+change completely untouched — the URL carries only *which step to show*,
+never the step's data.
+
+"run" and "result" are deliberately excluded from this and kept as a
+separate local `runPhase: "run" | "result" | null`, which takes rendering
+priority over the URL step. The reason is `ImportRunStep`'s side effects:
+it submits `POST /api/entries` from a mount effect, so if a URL-driven
+step *ever* caused it to remount, a back/forward navigation could
+resubmit entries. Keeping `runPhase` purely local closes that off
+entirely — nothing in browser history can set it, so it can only ever be
+entered by the dry-run step's own "Continue" handler. The remaining loose
+end this creates — a stale run/result view left on screen after a
+back/forward navigates the URL step out from under it — is closed by a
+`useEffect` that resets `runPhase` to `null` whenever the URL step
+changes, dropping back to the ordinary step-driven view instead.
+
+One more edge case this design introduces: a hard page reload lands on
+whatever `?step=` the URL last had, but the in-memory `parsed` file (and
+everything downstream of it) cannot survive a reload — so a reload on
+`step=mapping` or `step=dryrun` would otherwise render blank. A
+`useEffect` redirects (`replace: true`) to `"file"` whenever the URL step
+requires `parsed` data that isn't there.
+
 ### Import step: resolve tags once, then submit rows sequentially with live progress and a cancel action
 
 Before the first row, the batch's tag names are resolved to ids exactly

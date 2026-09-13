@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { runDryRun } from "../../lib/import/dryRun";
+import { truncateExample } from "../../lib/import/formatExample";
 import {
   type ClassifiedRow,
   classifyRow,
@@ -96,11 +97,13 @@ function rawFieldsForRow(
 function RemapSelect({
   label,
   fields,
+  row,
   value,
   onChange,
 }: {
   label: string;
   fields: string[];
+  row: ParsedRow;
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -112,11 +115,14 @@ function RemapSelect({
         onChange={(e) => onChange(e.target.value)}
         className={inputClass}
       >
-        {fields.map((f) => (
-          <option key={f} value={f}>
-            {f}
-          </option>
-        ))}
+        {fields.map((f) => {
+          const example = row[f];
+          return (
+            <option key={f} value={f}>
+              {example ? `${f} — ${truncateExample(example)}` : f}
+            </option>
+          );
+        })}
       </select>
     </label>
   );
@@ -349,6 +355,7 @@ export function ImportDryRunStep({
                                   <RemapSelect
                                     label={t("entries.form.title")}
                                     fields={fields}
+                                    row={r.row}
                                     value={
                                       override.titleColumn ??
                                       rowMapping.titleColumn
@@ -365,6 +372,7 @@ export function ImportDryRunStep({
                                         "entries.import.steps.mapping.amountColumn",
                                       )}
                                       fields={fields}
+                                      row={r.row}
                                       value={
                                         override.amountColumn ??
                                         rowMapping.amount.column
@@ -382,6 +390,7 @@ export function ImportDryRunStep({
                                           "entries.import.steps.mapping.debitColumn",
                                         )}
                                         fields={fields}
+                                        row={r.row}
                                         value={
                                           override.debitColumn ??
                                           rowMapping.amount.debitColumn
@@ -397,6 +406,7 @@ export function ImportDryRunStep({
                                           "entries.import.steps.mapping.creditColumn",
                                         )}
                                         fields={fields}
+                                        row={r.row}
                                         value={
                                           override.creditColumn ??
                                           rowMapping.amount.creditColumn
@@ -415,6 +425,7 @@ export function ImportDryRunStep({
                                   <RemapSelect
                                     label={t("entries.form.bookingTimestamp")}
                                     fields={fields}
+                                    row={r.row}
                                     value={
                                       override.bookingColumn ??
                                       rowMapping.bookingColumn

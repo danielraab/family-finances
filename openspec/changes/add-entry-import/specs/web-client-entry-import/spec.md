@@ -357,7 +357,19 @@ entry in place; no other row's classification, and no file-wide mapping
 setting, SHALL be affected. The row-level counts and totals SHALL reflect
 the current classification of every row, remaps included. A row that is
 not classified failed SHALL NOT offer a remap control — an ok or
-suspicious row already produced a valid entry.
+suspicious row already produced a valid entry. Each remap control's
+options SHALL show an example value next to the column name, same as the
+mapping step's own column pickers, but sourced from *that row's own*
+value for the column rather than a file-wide example — a different row's
+value would misrepresent what this specific failing row actually
+contains.
+
+#### Scenario: A remap control's example values come from the row being remapped
+
+- **WHEN** an authenticated visitor expands a row classified failed and
+  opens one of its remap controls
+- **THEN** each option shows that row's own value for the corresponding
+  column, not any other row's value for that column
 
 #### Scenario: Remapping a failed row's date fixes only that row
 
@@ -403,6 +415,48 @@ reflecting the new settings, at no point requiring a network request or
 losing the selected file. This is separate from, and does not require,
 the per-row remap capability above — a change here re-validates the whole
 file, not one row.
+
+### Requirement: The browser's Back button steps back one wizard step without losing progress
+
+The account, file, mapping, and dry-run steps SHALL each correspond to a
+distinct browser history entry, so that pressing the browser's own Back
+button steps back exactly one wizard step — matching the in-page "Back"
+link's behavior exactly — rather than navigating away from the import
+wizard. Every setting already entered (the selected account, the parsed
+file, the column mapping and parsing settings, any per-row remaps applied
+in the dry-run step) SHALL remain intact after stepping back and then
+forward again. The run and result steps SHALL NOT be reachable via
+back/forward navigation: once an import run has started or finished,
+pressing Back SHALL return to the dry-run step's ordinary view (not a
+stale run/result screen) and SHALL NOT resubmit any entry.
+
+#### Scenario: The browser Back button steps back one wizard step
+
+- **WHEN** an authenticated visitor has advanced through the account,
+  file, mapping, and dry-run steps and presses the browser's Back button
+- **THEN** the wizard shows the mapping step, with the column mapping and
+  parsing settings exactly as they were left
+
+#### Scenario: Stepping back and forward again preserves every setting
+
+- **WHEN** an authenticated visitor presses Back from the dry-run step to
+  the mapping step, then presses Forward again
+- **THEN** the dry-run step is shown with the same classified rows,
+  including any per-row remaps applied before navigating back
+
+#### Scenario: Back does not leave the import wizard
+
+- **WHEN** an authenticated visitor on the file, mapping, or dry-run step
+  (having arrived at `/entries/import` without a preset account) presses
+  the browser's Back button
+- **THEN** the wizard shows the previous wizard step, not a different page
+
+#### Scenario: Back after a completed import does not resubmit entries
+
+- **WHEN** an authenticated visitor completes an import run and then
+  presses the browser's Back button
+- **THEN** the wizard returns to the dry-run step's ordinary view and no
+  additional `POST /api/entries` request is sent
 
 #### Scenario: Adjusting the date format after a failed dry run
 

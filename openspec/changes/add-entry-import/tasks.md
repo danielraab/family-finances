@@ -255,3 +255,59 @@
   summary counts live, and leaves every other row unchanged; completing
   the import creates an entry for the remapped row using the remapped
   column's value, confirmed via `GET /api/entries`.
+
+## 11. Browser back button + row-specific remap examples (post-implementation feedback)
+
+- [x] 11.1 `entries.import.tsx`'s "account"/"file"/"mapping"/"dryrun"
+  steps now live in the URL (`?step=`), not local `useState`. The route's
+  `validateSearch` computes a default (`"file"` when `?account_id=` is
+  preset, else `"account"`) and accepts only the four navigable step
+  values, falling back to the default for anything else. Forward
+  transitions call `navigate({ search: (prev) => ({ ...prev, step:
+  next }) })` (a push, via `Route.useNavigate()` so the search updater is
+  typed against this route's own search shape rather than the router's
+  global union); every in-page "Back" link (except the account-locked
+  file step's leave-the-wizard case, which still explicitly navigates to
+  `/entries`) now calls `window.history.back()` instead of setting local
+  step state, so the physical browser Back button and the in-page Back
+  link are exactly symmetric. Because a search-param-only navigation
+  re-renders the same route component instead of remounting it, every
+  other piece of in-memory wizard state (parsed file, mapping, per-row
+  overrides) survives a back/forward step change untouched.
+- [x] 11.2 "run" and "result" are deliberately **not** part of the URL:
+  they're a separate local `runPhase: "run" | "result" | null` state that
+  takes rendering priority over the URL-derived step. A `useEffect` keyed
+  on the URL `step` resets `runPhase` to `null` whenever it changes (i.e.
+  on a genuine back/forward navigation), so a stale run/result view can't
+  stick around after navigating away from it — but nothing in browser
+  history can ever set `runPhase` back to `"run"`, so `ImportRunStep` can
+  never be remounted, and its entries never resubmitted, via back/forward.
+  `startOver()` resets `runPhase` and every other piece of local state and
+  navigates with `replace: true` back to the wizard's first step, so the
+  finished import isn't reachable again via forward-navigation.
+- [x] 11.3 Added a defensive fallback: a `useEffect` redirects
+  (`replace: true`) to the `"file"` step whenever the URL step is
+  `"mapping"` or `"dryrun"` but there's no in-memory `parsed` file — the
+  case a hard page reload lands in, since the parsed file/mapping state
+  cannot survive a reload but the URL's `?step=` can.
+- [x] 11.4 The dry-run step's per-row remap `<select>` (`RemapSelect` in
+  `ImportDryRunStep.tsx`) now shows an example value next to each column
+  name, same as the mapping step's pickers — but sourced from **that
+  specific row's** own raw value for the column, not the file-wide
+  first-non-empty-value example the mapping step uses (a different row's
+  value would be misleading when remapping one failing row). The shared
+  truncation logic (`EXAMPLE_MAX_LENGTH`/truncation to `"…"`) moved out of
+  `ImportMappingStep.tsx` into a new `lib/import/formatExample.ts`
+  (`truncateExample`), reused by both.
+- [x] 11.5 Verified end-to-end in a real browser: stepping account → file
+  → mapping → dry run and then pressing the browser Back button three
+  times steps back exactly one wizard step each time (dry run → mapping →
+  file → account) with the mapping selections still intact; pressing
+  Forward replays the same steps with state preserved. Ran a full import
+  to completion, then pressed Back — it returned to the mapping step
+  without re-submitting either entry (`POST /api/entries` call count
+  unchanged before/after), and pressing Forward again landed back on the
+  dry-run view (not a stale result screen) rather than resubmitting.
+  Confirmed a failed row's remap `<select>` shows that row's own value
+  (e.g. `"AltDate — 05.03.2026"` for row 2) rather than a different row's
+  file-wide example value (row 1's `"04.03.2026"`).
