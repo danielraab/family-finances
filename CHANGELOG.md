@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-13
+
+### Added
+
+- CSV/JSON transaction import wizard at `/entries/import`: pick an
+  account, select a file, map its columns/fields to entry fields
+  (title, amount, booking date, description, counterparty, location),
+  with support for split debit/credit amount columns and configurable
+  decimal/thousands separators. A fully offline dry run lists every
+  row with its status (ready, suspicious, failed) and lets a failed
+  row be remapped individually before importing, then creates entries
+  with a live progress indicator and a final results summary. Reachable
+  from the entries ledger and account detail page via a new "Import"
+  action next to "New Entry".
+
+### Fixed
+
+- CSV file selection on Android, and structured JSON amount values
+  that previously failed to parse.
+- The import wizard now respects the browser's back button and shows
+  row-specific examples when remapping a failed row's fields.
+- A row rejected during import now surfaces the backend's own error
+  message instead of a generic one.
+
 ## [0.1.2] - 2026-09-12
 
 ### Added
@@ -79,7 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/danielraab/family-finances/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/danielraab/family-finances/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/danielraab/family-finances/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/danielraab/family-finances/compare/v0.0.0...v0.1.0
