@@ -63,6 +63,11 @@ type Deps struct {
 	// order. Nil leaves it unrouted.
 	EntryHandler http.Handler
 
+	// RecurringTransactionHandler is the recurringtransaction domain
+	// package's http.Handler, mounted at /api/recurring-transactions. Nil
+	// leaves it unrouted.
+	RecurringTransactionHandler http.Handler
+
 	// OpenAPISpec is the raw bytes of the hand-written API contract
 	// (openapi/openapi.yaml), served verbatim at GET /api/openapi.yaml. Nil
 	// leaves that route unregistered (it 404s as any other unknown /api/ path).
@@ -110,6 +115,10 @@ func Routes(deps Deps) *http.ServeMux {
 		// More specific than AccountHandler's "/api/accounts/" mount above,
 		// so it wins for this one path regardless of registration order.
 		mux.Handle("GET /api/accounts/{id}/balance", deps.EntryHandler)
+	}
+	if deps.RecurringTransactionHandler != nil {
+		mux.Handle("/api/recurring-transactions", deps.RecurringTransactionHandler)
+		mux.Handle("/api/recurring-transactions/", deps.RecurringTransactionHandler)
 	}
 	// Unmatched /api/ paths get a JSON 404 — the reserved namespace never
 	// falls through to the static site. More specific than "/", so it wins

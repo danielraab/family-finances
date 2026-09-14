@@ -6,7 +6,7 @@ import type { components } from "../api/schema";
 import { LocationField } from "../components/LocationField";
 import { SignedAmountInput } from "../components/SignedAmountInput";
 import { TagInput } from "../components/TagInput";
-import { inputToAmount } from "../lib/amount";
+import { amountToInput, inputToAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
 import { resolveTagIds } from "../lib/resolveTags";
@@ -16,13 +16,20 @@ type Category = components["schemas"]["Category"];
 type Tag = components["schemas"]["Tag"];
 type EntryKind = components["schemas"]["EntryKind"];
 
-type NewEntrySearch = { account_id?: string | undefined };
+type NewEntrySearch = {
+  account_id?: string | undefined;
+  recurring_transaction_id?: string | undefined;
+};
 
 export const Route = createFileRoute("/entries/new")({
   validateSearch: (search: Record<string, unknown>): NewEntrySearch => ({
     account_id:
       typeof search["account_id"] === "string"
         ? search["account_id"]
+        : undefined,
+    recurring_transaction_id:
+      typeof search["recurring_transaction_id"] === "string"
+        ? search["recurring_transaction_id"]
         : undefined,
   }),
   component: NewEntry,
@@ -35,11 +42,21 @@ function nowLocalInput(): string {
   return new Date(d.getTime() - tzOffsetMs).toISOString().slice(0, 16);
 }
 
+/** Combines a "YYYY-MM-DD" date (a recurring transaction's
+ * next_suggested_date, which carries no time-of-day) with the current
+ * local time-of-day, for prefilling the datetime-local booking field. */
+function dateOnlyToLocalInput(date: string): string {
+  return `${date}T${nowLocalInput().slice(11)}`;
+}
+
 const inputClass =
   "rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
 
 function NewEntry() {
-  const { account_id: presetAccountId } = Route.useSearch();
+  const {
+    account_id: presetAccountId,
+    recurring_transaction_id: recurringTransactionId,
+  } = Route.useSearch();
   const { t } = useTranslation();
   const navigate = useNavigate();
 
@@ -60,6 +77,9 @@ function NewEntry() {
   const [counterparties, setCounterparties] = useState<string[]>([]);
   const [location, setLocation] = useState("");
   const [tagNames, setTagNames] = useState<string[]>([]);
+  const [recurringAccountId, setRecurringAccountId] = useState<
+    string | undefined
+  >(undefined);
 
   const [invalidField, setInvalidField] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -76,10 +96,43 @@ function NewEntry() {
       setCategories(c.data ?? []);
       setTags(tg.data ?? []);
       setCounterparties(cp.data ?? []);
+
+      // Prefilling from a recurring transaction's "Create transaction"
+      // action — never automatic, always the result of that click (see
+      // web-client-recurring-transactions). Every field stays editable
+      // afterward; only the account is locked, since a different account
+      // would make recurring_transaction_id invalid (it must name a
+      // recurring transaction on the entry's own account).
+      if (recurringTransactionId) {
+        api
+          .GET("/api/recurring-transactions/{id}", {
+            params: { path: { id: recurringTransactionId } },
+          })
+          .then(({ data: rt }) => {
+            if (!rt) return;
+            setRecurringAccountId(rt.account_id);
+            setAccountId(rt.account_id);
+            setTransactionNegative(rt.amount < 0);
+            setTransactionAmount(amountToInput(Math.abs(rt.amount)));
+            setTitle(rt.title);
+            setDescription(rt.description ?? "");
+            setCategoryId(rt.category_id ?? "");
+            setCounterparty(rt.counterparty ?? "");
+            setLocation(rt.location ?? "");
+            setBookingTimestamp(dateOnlyToLocalInput(rt.next_suggested_date));
+            const allTags = tg.data ?? [];
+            setTagNames(
+              rt.tag_ids
+                .map((tid) => allTags.find((tag) => tag.id === tid)?.name)
+                .filter((name): name is string => Boolean(name)),
+            );
+          });
+      }
     });
-  }, []);
+  }, [recurringTransactionId]);
 
   const account = accounts.find((a) => a.id === accountId);
+  const lockedAccountId = presetAccountId ?? recurringAccountId;
   // A new entry never starts with a category, so a disabled one is simply
   // never offered — unlike editing, there's no existing value to preserve.
   // A category shared at view tier only is excluded too — it can be
@@ -150,6 +203,7 @@ function NewEntry() {
         ...compact({
           description: description.trim() || undefined,
           category_id: categoryId || undefined,
+          recurring_transaction_id: recurringTransactionId,
           ...(kind === "transaction"
             ? {
                 counterparty: counterparty.trim() || undefined,
@@ -180,7 +234,7 @@ function NewEntry() {
             value={accountId}
             onChange={(e) => setAccountId(e.target.value)}
             className={inputClass}
-            disabled={presetAccountId !== undefined}
+            disabled={lockedAccountId !== undefined}
             required
           >
             <option value="" disabled>

@@ -37,13 +37,15 @@ const entryCols = `id::text, created_by::text, account_id::text, kind, amount, b
 	COALESCE(description, ''), category_id::text, COALESCE(counterparty, ''), COALESCE(location, ''), created_at, updated_at,
 	COALESCE((SELECT array_agg(tag_id::text) FROM entry_tags WHERE entry_id = entries.id), '{}'),
 	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = entries.created_by), ''),
-	COALESCE((SELECT currency FROM accounts WHERE accounts.id = entries.account_id), '')`
+	COALESCE((SELECT currency FROM accounts WHERE accounts.id = entries.account_id), ''),
+	recurring_transaction_id::text`
 
 func scanEntry(row pgx.Row) (entry.Entry, error) {
 	var e entry.Entry
 	var kind string
 	err := row.Scan(&e.ID, &e.CreatedBy, &e.AccountID, &kind, &e.Amount, &e.Balance, &e.BookingTimestamp, &e.Title,
-		&e.Description, &e.CategoryID, &e.Counterparty, &e.Location, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName, &e.AccountCurrency)
+		&e.Description, &e.CategoryID, &e.Counterparty, &e.Location, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName, &e.AccountCurrency,
+		&e.RecurringTransactionID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return entry.Entry{}, entry.ErrNotFound
 	}
@@ -88,10 +90,10 @@ func (s *EntryStore) Create(ctx context.Context, createdBy string, in entry.New)
 	var id int64
 	var bookingTS time.Time
 	err = tx.QueryRow(ctx, `
-		INSERT INTO entries (created_by, account_id, kind, amount, balance_reading, booking_timestamp, title, description, category_id, counterparty, location)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF($11, ''))
+		INSERT INTO entries (created_by, account_id, kind, amount, balance_reading, booking_timestamp, title, description, category_id, counterparty, location, recurring_transaction_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF($11, ''), $12)
 		RETURNING id, booking_timestamp`,
-		createdBy, in.AccountID, string(in.Kind), amount, in.Balance, in.BookingTimestamp, in.Title, in.Description, in.CategoryID, in.Counterparty, in.Location,
+		createdBy, in.AccountID, string(in.Kind), amount, in.Balance, in.BookingTimestamp, in.Title, in.Description, in.CategoryID, in.Counterparty, in.Location, in.RecurringTransactionID,
 	).Scan(&id, &bookingTS)
 	if isForeignKeyViolation(err) || isCheckViolation(err) {
 		return entry.Entry{}, entry.ErrInvalidValue
@@ -168,20 +170,27 @@ func (s *EntryStore) Update(ctx context.Context, id string, upd entry.Update) (e
 		categorySet = true
 		categoryID = upd.CategoryID.Value
 	}
+	var recurringSet bool
+	var recurringID *string
+	if upd.RecurringTransactionID.Set {
+		recurringSet = true
+		recurringID = upd.RecurringTransactionID.Value
+	}
 	tag, err := tx.Exec(ctx, `
 		UPDATE entries SET
-			account_id        = COALESCE($2, account_id),
-			amount            = COALESCE($3, amount),
-			balance_reading   = COALESCE($4, balance_reading),
-			booking_timestamp = COALESCE($5, booking_timestamp),
-			title             = COALESCE($6, title),
-			description       = COALESCE($7, description),
-			category_id       = CASE WHEN $8 THEN $9 ELSE category_id END,
-			counterparty      = COALESCE($10, counterparty),
-			location          = COALESCE($11, location),
-			updated_at        = now()
+			account_id                = COALESCE($2, account_id),
+			amount                    = COALESCE($3, amount),
+			balance_reading           = COALESCE($4, balance_reading),
+			booking_timestamp         = COALESCE($5, booking_timestamp),
+			title                     = COALESCE($6, title),
+			description               = COALESCE($7, description),
+			category_id               = CASE WHEN $8 THEN $9 ELSE category_id END,
+			counterparty              = COALESCE($10, counterparty),
+			location                  = COALESCE($11, location),
+			recurring_transaction_id  = CASE WHEN $12 THEN $13 ELSE recurring_transaction_id END,
+			updated_at                = now()
 		WHERE id = $1 AND deleted_at IS NULL`,
-		eid, upd.AccountID, upd.Amount, upd.Balance, upd.BookingTimestamp, upd.Title, upd.Description, categorySet, categoryID, upd.Counterparty, upd.Location,
+		eid, upd.AccountID, upd.Amount, upd.Balance, upd.BookingTimestamp, upd.Title, upd.Description, categorySet, categoryID, upd.Counterparty, upd.Location, recurringSet, recurringID,
 	)
 	if isForeignKeyViolation(err) || isCheckViolation(err) {
 		return entry.Entry{}, entry.ErrInvalidValue
@@ -610,6 +619,32 @@ func (s *EntryStore) ListInUseCounterparties(ctx context.Context, ownerID string
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// LatestBookingTimeByRecurringTransaction implements entry.Store's
+// LatestBookingTimeByRecurringTransaction: the highest booking_timestamp
+// among recurringTransactionID's non-deleted linked entries, or nil.
+func (s *EntryStore) LatestBookingTimeByRecurringTransaction(ctx context.Context, recurringTransactionID string) (*time.Time, error) {
+	var latest *time.Time
+	err := s.pool.QueryRow(ctx, `
+		SELECT MAX(booking_timestamp) FROM entries
+		WHERE recurring_transaction_id = $1 AND deleted_at IS NULL`,
+		recurringTransactionID,
+	).Scan(&latest)
+	return latest, err
+}
+
+// CountByRecurringTransaction implements entry.Store's
+// CountByRecurringTransaction: the number of recurringTransactionID's
+// non-deleted linked entries.
+func (s *EntryStore) CountByRecurringTransaction(ctx context.Context, recurringTransactionID string) (int, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM entries
+		WHERE recurring_transaction_id = $1 AND deleted_at IS NULL`,
+		recurringTransactionID,
+	).Scan(&count)
+	return count, err
 }
 
 func isCheckViolation(err error) bool {

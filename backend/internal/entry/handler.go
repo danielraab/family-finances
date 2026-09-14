@@ -55,30 +55,32 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h.mux.ServeHTTP(w, r) }
 
 type entryCreateBody struct {
-	AccountID        *string    `json:"account_id"`
-	Kind             *string    `json:"kind"`
-	Amount           *int64     `json:"amount"`
-	Balance          *int64     `json:"balance"`
-	BookingTimestamp *time.Time `json:"booking_timestamp"`
-	Title            *string    `json:"title"`
-	Description      *string    `json:"description"`
-	CategoryID       *string    `json:"category_id"`
-	Counterparty     *string    `json:"counterparty"`
-	Location         *string    `json:"location"`
-	TagIDs           []string   `json:"tag_ids"`
+	AccountID              *string    `json:"account_id"`
+	Kind                   *string    `json:"kind"`
+	Amount                 *int64     `json:"amount"`
+	Balance                *int64     `json:"balance"`
+	BookingTimestamp       *time.Time `json:"booking_timestamp"`
+	Title                  *string    `json:"title"`
+	Description            *string    `json:"description"`
+	CategoryID             *string    `json:"category_id"`
+	Counterparty           *string    `json:"counterparty"`
+	Location               *string    `json:"location"`
+	TagIDs                 []string   `json:"tag_ids"`
+	RecurringTransactionID *string    `json:"recurring_transaction_id"`
 }
 
 type entryUpdateBody struct {
-	AccountID        *string    `json:"account_id"`
-	Amount           *int64     `json:"amount"`
-	Balance          *int64     `json:"balance"`
-	BookingTimestamp *time.Time `json:"booking_timestamp"`
-	Title            *string    `json:"title"`
-	Description      *string    `json:"description"`
-	CategoryID       OptionalID `json:"category_id"`
-	Counterparty     *string    `json:"counterparty"`
-	Location         *string    `json:"location"`
-	TagIDs           *[]string  `json:"tag_ids"`
+	AccountID              *string    `json:"account_id"`
+	Amount                 *int64     `json:"amount"`
+	Balance                *int64     `json:"balance"`
+	BookingTimestamp       *time.Time `json:"booking_timestamp"`
+	Title                  *string    `json:"title"`
+	Description            *string    `json:"description"`
+	CategoryID             OptionalID `json:"category_id"`
+	Counterparty           *string    `json:"counterparty"`
+	Location               *string    `json:"location"`
+	TagIDs                 *[]string  `json:"tag_ids"`
+	RecurringTransactionID OptionalID `json:"recurring_transaction_id"`
 }
 
 type entryPage struct {
@@ -119,6 +121,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if body.Location != nil {
 		in.Location = *body.Location
 	}
+	in.RecurringTransactionID = body.RecurringTransactionID
 
 	e, err := h.svc.Create(r.Context(), user.ID, in)
 	if err != nil {
@@ -154,16 +157,17 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upd := Update{
-		AccountID:        body.AccountID,
-		Amount:           body.Amount,
-		Balance:          body.Balance,
-		BookingTimestamp: body.BookingTimestamp,
-		Title:            body.Title,
-		Description:      body.Description,
-		CategoryID:       body.CategoryID,
-		Counterparty:     body.Counterparty,
-		Location:         body.Location,
-		TagIDs:           body.TagIDs,
+		AccountID:              body.AccountID,
+		Amount:                 body.Amount,
+		Balance:                body.Balance,
+		BookingTimestamp:       body.BookingTimestamp,
+		Title:                  body.Title,
+		Description:            body.Description,
+		CategoryID:             body.CategoryID,
+		Counterparty:           body.Counterparty,
+		Location:               body.Location,
+		TagIDs:                 body.TagIDs,
+		RecurringTransactionID: body.RecurringTransactionID,
 	}
 	e, err := h.svc.Update(r.Context(), user.ID, r.PathValue("id"), upd)
 	if err != nil {

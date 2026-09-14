@@ -746,6 +746,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recurring-transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the caller's recurring transactions */
+        get: operations["getRecurringTransactions"];
+        put?: never;
+        /**
+         * Create a recurring transaction
+         * @description 422 when account_id does not name an account the caller can append to, or names a disabled account.
+         */
+        post: operations["postRecurringTransactions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/recurring-transactions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a recurring transaction */
+        get: operations["getRecurringTransaction"];
+        put?: never;
+        post?: never;
+        /**
+         * Soft-delete a recurring transaction
+         * @description 409 while one or more non-deleted entries reference this recurring transaction (recurring_transaction_id) — it must be unlinked from every entry first. One-way — there is no undelete endpoint.
+         */
+        delete: operations["deleteRecurringTransaction"];
+        options?: never;
+        head?: never;
+        /** Update a recurring transaction */
+        patch: operations["patchRecurringTransaction"];
+        trace?: never;
+    };
+    "/api/recurring-transactions/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sum the caller's matching recurring transactions' per-year amounts, per currency
+         * @description Accepts the same account_id filter as GET /api/recurring-transactions. Excludes any recurring transaction whose ends_on is before the current date (in the caller's resolved timezone) from the total.
+         */
+        get: operations["getRecurringTransactionsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -1130,6 +1193,8 @@ export interface components {
             kind: components["schemas"]["EntryKind"];
             /** @description A free-text location — accepted only when kind is transaction, rejected (400) on a balance_adjustment. Never parsed or validated by the backend: it may hold a typed address, or a JSON string `{"lat":<number>,"lng":<number>}` produced by device GPS or a map pin, at the client's discretion. */
             location?: string;
+            /** @description The recurring transaction this entry was created from or has been linked to, or null. Always on the same account_id as this entry. */
+            recurring_transaction_id?: string | null;
             tag_ids: string[];
             title: string;
             /** Format: date-time */
@@ -1157,6 +1222,8 @@ export interface components {
             kind: components["schemas"]["EntryKind"];
             /** @description Accepted only for kind=transaction; must be omitted otherwise. */
             location?: string;
+            /** @description Must name a recurring transaction on the same account_id as account_id above. */
+            recurring_transaction_id?: string;
             tag_ids?: string[];
             title: string;
         };
@@ -1185,6 +1252,8 @@ export interface components {
             counterparty?: string;
             description?: string;
             location?: string;
+            /** @description Must name a recurring transaction on the same account_id as this entry (its current one, or the account_id also set in this same request). Explicit null clears the link. */
+            recurring_transaction_id?: string | null;
             /** @description Replaces the full set, including clearing it with []. */
             tag_ids?: string[];
             title?: string;
@@ -1203,6 +1272,11 @@ export interface components {
              */
             period: string;
         };
+        /**
+         * @description Combined with interval_count to mean "every interval_count interval_units" — there is no separate named frequency value. Quarterly is interval_unit=month, interval_count=3; yearly is interval_unit=year, interval_count=1.
+         * @enum {string}
+         */
+        IntervalUnit: "day" | "week" | "month" | "year";
         Invite: {
             /** Format: date-time */
             accepted_at: string | null;
@@ -1235,6 +1309,90 @@ export interface components {
         ProfileUpdate: {
             /** @description The user's full name. Trimmed of surrounding whitespace before it is stored; the trimmed value must match `^[\p{L} .'-]{0,150}$` (Unicode letters, spaces, `.`, `'`, `-`). An empty string is accepted and clears the name. */
             display_name: string;
+        };
+        RecurringTransaction: {
+            /** @description The currency of account_id, resolved server-side — mirrors Entry's account_currency. */
+            account_currency?: string;
+            account_id: string;
+            /**
+             * Format: int64
+             * @description The signed amount at the same fixed 4-decimal-place scale as an Entry's amount — what is booked each occurrence, before the per_year_amount multiplier.
+             */
+            amount: number;
+            category_id: string;
+            counterparty?: string;
+            /** Format: date-time */
+            created_at: string;
+            created_by: string;
+            created_by_name?: string;
+            description?: string;
+            /** @description True when ends_on is at or before the current date, in the caller's resolved timezone. Never blocks reads or writes — only affects this flag and exclusion from GET /api/recurring-transactions/summary's total. */
+            ended: boolean;
+            /** Format: date */
+            ends_on?: string | null;
+            id: string;
+            /** @description Positive integer — "every interval_count interval_units". */
+            interval_count: number;
+            interval_unit: components["schemas"]["IntervalUnit"];
+            /** @description The number of non-deleted entries currently linked to this recurring transaction, computed server-side. A non-zero value means DELETE will be rejected (409) until every linked entry is unlinked. */
+            linked_entry_count: number;
+            location?: string;
+            /**
+             * Format: date
+             * @description Computed server-side, never stored: the latest non-deleted linked entry's booking_timestamp advanced by one recurrence interval, or starts_on when there is no linked entry yet.
+             */
+            next_suggested_date: string;
+            /**
+             * Format: int64
+             * @description Computed server-side from amount and the recurrence rule, never stored: 12/interval_count for month, 1/interval_count for year (both exact), 365.25/(7*interval_count) for week, and 365.25/interval_count for day.
+             */
+            per_year_amount: number;
+            /** Format: date */
+            starts_on: string;
+            tag_ids: string[];
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RecurringTransactionCreate: {
+            account_id: string;
+            /** Format: int64 */
+            amount: number;
+            category_id: string;
+            counterparty?: string;
+            description?: string;
+            /**
+             * Format: date
+             * @description Must not be before starts_on.
+             */
+            ends_on?: string;
+            interval_count: number;
+            interval_unit: components["schemas"]["IntervalUnit"];
+            location?: string;
+            /** Format: date */
+            starts_on: string;
+            tag_ids?: string[];
+            title: string;
+        };
+        RecurringTransactionUpdate: {
+            account_id?: string;
+            /** Format: int64 */
+            amount?: number;
+            category_id?: string;
+            counterparty?: string;
+            description?: string;
+            /**
+             * Format: date
+             * @description Explicit null clears it.
+             */
+            ends_on?: string | null;
+            interval_count?: number;
+            interval_unit?: components["schemas"]["IntervalUnit"];
+            location?: string;
+            /** Format: date */
+            starts_on?: string;
+            tag_ids?: string[];
+            title?: string;
         };
         StatusOk: {
             /** @enum {string} */
@@ -1377,6 +1535,7 @@ export interface components {
     parameters: {
         AccountId: string;
         EntryId: string;
+        RecurringTransactionId: string;
         ShareUserId: string;
     };
     requestBodies: never;
@@ -2772,6 +2931,158 @@ export interface operations {
                     "application/yaml": string;
                 };
             };
+        };
+    };
+    getRecurringTransactions: {
+        parameters: {
+            query?: {
+                /** @description Repeatable. Omitted means every non-deleted account the caller has any permission on. */
+                account_id?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every matching recurring transaction. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringTransaction"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    postRecurringTransactions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecurringTransactionCreate"];
+            };
+        };
+        responses: {
+            /** @description The created recurring transaction. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringTransaction"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getRecurringTransaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecurringTransactionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The recurring transaction. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringTransaction"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteRecurringTransaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecurringTransactionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The recurring transaction is soft-deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    patchRecurringTransaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RecurringTransactionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecurringTransactionUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated recurring transaction. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringTransaction"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getRecurringTransactionsSummary: {
+        parameters: {
+            query?: {
+                /** @description Repeatable. Omitted means every non-deleted account the caller has any permission on. */
+                account_id?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The matching, non-ended recurring transactions' per_year_amount, summed per currency. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntrySummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     getSettings: {

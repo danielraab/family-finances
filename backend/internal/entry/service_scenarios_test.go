@@ -1549,3 +1549,121 @@ func TestListInUseCounterpartiesExcludesSoftDeletedEntries(t *testing.T) {
 		t.Fatalf("ListInUseCounterparties = %v, want [Rewe]", got)
 	}
 }
+
+func TestCreateLinkedToRecurringTransactionOnSameAccount(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	recurring := newStubRecurringTransactions()
+	recurring.add("rt1", "acc1")
+	svc.SetRecurringTransactionLookup(recurring)
+
+	e, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Netflix", CategoryID: ptr("cat1"),
+		RecurringTransactionID: ptr("rt1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.RecurringTransactionID == nil || *e.RecurringTransactionID != "rt1" {
+		t.Fatalf("RecurringTransactionID = %v, want rt1", e.RecurringTransactionID)
+	}
+}
+
+func TestCreateLinkedToRecurringTransactionOnDifferentAccountRejected(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	categories.add("cat1")
+	recurring := newStubRecurringTransactions()
+	recurring.add("rt1", "acc2") // on a different account than the entry
+	svc.SetRecurringTransactionLookup(recurring)
+
+	_, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Netflix", CategoryID: ptr("cat1"),
+		RecurringTransactionID: ptr("rt1"),
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestCreateLinkedToRecurringTransactionWithoutLookupWiredRejected(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	// No SetRecurringTransactionLookup call — must fail closed, not panic.
+
+	_, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Netflix", CategoryID: ptr("cat1"),
+		RecurringTransactionID: ptr("rt1"),
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateLinkingRecurringTransactionCrossAccountRejected(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	categories.add("cat1")
+	recurring := newStubRecurringTransactions()
+	recurring.add("rt1", "acc2")
+	svc.SetRecurringTransactionLookup(recurring)
+
+	created, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Netflix", CategoryID: ptr("cat1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = svc.Update(context.Background(), "u1", created.ID, entry.Update{
+		RecurringTransactionID: entry.OptionalID{Set: true, Value: ptr("rt1")},
+	})
+	if !errors.Is(err, entry.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateLinkingAndUnlinkingExistingEntry(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	recurring := newStubRecurringTransactions()
+	recurring.add("rt1", "acc1")
+	svc.SetRecurringTransactionLookup(recurring)
+
+	created, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Netflix", CategoryID: ptr("cat1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	linked, err := svc.Update(context.Background(), "u1", created.ID, entry.Update{
+		RecurringTransactionID: entry.OptionalID{Set: true, Value: ptr("rt1")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linked.RecurringTransactionID == nil || *linked.RecurringTransactionID != "rt1" {
+		t.Fatalf("RecurringTransactionID = %v, want rt1", linked.RecurringTransactionID)
+	}
+
+	unlinked, err := svc.Update(context.Background(), "u1", created.ID, entry.Update{
+		RecurringTransactionID: entry.OptionalID{Set: true, Value: nil},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unlinked.RecurringTransactionID != nil {
+		t.Fatalf("RecurringTransactionID after unlink = %v, want nil", unlinked.RecurringTransactionID)
+	}
+}

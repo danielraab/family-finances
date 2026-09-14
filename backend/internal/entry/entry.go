@@ -113,24 +113,32 @@ func (m CategoryMode) valid() bool {
 // JSON-encoded {"lat":…,"lng":…} coordinate string, and deciding which is
 // a frontend concern (see design.md of add-entry-counterparty-location).
 type Entry struct {
-	ID               string     `json:"id"`
-	AccountID        string     `json:"account_id"`
-	AccountCurrency  string     `json:"account_currency,omitempty"`
-	Kind             Kind       `json:"kind"`
-	Amount           int64      `json:"amount"`
-	Balance          *int64     `json:"balance,omitempty"`
-	BookingTimestamp time.Time  `json:"booking_timestamp"`
-	Title            string     `json:"title"`
-	Description      string     `json:"description,omitempty"`
-	CategoryID       *string    `json:"category_id,omitempty"`
-	Counterparty     string     `json:"counterparty,omitempty"`
-	Location         string     `json:"location,omitempty"`
-	TagIDs           []string   `json:"tag_ids"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
-	CreatedBy        string     `json:"created_by"`
-	CreatedByName    string     `json:"created_by_name,omitempty"`
-	DeletedAt        *time.Time `json:"-"`
+	ID               string    `json:"id"`
+	AccountID        string    `json:"account_id"`
+	AccountCurrency  string    `json:"account_currency,omitempty"`
+	Kind             Kind      `json:"kind"`
+	Amount           int64     `json:"amount"`
+	Balance          *int64    `json:"balance,omitempty"`
+	BookingTimestamp time.Time `json:"booking_timestamp"`
+	Title            string    `json:"title"`
+	Description      string    `json:"description,omitempty"`
+	CategoryID       *string   `json:"category_id,omitempty"`
+	Counterparty     string    `json:"counterparty,omitempty"`
+	Location         string    `json:"location,omitempty"`
+	TagIDs           []string  `json:"tag_ids"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	CreatedBy        string    `json:"created_by"`
+	CreatedByName    string    `json:"created_by_name,omitempty"`
+	// RecurringTransactionID is the recurring transaction this entry was
+	// created from or has been linked to, or nil. See design.md of
+	// add-recurring-transactions: settable at creation or via update
+	// (RecurringTransactionLookup.SameAccount is consulted whenever it is
+	// newly set, requiring it to name a recurring transaction on this
+	// entry's own AccountID), and never touched by an update that doesn't
+	// supply it.
+	RecurringTransactionID *string    `json:"recurring_transaction_id,omitempty"`
+	DeletedAt              *time.Time `json:"-"`
 }
 
 // Permission mirrors internal/account's four-tier model as plain values so
@@ -209,6 +217,9 @@ type New struct {
 	Counterparty     string
 	Location         string
 	TagIDs           []string
+	// RecurringTransactionID, when set, must name a recurring transaction
+	// on this same AccountID — see RecurringTransactionLookup.SameAccount.
+	RecurringTransactionID *string
 }
 
 // Update is a partial change to an entry. Kind is deliberately absent — it
@@ -232,6 +243,11 @@ type Update struct {
 	Counterparty     *string
 	Location         *string
 	TagIDs           *[]string
+	// RecurringTransactionID uses the same OptionalID trick as CategoryID:
+	// absent (Set false) leaves the link untouched; explicit null clears
+	// it; a value links to (or re-links) a recurring transaction on this
+	// entry's (possibly also-updated) AccountID.
+	RecurringTransactionID OptionalID
 }
 
 // Cursor is the keyset position of the last row of a previous page: the

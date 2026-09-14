@@ -22,6 +22,7 @@ type Account = components["schemas"]["Account"];
 type Category = components["schemas"]["Category"];
 type Tag = components["schemas"]["Tag"];
 type Entry = components["schemas"]["Entry"];
+type RecurringTransaction = components["schemas"]["RecurringTransaction"];
 
 export const Route = createFileRoute("/entries/$entryId/edit")({
   component: EditEntry,
@@ -62,6 +63,10 @@ function EditEntry() {
   const [accountUnlocked, setAccountUnlocked] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [pendingAmount, setPendingAmount] = useState<number | null>(null);
+  const [recurringTransactionId, setRecurringTransactionId] = useState("");
+  const [recurringOptions, setRecurringOptions] = useState<
+    RecurringTransaction[]
+  >([]);
 
   const [invalidField, setInvalidField] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -100,6 +105,7 @@ function EditEntry() {
         setCounterparty(e.counterparty ?? "");
         setLocation(e.location ?? "");
         setSelectedAccountId(e.account_id);
+        setRecurringTransactionId(e.recurring_transaction_id ?? "");
         setTagNames(
           e.tag_ids
             .map((id) => allTags.find((tag) => tag.id === id)?.name)
@@ -117,6 +123,24 @@ function EditEntry() {
     };
   }, [entryId]);
 
+  // Offers only recurring transactions on the entry's current (possibly
+  // pending, if unlocked) account — a link across accounts is rejected
+  // server-side, so it's never offered here.
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    let cancelled = false;
+    api
+      .GET("/api/recurring-transactions", {
+        params: { query: { account_id: [selectedAccountId] } },
+      })
+      .then(({ data }) => {
+        if (!cancelled) setRecurringOptions(data ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAccountId]);
+
   async function performSubmit(parsedAmount: number) {
     if (!entry) return;
     setConfirmingAccountChange(false);
@@ -132,6 +156,7 @@ function EditEntry() {
         title: title.trim(),
         category_id: categoryId || null,
         tag_ids: tagIds,
+        recurring_transaction_id: recurringTransactionId || null,
         ...(entry.kind === "transaction"
           ? { amount: parsedAmount }
           : { balance: parsedAmount }),
@@ -504,6 +529,24 @@ function EditEntry() {
               )}
             />
           </div>
+
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.linkedRecurringTransaction")}
+            <select
+              value={recurringTransactionId}
+              onChange={(e) => setRecurringTransactionId(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">
+                {t("entries.form.linkedRecurringTransactionNone")}
+              </option>
+              {recurringOptions.map((rt) => (
+                <option key={rt.id} value={rt.id}>
+                  {rt.title}
+                </option>
+              ))}
+            </select>
+          </label>
 
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
