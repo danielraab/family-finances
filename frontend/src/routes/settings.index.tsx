@@ -13,8 +13,10 @@ export const Route = createFileRoute("/settings/")({
 
 type UserSettings = components["schemas"]["UserSettings"];
 type Language = UserSettings["language"];
+type WeekStart = UserSettings["week_start"];
 
 const LANGUAGES: Language[] = ["en", "de"];
+const WEEK_STARTS: WeekStart[] = ["monday", "sunday"];
 
 /** Feature-detects Intl.supportedValuesOf, absent from older engines. */
 function listTimezones(): string[] {
@@ -236,6 +238,29 @@ function ProfileSettingsTab() {
           {[0, 1, 2, 3, 4].map((n) => (
             <option key={n} value={n}>
               {n}
+            </option>
+          ))}
+        </select>
+      </SettingField>
+
+      <SettingField
+        id="settings-week-start"
+        label={t("settings.profile.weekStart")}
+        error={
+          errorField === "week_start" ? t("settings.profile.saveError") : null
+        }
+      >
+        <select
+          id="settings-week-start"
+          value={settings.week_start}
+          onChange={(event) =>
+            update({ week_start: event.target.value as NonNullable<WeekStart> })
+          }
+          className={inputClass}
+        >
+          {WEEK_STARTS.map((day) => (
+            <option key={day} value={day}>
+              {t(`settings.profile.weekStartOption.${day}`)}
             </option>
           ))}
         </select>

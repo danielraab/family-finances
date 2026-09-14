@@ -4,7 +4,8 @@
 
 The authenticated /settings page: the sidebar link to it, its auth gate,
 its Profile tab (full name plus
-language/timezone/default-currency/displayed-decimal-places preferences), its My
+language/timezone/default-currency/displayed-decimal-places/week-start
+preferences), its My
 Invitations tab (every authenticated visitor's own sent invitations, with
 revoke), and its admin-only Users tab (list/invite/disable/enable/delete/revoke).
 See `user-settings` and `user-administration` for the backend capabilities the
@@ -44,13 +45,14 @@ that would flash before the redirect-or-render decision is made.
 ### Requirement: Profile tab
 
 The settings page SHALL default to a **Profile** tab, visible to every
-authenticated visitor, containing five controls: the visitor's display name (a
-free-text field), display language (English/German), timezone (populated from
-the browser's supported IANA zones), default currency (a three-letter code,
-validated client-side to that shape), and displayed decimal places (an integer
-from 0 to 4). The tab's label SHALL come from the `settings.tabs.profile` i18n
-key and its field strings from the `settings.profile.*` namespace, in both the
-`en` and `de` locale files; the route SHALL remain the `/settings` index.
+authenticated visitor, containing six controls: the visitor's display name
+(a free-text field), display language (English/German), timezone (populated
+from the browser's supported IANA zones), default currency (a three-letter
+code, validated client-side to that shape), displayed decimal places (an
+integer from 0 to 4), and week start (Monday or Sunday). The tab's label
+SHALL come from the `settings.tabs.profile` i18n key and its field strings
+from the `settings.profile.*` namespace, in both the `en` and `de` locale
+files; the route SHALL remain the `/settings` index.
 
 The name control SHALL save on blur, calling `PATCH /api/auth/me` with
 `{ "display_name": <value> }`, with no separate save action. On a successful
@@ -58,7 +60,7 @@ save the client SHALL update the shared `useAuth` user so the sidebar user
 control reflects the new name without a page reload. On a failed save (for
 example a `400` from a value the backend rejects) the field SHALL revert to the
 last saved value and surface an error, matching the default-currency field's
-revert-on-error behaviour. The other four controls SHALL each save on change,
+revert-on-error behaviour. The other five controls SHALL each save on change,
 calling `PUT /api/settings` with only that field, with no separate save action.
 Changing the language control SHALL also switch the running app's language
 immediately, without a reload.
@@ -88,7 +90,7 @@ immediately, without a reload.
 
 - **WHEN** an authenticated visitor changes only the timezone control
 - **THEN** the request updates only `timezone`, leaving the name, language,
-  default currency, and displayed decimal places as they were
+  default currency, displayed decimal places, and week start as they were
 
 #### Scenario: Changing displayed decimal places
 
@@ -98,6 +100,14 @@ immediately, without a reload.
   `{ "displayed_decimal_places": 0 }`, and amounts shown elsewhere in the
   client (account balances, entry lists) subsequently round to whole
   numbers
+
+#### Scenario: Changing week start
+
+- **WHEN** an authenticated visitor on the Profile tab changes the week
+  start control to "Sunday"
+- **THEN** `PUT /api/settings` is called with `{ "week_start": "sunday" }`,
+  and week-anchored date-range presets on `/entries` and `/reports`
+  subsequently use Sunday as the start of the week
 
 ### Requirement: Users tab is admin-only
 

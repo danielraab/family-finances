@@ -20,10 +20,14 @@ const (
 	DefaultDisplayedDecimalPlaces = 2
 	MinDisplayedDecimalPlaces     = 0
 	MaxDisplayedDecimalPlaces     = 4
+	DefaultWeekStart              = "monday"
 )
 
 // SupportedLanguages mirrors the client's web-client-i18n language set.
 var SupportedLanguages = map[string]bool{"en": true, "de": true}
+
+// SupportedWeekStarts is the only two valid week_start values.
+var SupportedWeekStarts = map[string]bool{"monday": true, "sunday": true}
 
 var currencyShape = regexp.MustCompile(`^[A-Z]{3}$`)
 
@@ -34,6 +38,7 @@ type Row struct {
 	Timezone               *string
 	DefaultCurrency        *string
 	DisplayedDecimalPlaces *int
+	WeekStart              *string
 }
 
 // Update is a partial change: only non-nil fields are applied.
@@ -42,6 +47,7 @@ type Update struct {
 	Timezone               *string
 	DefaultCurrency        *string
 	DisplayedDecimalPlaces *int
+	WeekStart              *string
 }
 
 // Settings is a user's fully-resolved preferences — every field always
@@ -51,6 +57,7 @@ type Settings struct {
 	Timezone               string `json:"timezone"`
 	DefaultCurrency        string `json:"default_currency"`
 	DisplayedDecimalPlaces int    `json:"displayed_decimal_places"`
+	WeekStart              string `json:"week_start"`
 }
 
 // Resolve substitutes the hardcoded defaults for any unset field in row.
@@ -60,6 +67,7 @@ func Resolve(row Row) Settings {
 		Timezone:               DefaultTimezone,
 		DefaultCurrency:        DefaultDefaultCurrency,
 		DisplayedDecimalPlaces: DefaultDisplayedDecimalPlaces,
+		WeekStart:              DefaultWeekStart,
 	}
 	if row.Language != nil {
 		s.Language = *row.Language
@@ -72,6 +80,9 @@ func Resolve(row Row) Settings {
 	}
 	if row.DisplayedDecimalPlaces != nil {
 		s.DisplayedDecimalPlaces = *row.DisplayedDecimalPlaces
+	}
+	if row.WeekStart != nil {
+		s.WeekStart = *row.WeekStart
 	}
 	return s
 }
@@ -106,6 +117,14 @@ func ValidateCurrency(v string) error {
 // decimal digits than are ever stored would be meaningless.
 func ValidateDisplayedDecimalPlaces(v int) error {
 	if v < MinDisplayedDecimalPlaces || v > MaxDisplayedDecimalPlaces {
+		return ErrInvalidValue
+	}
+	return nil
+}
+
+// ValidateWeekStart accepts only "monday" or "sunday".
+func ValidateWeekStart(v string) error {
+	if !SupportedWeekStarts[v] {
 		return ErrInvalidValue
 	}
 	return nil

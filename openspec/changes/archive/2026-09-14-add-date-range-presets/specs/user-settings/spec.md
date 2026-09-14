@@ -1,15 +1,4 @@
-# user-settings Specification
-
-## Purpose
-
-Per-user preferences — display language, timezone, default currency,
-displayed decimal places, and week start — their storage shape,
-hardcoded-default resolution, validation, and the GET/PUT /api/settings
-endpoints. See
-`web-client-settings` for the client surface and `web-client-i18n` for how
-the language preference interacts with browser detection.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Per-user settings storage with hardcoded defaults
 

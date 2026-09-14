@@ -1467,6 +1467,11 @@ export interface components {
             /** @enum {string} */
             language: "en" | "de";
             timezone: string;
+            /**
+             * @description Which day a week starts on, used to anchor week-based date-range presets on the client.
+             * @enum {string}
+             */
+            week_start: "monday" | "sunday";
         };
         UserSettingsUpdate: {
             default_currency?: string;
@@ -1474,6 +1479,8 @@ export interface components {
             /** @enum {string} */
             language?: "en" | "de";
             timezone?: string;
+            /** @enum {string} */
+            week_start?: "monday" | "sunday";
         };
     };
     responses: {

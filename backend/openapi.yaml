@@ -2335,7 +2335,14 @@ components:
     UserSettings:
       type: object
       additionalProperties: false
-      required: [language, timezone, default_currency, displayed_decimal_places]
+      required:
+        [
+          language,
+          timezone,
+          default_currency,
+          displayed_decimal_places,
+          week_start,
+        ]
       properties:
         language:
           type: string
@@ -2352,6 +2359,12 @@ components:
             Display-only rounding preference — never affects how an amount
             is stored or edited (see account-entries' fixed 4-decimal-place
             storage).
+        week_start:
+          type: string
+          enum: [monday, sunday]
+          description: >-
+            Which day a week starts on, used to anchor week-based
+            date-range presets on the client.
 
     UserSettingsUpdate:
       type: object
@@ -2368,6 +2381,9 @@ components:
           type: integer
           minimum: 0
           maximum: 4
+        week_start:
+          type: string
+          enum: [monday, sunday]
 
     Error:
       type: object

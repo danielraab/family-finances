@@ -42,6 +42,9 @@ func (s *SettingsStore) Upsert(_ context.Context, userID string, upd settings.Up
 	if upd.DisplayedDecimalPlaces != nil {
 		row.DisplayedDecimalPlaces = upd.DisplayedDecimalPlaces
 	}
+	if upd.WeekStart != nil {
+		row.WeekStart = upd.WeekStart
+	}
 	s.rows[userID] = row
 	return row, nil
 }

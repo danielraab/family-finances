@@ -32,7 +32,7 @@ func TestPGSettingsGetMissingRowIsZeroValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if row.Language != nil || row.Timezone != nil || row.DefaultCurrency != nil {
+	if row.Language != nil || row.Timezone != nil || row.DefaultCurrency != nil || row.WeekStart != nil {
 		t.Fatalf("row = %+v, want all nil", row)
 	}
 }
@@ -75,6 +75,20 @@ func TestPGSettingsLanguageCheckConstraint(t *testing.T) {
 
 	if _, err := store.Upsert(ctx, u.ID, settings.Update{Language: ptr("fr")}); err == nil {
 		t.Fatal("expected the DB CHECK constraint to reject an unsupported language")
+	}
+}
+
+func TestPGSettingsWeekStartCheckConstraint(t *testing.T) {
+	store, authStore := newSettingsStore(t)
+	ctx := context.Background()
+
+	u, _, err := authStore.CreateUserWithIdentity(ctx, auth.NewUser{Email: "u2@example.com"}, emailIdentity("u2@example.com"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Upsert(ctx, u.ID, settings.Update{WeekStart: ptr("tuesday")}); err == nil {
+		t.Fatal("expected the DB CHECK constraint to reject an unsupported week_start")
 	}
 }
 

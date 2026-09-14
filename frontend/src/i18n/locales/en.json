@@ -97,6 +97,11 @@
       "timezone": "Timezone",
       "defaultCurrency": "Default currency",
       "displayedDecimalPlaces": "Displayed decimal places",
+      "weekStart": "Week starts on",
+      "weekStartOption": {
+        "monday": "Monday",
+        "sunday": "Sunday"
+      },
       "saveError": "Couldn't save — please try again."
     },
     "invite": {
@@ -258,6 +263,26 @@
         "leaveTitle": "Leave this shared account?",
         "leaveBody": "You'll immediately lose all access to this account, including to entries you created."
       }
+    }
+  },
+  "dateRangeFilter": {
+    "label": "Date range",
+    "placeholder": "All time",
+    "fromOnly": "From {{date}}",
+    "toOnly": "Until {{date}}",
+    "done": "Done",
+    "presets": {
+      "today": "Today",
+      "last7Days": "Last 7 days",
+      "last14Days": "Last 14 days",
+      "last30Days": "Last 30 days",
+      "thisWeek": "This week",
+      "lastWeek": "Last week",
+      "last2Weeks": "Last 2 weeks (this + last week)",
+      "thisMonth": "This month",
+      "lastMonth": "Last month",
+      "thisYear": "This year",
+      "custom": "Custom"
     }
   },
   "entries": {

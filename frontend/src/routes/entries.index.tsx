@@ -6,6 +6,7 @@ import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
+import { DateRangeFilter } from "../components/DateRangeFilter";
 import { LocationPreviewModal } from "../components/LocationPreviewModal";
 import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
 import { TagLabel } from "../components/TagLabel";
@@ -16,8 +17,10 @@ import {
 } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
+import { resolveEffectiveRange } from "../lib/dateRangePresets";
 import { type Coordinates, parseLocation } from "../lib/location";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
+import { useWeekStart } from "../lib/useWeekStart";
 
 type Account = components["schemas"]["Account"];
 type Category = components["schemas"]["Category"];
@@ -32,6 +35,7 @@ type EntriesSearch = {
   category_id?: string | undefined;
   tag_id?: string | undefined;
   kind?: EntryKind | undefined;
+  range?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
   q?: string | undefined;
@@ -40,6 +44,7 @@ type EntriesSearch = {
 };
 
 const PAGE_SIZE = 30;
+const DEFAULT_RANGE_PRESET = "last_2_weeks" as const;
 
 function asString(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" ? v : undefined;
@@ -55,6 +60,7 @@ export const Route = createFileRoute("/entries/")({
       search["kind"] === "balance_adjustment"
         ? search["kind"]
         : undefined,
+    range: asString(search["range"]),
     from: asString(search["from"]),
     to: asString(search["to"]),
     q: asString(search["q"]),
@@ -80,6 +86,13 @@ function EntriesListPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
+  const weekStart = useWeekStart();
+  const effectiveRange = resolveEffectiveRange(
+    { range: search.range, from: search.from, to: search.to },
+    weekStart,
+    DEFAULT_RANGE_PRESET,
+    new Date(),
+  );
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -108,7 +121,7 @@ function EntriesListPage() {
     });
   }, []);
 
-  const searchKey = JSON.stringify(search);
+  const searchKey = JSON.stringify({ ...search, weekStart });
 
   function buildQuery(after?: string) {
     return compact({
@@ -116,8 +129,8 @@ function EntriesListPage() {
       category_id: search.category_id,
       tag_id: search.tag_id,
       kind: search.kind,
-      from: search.from ? toRangeStart(search.from) : undefined,
-      to: search.to ? toRangeEnd(search.to) : undefined,
+      from: effectiveRange.from ? toRangeStart(effectiveRange.from) : undefined,
+      to: effectiveRange.to ? toRangeEnd(effectiveRange.to) : undefined,
       q: search.q,
       sort: search.sort ?? "booking_timestamp",
       dir: search.dir ?? "desc",
@@ -289,25 +302,14 @@ function EntriesListPage() {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("entries.filters.from")}
-          <input
-            type="date"
-            className={inputClass}
-            value={search.from ?? ""}
-            onChange={(e) => patchSearch({ from: e.target.value || undefined })}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("entries.filters.to")}
-          <input
-            type="date"
-            className={inputClass}
-            value={search.to ?? ""}
-            onChange={(e) => patchSearch({ to: e.target.value || undefined })}
-          />
-        </label>
+        <DateRangeFilter
+          value={{ range: search.range, from: search.from, to: search.to }}
+          weekStart={weekStart}
+          defaultPreset={DEFAULT_RANGE_PRESET}
+          onChange={(patch) => patchSearch(patch)}
+          fromLabel={t("entries.filters.from")}
+          toLabel={t("entries.filters.to")}
+        />
 
         <label className="flex flex-1 flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
           {t("entries.filters.search")}
@@ -541,8 +543,8 @@ function EntriesListPage() {
           search.category_id ||
           search.tag_id ||
           search.kind ||
-          search.from ||
-          search.to ||
+          effectiveRange.from ||
+          effectiveRange.to ||
           search.q
             ? t("entries.emptyFiltered")
             : t("entries.emptyAll")}

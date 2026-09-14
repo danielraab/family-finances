@@ -46,6 +46,11 @@ func (s *Service) Update(ctx context.Context, userID string, upd Update) (Settin
 			return Settings{}, err
 		}
 	}
+	if upd.WeekStart != nil {
+		if err := ValidateWeekStart(*upd.WeekStart); err != nil {
+			return Settings{}, err
+		}
+	}
 
 	row, err := s.store.Upsert(ctx, userID, upd)
 	if err != nil {

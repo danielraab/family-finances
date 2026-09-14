@@ -5,11 +5,14 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
+import { DateRangeFilter } from "../components/DateRangeFilter";
 import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
 import { amountColorClass, formatAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
+import { resolveEffectiveRange } from "../lib/dateRangePresets";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
+import { useWeekStart } from "../lib/useWeekStart";
 
 type Account = components["schemas"]["Account"];
 type Category = components["schemas"]["Category"];
@@ -22,6 +25,7 @@ type ReportsSearch = {
   include_subcategories?: boolean | undefined;
   tag_id?: string | undefined;
   account_id?: string | undefined;
+  range?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
 };
@@ -53,6 +57,7 @@ export const Route = createFileRoute("/reports")({
         : undefined,
     tag_id: asString(search["tag_id"]),
     account_id: asString(search["account_id"]),
+    range: asString(search["range"]),
     from: asString(search["from"]),
     to: asString(search["to"]),
   }),
@@ -108,6 +113,7 @@ function ReportsPage() {
   const routeNavigate = Route.useNavigate();
   const { t, i18n } = useTranslation();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
+  const weekStart = useWeekStart();
 
   useEffect(() => {
     if (status === "anonymous") {
@@ -216,27 +222,42 @@ function ReportsPage() {
   }
 
   function generateReport() {
+    const effective = resolveEffectiveRange(
+      { range: search.range, from: search.from, to: search.to },
+      weekStart,
+      undefined,
+      new Date(),
+    );
     setGeneratedFilter({
       categoryId: search.category_id,
       includeSubcategories: search.include_subcategories ?? true,
       tagId: search.tag_id,
       accountId: search.account_id,
-      from: search.from,
-      to: search.to,
+      from: effective.from,
+      to: effective.to,
     });
   }
 
   /** Whether the live filter controls have moved away from the filters the
    * displayed report was generated with — the signal for the "results are
-   * out of date" hint, not for re-fetching anything on its own. */
+   * out of date" hint, not for re-fetching anything on its own. `gf.from`/
+   * `gf.to` are the *resolved* dates a preset produced at generation time,
+   * so staleness compares against the live filter's own resolved dates,
+   * not its raw `range`/`from`/`to` representation. */
   function isStale(gf: GeneratedFilter, s: ReportsSearch): boolean {
+    const liveEffective = resolveEffectiveRange(
+      { range: s.range, from: s.from, to: s.to },
+      weekStart,
+      undefined,
+      new Date(),
+    );
     return (
       gf.categoryId !== s.category_id ||
       gf.includeSubcategories !== (s.include_subcategories ?? true) ||
       gf.tagId !== s.tag_id ||
       gf.accountId !== s.account_id ||
-      gf.from !== s.from ||
-      gf.to !== s.to
+      gf.from !== liveEffective.from ||
+      gf.to !== liveEffective.to
     );
   }
 
@@ -326,25 +347,13 @@ function ReportsPage() {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("reports.filters.from")}
-          <input
-            type="date"
-            className={inputClass}
-            value={search.from ?? ""}
-            onChange={(e) => patchSearch({ from: e.target.value || undefined })}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("reports.filters.to")}
-          <input
-            type="date"
-            className={inputClass}
-            value={search.to ?? ""}
-            onChange={(e) => patchSearch({ to: e.target.value || undefined })}
-          />
-        </label>
+        <DateRangeFilter
+          value={{ range: search.range, from: search.from, to: search.to }}
+          weekStart={weekStart}
+          onChange={(patch) => patchSearch(patch)}
+          fromLabel={t("reports.filters.from")}
+          toLabel={t("reports.filters.to")}
+        />
 
         <button
           type="button"

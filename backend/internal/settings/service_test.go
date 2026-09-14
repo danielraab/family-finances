@@ -18,7 +18,7 @@ func TestGetResolvesDefaultsForMissingRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2}
+	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2, WeekStart: "monday"}
 	if got != want {
 		t.Fatalf("Get = %+v, want %+v", got, want)
 	}
@@ -35,7 +35,7 @@ func TestUpdateOnlyChangesProvidedField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second update: %v", err)
 	}
-	want := settings.Settings{Language: "de", Timezone: "Europe/Vienna", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2}
+	want := settings.Settings{Language: "de", Timezone: "Europe/Vienna", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2, WeekStart: "monday"}
 	if got != want {
 		t.Fatalf("Get after two updates = %+v, want %+v", got, want)
 	}
@@ -99,6 +99,24 @@ func TestInvalidFieldRejectsWholeUpdate(t *testing.T) {
 	}
 	if got.Language != "en" {
 		t.Fatalf("Language = %q, want unchanged default %q", got.Language, "en")
+	}
+}
+
+func TestUpdateRejectsInvalidWeekStart(t *testing.T) {
+	svc := settings.NewService(memory.NewSettingsStore())
+	if _, err := svc.Update(context.Background(), "u1", settings.Update{WeekStart: ptr("tuesday")}); !errors.Is(err, settings.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateWeekStart(t *testing.T) {
+	svc := settings.NewService(memory.NewSettingsStore())
+	got, err := svc.Update(context.Background(), "u1", settings.Update{WeekStart: ptr("sunday")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.WeekStart != "sunday" {
+		t.Fatalf("WeekStart = %q, want \"sunday\"", got.WeekStart)
 	}
 }
 

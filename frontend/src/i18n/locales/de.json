@@ -97,6 +97,11 @@
       "timezone": "Zeitzone",
       "defaultCurrency": "Standardwährung",
       "displayedDecimalPlaces": "Angezeigte Nachkommastellen",
+      "weekStart": "Woche beginnt am",
+      "weekStartOption": {
+        "monday": "Montag",
+        "sunday": "Sonntag"
+      },
       "saveError": "Speichern fehlgeschlagen — bitte versuche es erneut."
     },
     "invite": {
@@ -258,6 +263,26 @@
         "leaveTitle": "Dieses geteilte Konto verlassen?",
         "leaveBody": "Du verlierst sofort jeden Zugriff auf dieses Konto, auch auf von dir erstellte Buchungen."
       }
+    }
+  },
+  "dateRangeFilter": {
+    "label": "Zeitraum",
+    "placeholder": "Gesamter Zeitraum",
+    "fromOnly": "Ab {{date}}",
+    "toOnly": "Bis {{date}}",
+    "done": "Fertig",
+    "presets": {
+      "today": "Heute",
+      "last7Days": "Letzte 7 Tage",
+      "last14Days": "Letzte 14 Tage",
+      "last30Days": "Letzte 30 Tage",
+      "thisWeek": "Diese Woche",
+      "lastWeek": "Letzte Woche",
+      "last2Weeks": "Letzte 2 Wochen (diese + letzte Woche)",
+      "thisMonth": "Dieser Monat",
+      "lastMonth": "Letzter Monat",
+      "thisYear": "Dieses Jahr",
+      "custom": "Benutzerdefiniert"
     }
   },
   "entries": {

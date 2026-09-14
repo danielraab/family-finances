@@ -65,6 +65,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Timezone               *string `json:"timezone"`
 		DefaultCurrency        *string `json:"default_currency"`
 		DisplayedDecimalPlaces *int    `json:"displayed_decimal_places"`
+		WeekStart              *string `json:"week_start"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		h.renderError(w, r, ErrInvalidValue)
@@ -75,6 +76,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Timezone:               body.Timezone,
 		DefaultCurrency:        body.DefaultCurrency,
 		DisplayedDecimalPlaces: body.DisplayedDecimalPlaces,
+		WeekStart:              body.WeekStart,
 	})
 	if err != nil {
 		h.renderError(w, r, err)
