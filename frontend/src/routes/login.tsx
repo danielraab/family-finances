@@ -29,7 +29,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      navigate({ to: "/", replace: true });
+      navigate({ to: "/home", replace: true });
     }
   }, [status, navigate]);
 
