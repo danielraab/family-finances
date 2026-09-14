@@ -586,6 +586,91 @@ export interface paths {
         patch: operations["patchCategoryShare"];
         trace?: never;
     };
+    "/api/dashboard/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's dashboard cards
+         * @description The caller's own cards only, ordered by sort_order. Never includes another user's cards, even one referencing an entity shared with the caller — a dashboard is always private to its owner.
+         */
+        get: operations["getDashboardCards"];
+        put?: never;
+        /**
+         * Create a dashboard card
+         * @description Appends the card to the end of the caller's list. 400 when type is unrecognized, when config is missing a field its type requires, when config sets a field foreign to its type, or when an account_id/category_id/tag_id in config does not resolve to an entity the caller has at least view permission on.
+         */
+        post: operations["postDashboardCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboard/cards/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a dashboard card */
+        delete: operations["deleteDashboardCard"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a dashboard card's config
+         * @description Accepts only config — a card's type is immutable after creation; a type field in the request body, if present, is ignored. Applies the same per-type validation as creation.
+         */
+        patch: operations["patchDashboardCard"];
+        trace?: never;
+    };
+    "/api/dashboard/cards/{id}/move-down": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a card down among the caller's cards
+         * @description Swaps sort_order with the immediately following card. A no-op — 200, order unchanged — if the card is already last.
+         */
+        post: operations["postDashboardCardMoveDown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dashboard/cards/{id}/move-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a card up among the caller's cards
+         * @description Swaps sort_order with the immediately preceding card. A no-op — 200, order unchanged — if the card is already first.
+         */
+        post: operations["postDashboardCardMoveUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/entries": {
         parameters: {
             query?: never;
@@ -681,7 +766,7 @@ export interface paths {
         };
         /**
          * Bucket the caller's matching entries into per-month or per-day income/outcome totals
-         * @description Buckets the caller's own, non-deleted accounts' non-deleted entries by booking_timestamp — one bucket per calendar month of year when unit=month, or one bucket per calendar day of year/month when unit=day — using the caller's resolved timezone setting (see user-settings) to decide bucket boundaries, default UTC. Within each bucket, entries whose amount is positive are summed into income and the absolute value of entries whose amount is negative into outcome, grouped per currency (the currency of the entry's account) the same way GET /api/entries/summary groups its sum. Unlike GET /api/entries/summary, a balance_adjustment's amount (always a signed delta — see account-entries) is included, not excluded. Every period in the requested range is present, even one with no matching entries at all (empty income/outcome).
+         * @description Buckets the caller's own, non-deleted accounts' non-deleted entries by booking_timestamp — one bucket per calendar month of year when unit=month, or one bucket per calendar day of year/month when unit=day — using the caller's resolved timezone setting (see user-settings) to decide bucket boundaries, default UTC. Within each bucket, entries whose amount is positive are summed into income and the absolute value of entries whose amount is negative into outcome, grouped per currency (the currency of the entry's account) the same way GET /api/entries/summary groups its sum. Unlike GET /api/entries/summary, a balance_adjustment's amount (always a signed delta — see account-entries) is included, not excluded. Every period in the requested range is present, even one with no matching entries at all (empty income/outcome). Accepts the same category_id/category_mode and tag_id filters as GET /api/entries/summary, applied before bucketing.
          */
         get: operations["getEntriesFlowSummary"];
         put?: never;
@@ -1157,6 +1242,54 @@ export interface components {
             /** Format: int64 */
             amount: number;
             currency: string;
+        };
+        DashboardCard: {
+            config: components["schemas"]["DashboardCardConfig"];
+            id: string;
+            /** @description Meaningful only among the caller's own cards. */
+            sort_order: number;
+            type: components["schemas"]["DashboardCardType"];
+        };
+        /** @description A plain object whose meaningful fields depend on the card's type (see DashboardCardType) — not a discriminated union at the schema level; the backend validates the required/allowed field set per type. account_id/category_id/tag_id, when present, must each name an entity the caller has at least view permission on. range (on query_stat/entry_list) is never interpreted server-side — it is resolved to concrete from/to timestamps by the client at render time, the same way /reports resolves its own date-range presets. */
+        DashboardCardConfig: {
+            /** @description Required on account_stat. Optional filter on query_stat/ entry_list/bar_chart (omitted means every account the caller can see). */
+            account_id?: string;
+            /** @description Optional filter on query_stat/entry_list/bar_chart. */
+            category_id?: string;
+            /** @description Only meaningful, and only settable, on entry_list — how many columns of the dashboard's responsive grid the card spans. Absent means 2 (the minimum). account_stat/query_stat always occupy exactly one column and bar_chart is always full width, neither configurable. */
+            columns?: number;
+            /** @description Only meaningful alongside category_id. Absent means true (the default), mirroring /reports' own checkbox. */
+            include_subcategories?: boolean;
+            /** @description Only meaningful on query_stat/entry_list. Mirrors /reports' own filter shape. */
+            range?: {
+                /** Format: date */
+                from?: string;
+                /** @description A frontend-owned relative-range key (e.g. this_month), opaque to the backend. */
+                preset?: string;
+                /** Format: date */
+                to?: string;
+            };
+            /** @description Optional filter on query_stat/entry_list/bar_chart. */
+            tag_id?: string;
+            /** @description Optional custom heading, settable on query_stat/entry_list/ bar_chart only (never account_stat, whose heading is always its account's own name). The web client renders it — falling back to a generated summary of the filter when absent — as a link through to /reports with this card's account/category/ tag/date-range filter prefilled. */
+            title?: string;
+            /**
+             * @description Required on bar_chart. month renders a year of monthly bars; day renders a month of daily bars.
+             * @enum {string}
+             */
+            unit?: "month" | "day";
+        };
+        DashboardCardCreate: {
+            config: components["schemas"]["DashboardCardConfig"];
+            type: components["schemas"]["DashboardCardType"];
+        };
+        /**
+         * @description Immutable after creation. account_stat: one account's live balance. query_stat: a per-currency sum for an inline filter. entry_list: the 10 most recent entries matching an inline filter. bar_chart: an income/outcome bar chart for an account or an inline-filtered query.
+         * @enum {string}
+         */
+        DashboardCardType: "account_stat" | "query_stat" | "entry_list" | "bar_chart";
+        DashboardCardUpdate: {
+            config: components["schemas"]["DashboardCardConfig"];
         };
         EmailStartRequest: {
             /** Format: email */
@@ -2626,6 +2759,152 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getDashboardCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's cards, in display order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardCard"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    postDashboardCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DashboardCardCreate"];
+            };
+        };
+        responses: {
+            /** @description The created card. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardCard"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deleteDashboardCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    patchDashboardCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DashboardCardUpdate"];
+            };
+        };
+        responses: {
+            /** @description The updated card. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardCard"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    postDashboardCardMoveDown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card, with its updated (or unchanged) sort_order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardCard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    postDashboardCardMoveUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card, with its updated (or unchanged) sort_order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardCard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getEntries: {
         parameters: {
             query?: {
@@ -2829,8 +3108,12 @@ export interface operations {
             query: {
                 /** @description Repeatable. Omitted means every account the caller owns. */
                 account_id?: string[];
+                /** @description Matches this category, plus every descendant unless category_mode=exact. */
+                category_id?: string;
+                category_mode?: "subtree" | "exact";
                 /** @description 1-12. Required when unit=day, rejected when unit=month. */
                 month?: number;
+                tag_id?: string;
                 unit: "month" | "day";
                 year: number;
             };

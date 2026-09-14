@@ -795,13 +795,19 @@ balance adjustment after it.
 
 `GET /api/entries/flow-summary` SHALL accept `account_id` (repeatable,
 omitted meaning every non-deleted account the caller owns, same as
-`GET /api/entries`), `unit` (`month` or `day`), `year`, and `month`
-(required when `unit` is `day`, rejected when `unit` is `month`). It SHALL
-bucket the caller's own, non-deleted accounts' non-deleted entries by
+`GET /api/entries`), `category_id`, `category_mode` (`exact`, only
+meaningful with `category_id`), `tag_id`, `unit` (`month` or `day`),
+`year`, and `month` (required when `unit` is `day`, rejected when `unit`
+is `month`) — the same `category_id`/`category_mode`/`tag_id` filters
+`GET /api/entries/summary` already accepts, resolved the same way
+(`category_id` alone includes the category's subtree; paired with
+`category_mode=exact` it matches that category only). It SHALL bucket the
+caller's own, non-deleted accounts' non-deleted entries by
 `booking_timestamp` — one bucket per month of `year` when `unit` is
 `month`, or one bucket per day of `year`/`month` when `unit` is `day` —
-using the caller's resolved timezone setting (`user-settings`) to determine
-bucket boundaries. Within each bucket, entries whose `amount` is positive
+using the caller's resolved timezone setting (`user-settings`) to
+determine bucket boundaries, after applying any given `category_id`/
+`tag_id` filter. Within each bucket, entries whose `amount` is positive
 SHALL be summed into `income`, and the absolute value of entries whose
 `amount` is negative SHALL be summed into `outcome`, each grouped per
 currency (the currency of the entry's account) the same way
@@ -858,6 +864,36 @@ with empty `income` and `outcome` lists.
 - **WHEN** `GET /api/entries/flow-summary?unit=month&year=2026&month=3` is
   called
 - **THEN** the request is rejected (`400`)
+
+#### Scenario: Filtering by category restricts the buckets to that category's entries
+
+- **WHEN** `GET /api/entries/flow-summary?category_id={id}&unit=month&year=2026`
+  is called
+- **THEN** each bucket's `income`/`outcome` reflects only entries
+  categorized under that category or one of its descendants
+
+#### Scenario: category_mode=exact excludes subcategories
+
+- **WHEN**
+  `GET /api/entries/flow-summary?category_id={parent}&category_mode=exact&unit=month&year=2026`
+  is called
+- **THEN** entries categorized under a child of `{parent}` are excluded
+  from every bucket
+
+#### Scenario: Filtering by tag restricts the buckets to that tag's entries
+
+- **WHEN** `GET /api/entries/flow-summary?tag_id={id}&unit=month&year=2026`
+  is called
+- **THEN** each bucket's `income`/`outcome` reflects only entries carrying
+  that tag
+
+#### Scenario: Category and tag filters combine with account filters
+
+- **WHEN** `GET /api/entries/flow-summary` is called with `account_id`,
+  `category_id`, and `tag_id` together
+- **THEN** each bucket reflects only entries matching all three filters at
+  once, the same intersection semantics `GET /api/entries/summary` already
+  applies
 
 ### Requirement: A running-balance series can be sampled per day over a month
 

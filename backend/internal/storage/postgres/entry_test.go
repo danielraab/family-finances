@@ -9,11 +9,13 @@ import (
 	"at.draab/familyfinances/internal/account"
 	"at.draab/familyfinances/internal/category"
 	"at.draab/familyfinances/internal/entry"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func ptrInt64(n int64) *int64 { return &n }
 
 type entryFixture struct {
+	pool     *pgxpool.Pool
 	entries  *EntryStore
 	accounts *AccountStore
 	cats     *CategoryStore
@@ -48,6 +50,7 @@ func newEntryFixture(t *testing.T) entryFixture {
 	}
 
 	return entryFixture{
+		pool:    pool,
 		entries: entryStore, accounts: accStore, cats: catStore,
 		owner: owner.ID, accID: acc.ID, catID: cat.ID,
 	}
@@ -986,6 +989,73 @@ func TestPGEntryFlowSummaryUsesGivenTimezone(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].Period != "2024-01-01" {
 		t.Fatalf("rows = %+v, want a single January row (America/New_York local date)", rows)
+	}
+}
+
+func TestPGEntryFlowSummaryCategoryFilterRestrictsRows(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	other, err := f.cats.Create(ctx, f.owner, category.New{Name: "Other-entry"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(100),
+		BookingTimestamp: at("2024-01-05T00:00:00Z"), Title: "x", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(50),
+		BookingTimestamp: at("2024-01-06T00:00:00Z"), Title: "y", CategoryID: &other.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := f.entries.FlowSummary(ctx, entry.FlowFilter{
+		AccountIDs: []string{f.accID}, Unit: entry.FlowUnitMonth, Year: 2024, Timezone: "UTC",
+		CategoryID: &f.catID, CategoryIDs: []string{f.catID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Income != 100 {
+		t.Fatalf("rows = %+v, want a single row with income 100 (only f.catID's entry)", rows)
+	}
+}
+
+func TestPGEntryFlowSummaryTagFilterRestrictsRows(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+	tagStore := NewTagStore(f.pool)
+
+	tg, err := tagStore.Create(ctx, f.owner, "groceries-flow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(100),
+		BookingTimestamp: at("2024-01-05T00:00:00Z"), Title: "tagged", CategoryID: &f.catID, TagIDs: []string{tg.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(50),
+		BookingTimestamp: at("2024-01-06T00:00:00Z"), Title: "untagged", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := f.entries.FlowSummary(ctx, entry.FlowFilter{
+		AccountIDs: []string{f.accID}, Unit: entry.FlowUnitMonth, Year: 2024, Timezone: "UTC",
+		TagID: &tg.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Income != 100 {
+		t.Fatalf("rows = %+v, want a single row with income 100 (only the tagged entry)", rows)
 	}
 }
 

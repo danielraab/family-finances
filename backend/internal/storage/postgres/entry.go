@@ -542,33 +542,43 @@ func (s *EntryStore) Sum(ctx context.Context, f entry.Filter) (map[string]int64,
 // resolved it) and truncated to f.Unit ('month' or 'day' — usable directly
 // as date_trunc's field argument, since FlowUnit's only two values are
 // exactly those words). income/outcome split by amount's sign via FILTER,
-// so a currency needs no CASE-WHEN gymnastics. f.AccountIDs is the sole
-// caller-scoping mechanism, already narrowed by Service to the caller's
-// visible accounts.
+// so a currency needs no CASE-WHEN gymnastics. Account/category/tag
+// scoping reuses buildWhere — the same clauses List/Sum apply — extended
+// here with the timezone-aware year/month bucketing condition, continuing
+// its positional-arg numbering exactly as List already does for its own
+// keyset clause.
 func (s *EntryStore) FlowSummary(ctx context.Context, f entry.FlowFilter) ([]entry.FlowRow, error) {
-	if len(f.AccountIDs) == 0 {
+	if !f.AllAccounts && len(f.AccountIDs) == 0 {
 		return nil, nil
 	}
 
-	where := []string{
-		"account_id = ANY($1::uuid[])",
-		"deleted_at IS NULL",
-		"EXTRACT(year FROM timezone($2, booking_timestamp)) = $4",
+	where, args := buildWhere(entry.Filter{
+		AccountIDs:   f.AccountIDs,
+		AllAccounts:  f.AllAccounts,
+		CategoryID:   f.CategoryID,
+		CategoryMode: f.CategoryMode,
+		CategoryIDs:  f.CategoryIDs,
+		TagID:        f.TagID,
+	})
+	arg := func(v any) string {
+		args = append(args, v)
+		return "$" + strconv.Itoa(len(args))
 	}
-	args := []any{f.AccountIDs, f.Timezone, string(f.Unit), f.Year}
+	tzArg := arg(f.Timezone)
+	where = append(where, "EXTRACT(year FROM timezone("+tzArg+", entries.booking_timestamp)) = "+arg(f.Year))
 	if f.Unit == entry.FlowUnitDay {
-		where = append(where, "EXTRACT(month FROM timezone($2, booking_timestamp)) = $5")
-		args = append(args, f.Month)
+		where = append(where, "EXTRACT(month FROM timezone("+tzArg+", entries.booking_timestamp)) = "+arg(f.Month))
 	}
+	unitArg := arg(string(f.Unit))
 
 	query := `
-		SELECT date_trunc($3, timezone($2, booking_timestamp))::date AS period,
-		       account_id::text,
-		       COALESCE(SUM(amount) FILTER (WHERE amount > 0), 0) AS income,
-		       COALESCE(-SUM(amount) FILTER (WHERE amount < 0), 0) AS outcome
+		SELECT date_trunc(` + unitArg + `, timezone(` + tzArg + `, entries.booking_timestamp))::date AS period,
+		       entries.account_id::text,
+		       COALESCE(SUM(entries.amount) FILTER (WHERE entries.amount > 0), 0) AS income,
+		       COALESCE(-SUM(entries.amount) FILTER (WHERE entries.amount < 0), 0) AS outcome
 		FROM entries
 		WHERE ` + strings.Join(where, " AND ") + `
-		GROUP BY period, account_id`
+		GROUP BY period, entries.account_id`
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {

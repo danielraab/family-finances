@@ -461,7 +461,9 @@ func (s *EntryStore) Sum(_ context.Context, f entry.Filter) (map[string]int64, i
 // FlowSummary implements entry.Store's FlowSummary: one row per (account,
 // period) combination with at least one matching entry, bucketed by
 // booking_timestamp converted into f.Timezone (Service.FlowSummary already
-// resolved it, default "UTC") and truncated to f.Unit.
+// resolved it, default "UTC") and truncated to f.Unit. Account/category/tag
+// scoping reuses matchingRows (the same filtering List/Sum apply), passing
+// no Kind so both transaction and balance_adjustment entries are included.
 func (s *EntryStore) FlowSummary(_ context.Context, f entry.FlowFilter) ([]entry.FlowRow, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -470,16 +472,20 @@ func (s *EntryStore) FlowSummary(_ context.Context, f entry.FlowFilter) ([]entry
 	if err != nil {
 		return nil, err
 	}
-	accountSet := toSet(f.AccountIDs)
+
+	rows := s.matchingRows(entry.Filter{
+		AccountIDs:  f.AccountIDs,
+		AllAccounts: f.AllAccounts,
+		CategoryID:  f.CategoryID,
+		CategoryIDs: f.CategoryIDs,
+		TagID:       f.TagID,
+	})
 
 	type key struct{ period, accountID string }
 	totals := map[key]*entry.FlowRow{}
 
-	for _, row := range s.rows {
+	for _, row := range rows {
 		e := row.e
-		if e.DeletedAt != nil || !accountSet[e.AccountID] {
-			continue
-		}
 		local := e.BookingTimestamp.In(loc)
 		if local.Year() != f.Year {
 			continue

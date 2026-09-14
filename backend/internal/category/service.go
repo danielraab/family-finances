@@ -89,6 +89,28 @@ func (s *Service) Get(ctx context.Context, callerID, id string) (Category, error
 	return c, nil
 }
 
+// Visible reports whether every id in categoryIDs exists and is visible to
+// callerID — owned by them, or shared with them at any tier (at least
+// view) — mirroring tag.Service.OwnedBy's contract. For cross-package
+// view-tier checks (e.g. internal/dashboard's CategoryLookup) that need
+// only a boolean, never ErrNotFound: a nonexistent or inaccessible id
+// simply reports false. An empty categoryIDs is trivially true.
+func (s *Service) Visible(ctx context.Context, callerID string, categoryIDs []string) (bool, error) {
+	for _, id := range categoryIDs {
+		c, err := s.store.GetForCaller(ctx, callerID, id)
+		if errors.Is(err, ErrNotFound) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if c.Permission == "" {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 // Create validates in and, when it sets a ParentID, checks it exists among
 // ownerID's own categories.
 func (s *Service) Create(ctx context.Context, ownerID string, in New) (Category, error) {

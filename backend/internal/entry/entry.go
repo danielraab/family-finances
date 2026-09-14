@@ -318,13 +318,21 @@ func (u FlowUnit) valid() bool { return u == FlowUnitMonth || u == FlowUnitDay }
 // caller-supplied — Service.FlowSummary fills it in from the caller's
 // resolved settings (default UTC) before calling Store, so bucket
 // boundaries always reflect the viewer's own calendar, not UTC
-// unconditionally.
+// unconditionally. AllAccounts/CategoryIDs are likewise resolved by
+// Service.FlowSummary (never caller-supplied) — see Filter's identical
+// fields, whose category/tag resolution semantics FlowFilter shares
+// exactly (Service.resolveCategoryAndTag backs both).
 type FlowFilter struct {
-	AccountIDs []string
-	Unit       FlowUnit
-	Year       int
-	Month      int // 1-12; required when Unit == FlowUnitDay, must be 0 otherwise
-	Timezone   string
+	AccountIDs   []string
+	AllAccounts  bool
+	CategoryID   *string
+	CategoryMode CategoryMode
+	CategoryIDs  []string
+	TagID        *string
+	Unit         FlowUnit
+	Year         int
+	Month        int // 1-12; required when Unit == FlowUnitDay, must be 0 otherwise
+	Timezone     string
 }
 
 // FlowRow is one (account, period)'s income/outcome totals, as Store

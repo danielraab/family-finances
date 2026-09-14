@@ -1113,6 +1113,92 @@ func TestFlowSummaryUsesCallerTimezoneForBucketBoundaries(t *testing.T) {
 	}
 }
 
+func TestFlowSummaryCategoryFilterRestrictsBuckets(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	categories.add("cat2")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2024-01-05T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 50, "2024-01-06T00:00:00Z", ptr("cat2"))
+
+	buckets, err := svc.FlowSummary(context.Background(), "u1", entry.FlowFilter{
+		Unit: entry.FlowUnitMonth, Year: 2024, CategoryID: ptr("cat1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(buckets[0].Income) != 1 || buckets[0].Income[0].Amount != 100 {
+		t.Fatalf("January income = %+v, want only cat1's 100", buckets[0].Income)
+	}
+}
+
+func TestFlowSummaryCategoryModeExactExcludesDescendants(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("parent")
+	categories.add("child")
+	categories.children["parent"] = []string{"child"}
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 10, "2024-01-01T00:00:00Z", ptr("parent"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 5, "2024-01-02T00:00:00Z", ptr("child"))
+
+	buckets, err := svc.FlowSummary(context.Background(), "u1", entry.FlowFilter{
+		Unit: entry.FlowUnitMonth, Year: 2024, CategoryID: ptr("parent"), CategoryMode: entry.ModeExact,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(buckets[0].Income) != 1 || buckets[0].Income[0].Amount != 10 {
+		t.Fatalf("January income = %+v, want only the parent-category entry (10)", buckets[0].Income)
+	}
+}
+
+func TestFlowSummaryTagFilterRestrictsBuckets(t *testing.T) {
+	svc, accounts, categories, tags := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	tags.add("tag1", "u1")
+
+	if _, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+		BookingTimestamp: at("2024-01-05T00:00:00Z"), Title: "tagged", CategoryID: ptr("cat1"), TagIDs: []string{"tag1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 50, "2024-01-06T00:00:00Z", ptr("cat1"))
+
+	buckets, err := svc.FlowSummary(context.Background(), "u1", entry.FlowFilter{
+		Unit: entry.FlowUnitMonth, Year: 2024, TagID: ptr("tag1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(buckets[0].Income) != 1 || buckets[0].Income[0].Amount != 100 {
+		t.Fatalf("January income = %+v, want only the tagged entry's 100", buckets[0].Income)
+	}
+}
+
+func TestFlowSummaryCategoryAndAccountFiltersCombine(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2024-01-05T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc2", entry.KindTransaction, 40, "2024-01-06T00:00:00Z", ptr("cat1"))
+
+	buckets, err := svc.FlowSummary(context.Background(), "u1", entry.FlowFilter{
+		Unit: entry.FlowUnitMonth, Year: 2024, AccountIDs: []string{"acc1"}, CategoryID: ptr("cat1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(buckets[0].Income) != 1 || buckets[0].Income[0].Amount != 100 {
+		t.Fatalf("January income = %+v, want only acc1's 100 (acc2 excluded by the explicit account filter)", buckets[0].Income)
+	}
+}
+
 // balanceAt returns the amount for a currency at one BalancePoint, or a
 // fatal error if that currency is not listed on the point.
 func balanceAt(t *testing.T, p entry.BalancePoint, currency string) int64 {

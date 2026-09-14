@@ -314,6 +314,15 @@ func (h *Handler) flowSummary(w http.ResponseWriter, r *http.Request) {
 		AccountIDs: q["account_id"],
 		Unit:       FlowUnit(q.Get("unit")),
 	}
+	if v := q.Get("category_id"); v != "" {
+		f.CategoryID = &v
+	}
+	if v := q.Get("category_mode"); v != "" {
+		f.CategoryMode = CategoryMode(v)
+	}
+	if v := q.Get("tag_id"); v != "" {
+		f.TagID = &v
+	}
 	year, err := strconv.Atoi(q.Get("year"))
 	if err != nil {
 		h.renderError(w, r, ErrInvalidValue)

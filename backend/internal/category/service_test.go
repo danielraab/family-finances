@@ -385,3 +385,46 @@ func TestUsableRejectsDisabledAndForeignCategories(t *testing.T) {
 		t.Fatalf("Usable(disabled) = %v, %v, want false, nil", ok, err)
 	}
 }
+
+func TestVisibleReportsOwnerTrue(t *testing.T) {
+	svc := newService()
+	c, err := svc.Create(context.Background(), "u1", category.New{Name: "Groceries"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := svc.Visible(context.Background(), "u1", []string{c.ID}); err != nil || !ok {
+		t.Fatalf("Visible(owner) = %v, %v, want true, nil", ok, err)
+	}
+}
+
+func TestVisibleReportsSharedViewTierTrue(t *testing.T) {
+	f := newSharingFixture(t)
+	f.users.add("recipient@example.com", "recipient", "Recipient")
+	if _, err := f.svc.InviteShare(context.Background(), f.ownerID, "Owner", f.catID, "recipient@example.com", category.PermissionView); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := f.svc.Visible(context.Background(), "recipient", []string{f.catID}); err != nil || !ok {
+		t.Fatalf("Visible(view-tier recipient) = %v, %v, want true, nil", ok, err)
+	}
+}
+
+func TestVisibleReportsForeignOrMissingCategoryFalse(t *testing.T) {
+	svc := newService()
+	c, err := svc.Create(context.Background(), "u1", category.New{Name: "Groceries"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := svc.Visible(context.Background(), "u2", []string{c.ID}); err != nil || ok {
+		t.Fatalf("Visible(non-owner, no share) = %v, %v, want false, nil", ok, err)
+	}
+	if ok, err := svc.Visible(context.Background(), "u1", []string{"does-not-exist"}); err != nil || ok {
+		t.Fatalf("Visible(missing id) = %v, %v, want false, nil", ok, err)
+	}
+}
+
+func TestVisibleOfEmptySetIsTrue(t *testing.T) {
+	svc := newService()
+	if ok, err := svc.Visible(context.Background(), "u1", nil); err != nil || !ok {
+		t.Fatalf("Visible(empty) = %v, %v, want true, nil", ok, err)
+	}
+}

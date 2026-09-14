@@ -16,6 +16,7 @@ import (
 	"at.draab/familyfinances/internal/category"
 	"at.draab/familyfinances/internal/cli"
 	"at.draab/familyfinances/internal/config"
+	"at.draab/familyfinances/internal/dashboard"
 	"at.draab/familyfinances/internal/entry"
 	"at.draab/familyfinances/internal/httpapi"
 	"at.draab/familyfinances/internal/mailer"
@@ -99,6 +100,7 @@ func main() {
 
 	entrySvc, entryHandler := buildEntry(pool, accountSvc, categorySvc, tagSvc, settingsSvc)
 	recurringSvc, recurringHandler := buildRecurringTransaction(pool, accountSvc, categorySvc, tagSvc, settingsSvc)
+	_, dashboardHandler := buildDashboard(pool, accountSvc, categorySvc, tagSvc)
 
 	// entry and recurringtransaction each optionally depend on the other
 	// (entry validates a newly-set recurring_transaction_id against it;
@@ -121,6 +123,7 @@ func main() {
 		TagHandler:                  tagHandler,
 		EntryHandler:                entryHandler,
 		RecurringTransactionHandler: recurringHandler,
+		DashboardHandler:            dashboardHandler,
 		OpenAPISpec:                 openAPISpec,
 		AnalyticsScript:             cfg.AnalyticsScript,
 	})
@@ -198,6 +201,19 @@ func buildRecurringTransaction(pool *postgres.Pool, accountSvc *account.Service,
 	store := postgres.NewRecurringTransactionStore(pool)
 	svc := recurringtransaction.NewService(store, accountSvc, categorySvc, tagSvc, recurringtransaction.WithTimezoneLookup(settingsSvc))
 	return svc, recurringtransaction.NewHandler(svc, recurringtransaction.HandlerOptions{RenderError: httpapi.WriteError})
+}
+
+// buildDashboard constructs the dashboard service and its HTTP handler
+// over the Postgres store, wiring accountSvc/categorySvc/tagSvc in as its
+// AccountLookup/CategoryLookup/TagLookup dependencies — the same
+// cross-package validation pattern buildEntry/buildRecurringTransaction
+// use, except dashboard only ever reads through them (view-tier
+// visibility checks), never writes.
+func buildDashboard(pool *postgres.Pool, accountSvc *account.Service, categorySvc *category.Service, tagSvc *tag.Service) (*dashboard.Service, http.Handler) {
+	store := postgres.NewDashboardStore(pool)
+	svc := dashboard.NewService(store, accountSvc, categorySvc, tagSvc)
+	handler := dashboard.NewHandler(svc, dashboard.HandlerOptions{RenderError: httpapi.WriteError})
+	return svc, handler
 }
 
 // buildAuth constructs the auth service and its HTTP handler: the Postgres

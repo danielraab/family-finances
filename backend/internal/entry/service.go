@@ -323,32 +323,53 @@ func (s *Service) resolveFilter(ctx context.Context, callerID string, f Filter) 
 		f.AccountIDs = visible
 	}
 
-	if f.CategoryID != nil {
-		permitted, err := s.categories.Subtree(ctx, callerID, *f.CategoryID)
-		if err != nil {
-			return Filter{}, err
-		}
-		if f.CategoryMode == ModeExact {
-			f.CategoryIDs = []string{*f.CategoryID}
-		} else {
-			f.CategoryIDs = permitted
-		}
-		if len(permitted) > 0 && !explicitAccounts {
-			f.AllAccounts = true
-		}
+	categoryIDs, allAccounts, err := s.resolveCategoryAndTag(ctx, callerID, f.CategoryID, f.CategoryMode, f.TagID, explicitAccounts)
+	if err != nil {
+		return Filter{}, err
 	}
-
-	if f.TagID != nil {
-		permitted, err := s.tags.OwnedBy(ctx, callerID, []string{*f.TagID})
-		if err != nil {
-			return Filter{}, err
-		}
-		if permitted && !explicitAccounts {
-			f.AllAccounts = true
-		}
+	f.CategoryIDs = categoryIDs
+	if allAccounts {
+		f.AllAccounts = true
 	}
 
 	return f, nil
+}
+
+// resolveCategoryAndTag is the category/tag half of resolveFilter, factored
+// out so FlowSummary (whose FlowFilter carries the identical
+// CategoryID/CategoryMode/TagID fields but isn't a Filter) can apply
+// exactly the same resolution: expanding categoryID to its permitted
+// subtree (or itself alone, at ModeExact), confirming tagID's visibility,
+// and reporting allAccounts=true when either alone authorizes seeing
+// entries beyond an explicit account filter (mirroring Filter.AllAccounts'
+// own doc comment).
+func (s *Service) resolveCategoryAndTag(ctx context.Context, callerID string, categoryID *string, categoryMode CategoryMode, tagID *string, explicitAccounts bool) (categoryIDs []string, allAccounts bool, err error) {
+	if categoryID != nil {
+		permitted, err := s.categories.Subtree(ctx, callerID, *categoryID)
+		if err != nil {
+			return nil, false, err
+		}
+		if categoryMode == ModeExact {
+			categoryIDs = []string{*categoryID}
+		} else {
+			categoryIDs = permitted
+		}
+		if len(permitted) > 0 && !explicitAccounts {
+			allAccounts = true
+		}
+	}
+
+	if tagID != nil {
+		permitted, err := s.tags.OwnedBy(ctx, callerID, []string{*tagID})
+		if err != nil {
+			return nil, false, err
+		}
+		if permitted && !explicitAccounts {
+			allAccounts = true
+		}
+	}
+
+	return categoryIDs, allAccounts, nil
 }
 
 // List resolves f's caller-supplied AccountIDs/CategoryID against
@@ -441,15 +462,28 @@ func (s *Service) FlowSummary(ctx context.Context, callerID string, f FlowFilter
 	if f.Year < 1 {
 		return nil, ErrInvalidValue
 	}
+	if !f.CategoryMode.valid() {
+		return nil, ErrInvalidValue
+	}
 
 	visible, err := s.accounts.VisibleIDs(ctx, callerID)
 	if err != nil {
 		return nil, err
 	}
-	if len(f.AccountIDs) > 0 {
+	explicitAccounts := len(f.AccountIDs) > 0
+	if explicitAccounts {
 		f.AccountIDs = intersect(f.AccountIDs, visible)
 	} else {
 		f.AccountIDs = visible
+	}
+
+	categoryIDs, allAccounts, err := s.resolveCategoryAndTag(ctx, callerID, f.CategoryID, f.CategoryMode, f.TagID, explicitAccounts)
+	if err != nil {
+		return nil, err
+	}
+	f.CategoryIDs = categoryIDs
+	if allAccounts {
+		f.AllAccounts = true
 	}
 
 	f.Timezone = "UTC"

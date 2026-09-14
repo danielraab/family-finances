@@ -1,36 +1,98 @@
-# web-client-home Specification
+## REMOVED Requirements
 
-## Purpose
+### Requirement: Home dashboard shows a card per account with its balance
 
-The authenticated `/home` dashboard: an auth gate redirecting anonymous
-visitors to the public placeholder, and a customizable, per-user grid of
-dashboard cards (`account_stat`, `query_stat`, `entry_list`, `bar_chart`)
-backed by `dashboard-cards`, with an edit mode to add, remove, reorder,
-and edit cards. See `web-client-shell` for the sidebar's "Home" link,
-`web-client-accounts` for the equivalent `/accounts` overview, and
-`web-client-reports` for the filter controls several card types reuse.
+**Reason**: Replaced by the opt-in `account_stat` card type — `/home` no
+longer automatically renders every account, since the dashboard is now
+user-composed.
+**Migration**: A visitor who wants an account represented on `/home` adds
+an `account_stat` card for it via edit mode. See the new "Account stat
+card shows an account's live balance" requirement.
 
-## Requirements
+#### Scenario: Accounts render as cards with their balances
 
-### Requirement: Home dashboard requires authentication, redirecting to the root placeholder
+- **WHEN** an authenticated visitor with two accounts opens `/home`
+- **THEN** both accounts render as cards, each showing its title,
+  financial institute, and current live balance
 
-`/home` SHALL be accessible only to an authenticated visitor. While the
-visitor's auth status is resolving, `/home` SHALL render nothing. An
-anonymous visitor navigating to `/home` SHALL be redirected to `/` — not
-`/login` — since `/home` is reached from the sidebar's "Home" item, which
-anonymous visitors also see.
+#### Scenario: A shared account's card shows its real owner
 
-#### Scenario: Anonymous visitor is redirected to the placeholder
+- **WHEN** an authenticated visitor has permission on an account they do
+  not really own
+- **THEN** its card on `/home` shows a shared indicator and the real
+  owner's name
 
-- **WHEN** an anonymous visitor navigates to `/home`
-- **THEN** the client redirects them to `/`
+#### Scenario: Activating a card opens the account's details
 
-#### Scenario: No flash while auth status resolves
+- **WHEN** an authenticated visitor activates an account card on `/home`
+- **THEN** the client navigates to `/accounts/{id}` for that account
 
-- **WHEN** a visitor opens `/home` and their auth status has not yet
-  resolved
-- **THEN** the page renders nothing until the status resolves to
-  `anonymous` or `authenticated`
+#### Scenario: Missing financial institute is handled gracefully
+
+- **WHEN** an authenticated visitor opens `/home` and one of their accounts
+  has no `financial_institute` set
+- **THEN** that account's card renders without an institute line, rather
+  than showing an empty or broken value
+
+### Requirement: Home dashboard shows an all-accounts income/outcome bar chart with a year switcher
+
+**Reason**: Replaced by the opt-in `bar_chart` card type — the dashboard
+no longer automatically shows one fixed, all-accounts chart. A visitor who
+wants the equivalent view configures it themselves, and can additionally
+scope it to one account, category, or tag.
+**Migration**: A visitor who wants the previous all-accounts year-view
+chart adds a `bar_chart` card with `unit: month` and no account/category/
+tag filter — equivalent to what previously rendered automatically. See
+the new "Bar chart card shows an income/outcome chart" requirement.
+
+#### Scenario: Chart shows twelve months of the current year by default
+
+- **WHEN** an authenticated visitor with at least one owned or shared
+  account opens `/home`
+- **THEN** below the account cards, a bar chart shows one income bar and
+  one outcome bar for each month of the current year, aggregated across
+  all their accounts
+
+#### Scenario: A shared account's entries contribute to the chart
+
+- **WHEN** an authenticated visitor has permission on a shared account with
+  entries in the selected year
+- **THEN** those entries' amounts are included in the year-overview chart
+
+#### Scenario: One chart per currency
+
+- **WHEN** an authenticated visitor whose accounts span two currencies
+  opens `/home`
+- **THEN** two bar charts render one above the other, each headed by its
+  currency code, and each showing only that currency's income and outcome
+
+#### Scenario: Single-currency visitor sees a single chart
+
+- **WHEN** an authenticated visitor whose accounts all use one currency
+  opens `/home`
+- **THEN** exactly one bar chart renders for the year overview
+
+#### Scenario: Switching years
+
+- **WHEN** the visitor activates the previous-year or next-year control
+- **THEN** every per-currency chart refetches and redraws for the newly
+  selected year, with no restriction on navigating past the current year
+
+#### Scenario: A month with no entries still renders
+
+- **WHEN** the selected year includes a month with no matching entries in
+  a given currency
+- **THEN** that month's bars in that currency's chart render at zero
+  rather than being omitted or erroring
+
+#### Scenario: No chart in the empty state
+
+- **WHEN** an authenticated visitor with no owned or shared accounts opens
+  `/home`
+- **THEN** the empty-state text renders and no year-overview chart or year
+  controls are shown
+
+## MODIFIED Requirements
 
 ### Requirement: Home dashboard empty state
 
@@ -92,6 +154,8 @@ there is no single account to preselect.
 - **WHEN** an authenticated visitor has only `view` permission on the
   account an `account_stat` card references
 - **THEN** no add-entry button is shown on that card
+
+## ADDED Requirements
 
 ### Requirement: Home dashboard renders the caller's cards in their saved order
 

@@ -70,7 +70,53 @@
   "dashboard": {
     "emptyTitle": "No accounts yet",
     "emptyBody": "Create your first account to see it here.",
-    "yearOverview": "Year overview"
+    "noCardsTitle": "No cards yet",
+    "noCardsBody": "Add your first card to start building your dashboard.",
+    "filterAllAccounts": "All accounts",
+    "entryCount_one": "{{count}} entry",
+    "entryCount_other": "{{count}} entries",
+    "entryListEmpty": "No entries match this card's filter.",
+    "cardMissingReference": "No longer accessible",
+    "cardTypes": {
+      "account_stat": "Account balance",
+      "query_stat": "Sum",
+      "entry_list": "Recent entries",
+      "bar_chart": "Bar chart"
+    },
+    "edit": {
+      "toggle": "Edit dashboard",
+      "done": "Done editing",
+      "moveUp": "Move card up",
+      "moveDown": "Move card down",
+      "edit": "Edit card",
+      "remove": "Remove card"
+    },
+    "editCard": {
+      "heading": "Edit card",
+      "typeImmutableHint": "Card type can't be changed after creation."
+    },
+    "addCard": {
+      "trigger": "Add card",
+      "heading": "Add a card",
+      "typeLabel": "Card type",
+      "titleLabel": "Title (optional)",
+      "titlePlaceholder": "Auto (based on filter)",
+      "accountOptional": "Account (optional)",
+      "accountRequired": "Select an account.",
+      "saveError": "Something went wrong creating the card. Please try again.",
+      "unitLabel": "View",
+      "unitMonth": "Year (monthly bars)",
+      "unitDay": "Month (daily bars)",
+      "columnsLabel": "Width",
+      "columns2": "Narrow (2 columns)",
+      "columns3": "Wide (3 columns)",
+      "columns4": "Full width (4 columns)",
+      "submit": "Add card"
+    },
+    "barChart": {
+      "previous": "Previous period",
+      "next": "Next period"
+    }
   },
   "flowChart": {
     "title": "Income & outcome",

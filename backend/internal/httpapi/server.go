@@ -68,6 +68,10 @@ type Deps struct {
 	// leaves it unrouted.
 	RecurringTransactionHandler http.Handler
 
+	// DashboardHandler is the dashboard domain package's http.Handler,
+	// mounted at /api/dashboard/cards. Nil leaves it unrouted.
+	DashboardHandler http.Handler
+
 	// OpenAPISpec is the raw bytes of the hand-written API contract
 	// (openapi/openapi.yaml), served verbatim at GET /api/openapi.yaml. Nil
 	// leaves that route unregistered (it 404s as any other unknown /api/ path).
@@ -119,6 +123,9 @@ func Routes(deps Deps) *http.ServeMux {
 	if deps.RecurringTransactionHandler != nil {
 		mux.Handle("/api/recurring-transactions", deps.RecurringTransactionHandler)
 		mux.Handle("/api/recurring-transactions/", deps.RecurringTransactionHandler)
+	}
+	if deps.DashboardHandler != nil {
+		mux.Handle("/api/dashboard/", deps.DashboardHandler)
 	}
 	// Unmatched /api/ paths get a JSON 404 — the reserved namespace never
 	// falls through to the static site. More specific than "/", so it wins

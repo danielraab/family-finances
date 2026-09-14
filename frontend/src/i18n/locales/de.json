@@ -70,7 +70,53 @@
   "dashboard": {
     "emptyTitle": "Noch keine Konten",
     "emptyBody": "Lege dein erstes Konto an, um es hier zu sehen.",
-    "yearOverview": "Jahresübersicht"
+    "noCardsTitle": "Noch keine Karten",
+    "noCardsBody": "Füge deine erste Karte hinzu, um dein Dashboard zu gestalten.",
+    "filterAllAccounts": "Alle Konten",
+    "entryCount_one": "{{count}} Eintrag",
+    "entryCount_other": "{{count}} Einträge",
+    "entryListEmpty": "Keine Einträge entsprechen dem Filter dieser Karte.",
+    "cardMissingReference": "Nicht mehr verfügbar",
+    "cardTypes": {
+      "account_stat": "Kontostand",
+      "query_stat": "Summe",
+      "entry_list": "Letzte Einträge",
+      "bar_chart": "Balkendiagramm"
+    },
+    "edit": {
+      "toggle": "Dashboard bearbeiten",
+      "done": "Bearbeitung beenden",
+      "moveUp": "Karte nach oben verschieben",
+      "moveDown": "Karte nach unten verschieben",
+      "edit": "Karte bearbeiten",
+      "remove": "Karte entfernen"
+    },
+    "editCard": {
+      "heading": "Karte bearbeiten",
+      "typeImmutableHint": "Der Kartentyp kann nach dem Erstellen nicht mehr geändert werden."
+    },
+    "addCard": {
+      "trigger": "Karte hinzufügen",
+      "heading": "Karte hinzufügen",
+      "typeLabel": "Kartentyp",
+      "titleLabel": "Titel (optional)",
+      "titlePlaceholder": "Automatisch (basierend auf Filter)",
+      "accountOptional": "Konto (optional)",
+      "accountRequired": "Wähle ein Konto aus.",
+      "saveError": "Beim Erstellen der Karte ist ein Fehler aufgetreten. Bitte versuche es erneut.",
+      "unitLabel": "Ansicht",
+      "unitMonth": "Jahr (monatliche Balken)",
+      "unitDay": "Monat (tägliche Balken)",
+      "columnsLabel": "Breite",
+      "columns2": "Schmal (2 Spalten)",
+      "columns3": "Breit (3 Spalten)",
+      "columns4": "Volle Breite (4 Spalten)",
+      "submit": "Karte hinzufügen"
+    },
+    "barChart": {
+      "previous": "Vorheriger Zeitraum",
+      "next": "Nächster Zeitraum"
+    }
   },
   "flowChart": {
     "title": "Einnahmen & Ausgaben",
