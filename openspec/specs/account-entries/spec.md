@@ -355,12 +355,68 @@ not to the request as a whole.
 - **THEN** the update succeeds and the entry keeps every one of its
   existing tags, including the disabled one
 
+### Requirement: An entry can be linked to a recurring transaction on the same account
+
+Every entry MAY reference at most one recurring transaction via an optional
+`recurring_transaction_id`, settable on `POST /api/entries` and
+`PATCH /api/entries/{id}`. Setting it SHALL require the referenced recurring
+transaction to belong to the same `account_id` as the entry and to not be
+soft-deleted; referencing a recurring transaction on a different account, or
+a nonexistent/deleted one, SHALL be rejected. `PATCH /api/entries/{id}` MAY
+also clear an existing link by supplying `recurring_transaction_id: null`.
+Linking or unlinking an entry follows the same edit-permission rule as any
+other entry field (see "Editing or deleting an entry is gated by permission
+tier and, for append, by who created it").
+
+#### Scenario: Creating an entry linked to a recurring transaction on the same account
+
+- **WHEN** `POST /api/entries` is called with `account_id` and a
+  `recurring_transaction_id` naming a non-deleted recurring transaction on
+  that same account
+- **THEN** the response is `201` and the entry's `recurring_transaction_id`
+  is set
+
+#### Scenario: Linking to a recurring transaction on a different account is rejected
+
+- **WHEN** `POST /api/entries` or `PATCH /api/entries/{id}` supplies a
+  `recurring_transaction_id` naming a recurring transaction whose
+  `account_id` differs from the entry's own `account_id`
+- **THEN** the request is rejected (`400`) and the entry is not linked
+
+#### Scenario: Linking an existing entry via update
+
+- **WHEN** an authenticated user with edit permission on an entry calls
+  `PATCH /api/entries/{id}` with a `recurring_transaction_id` naming a valid
+  recurring transaction on the entry's account
+- **THEN** the response is `200` and the entry is now linked
+
+#### Scenario: Clearing a link
+
+- **WHEN** `PATCH /api/entries/{id}` is called with
+  `recurring_transaction_id: null` on a currently-linked entry
+- **THEN** the response is `200` and the entry's `recurring_transaction_id`
+  is now null
+
+#### Scenario: Every entry response carries its link, when present
+
+- **WHEN** a client fetches an entry (directly or in a listing) that has a
+  `recurring_transaction_id` set
+- **THEN** the response includes that id, so the client can render a link
+  to the recurring transaction without a separate lookup
+
 ### Requirement: An entry has a booking timestamp, title, and optional description
 
 Every entry SHALL carry a required `booking_timestamp` (millisecond
 precision), a required non-empty `title`, and an optional `description`. It
 MAY reference zero or more tags belonging to the same owner (see
-`entry-tags`).
+`entry-tags`). A transaction SHALL additionally accept two optional,
+free-text fields: `counterparty` (the other party in the transaction — who
+was paid, or who paid — regardless of the amount's sign) and `location`
+(a free-text value the backend never interprets or validates beyond
+allowing it to be empty — it may hold a typed address or a JSON-encoded
+coordinate string; see `web-client-entries` for how a client renders
+either). Both `counterparty` and `location` SHALL be rejected (`400`) on a
+`balance_adjustment`, the same kind-gating `category_id` already has.
 
 #### Scenario: Creating an entry with the minimum required fields
 
@@ -368,6 +424,25 @@ MAY reference zero or more tags belonging to the same owner (see
   `amount`, `booking_timestamp`, `title`, and (for a transaction)
   `category_id`
 - **THEN** the response is `201`
+
+#### Scenario: Creating a transaction with a counterparty and location
+
+- **WHEN** `POST /api/entries` is called with `kind: transaction` and both
+  `counterparty` and `location` set
+- **THEN** the response is `201`, carrying both values unchanged
+
+#### Scenario: A balance adjustment rejects counterparty and location
+
+- **WHEN** `POST /api/entries` is called with `kind: balance_adjustment`
+  and either `counterparty` or `location` set
+- **THEN** the response is `400` and no entry is created
+
+#### Scenario: Counterparty and location can be cleared on update
+
+- **WHEN** `PATCH /api/entries/{id}` is called on a transaction with
+  `counterparty: ""` and/or `location: ""`
+- **THEN** the response is `200` and the corresponding field(s) are empty
+  on that entry going forward
 
 ### Requirement: Entries ordered by booking timestamp break ties by insertion order
 
@@ -487,14 +562,15 @@ matching nothing, the same as an unknown id.
 matches that category and every descendant in the category tree — or
 `exact`, matching only that category), `tag_id`, `kind`, `from`/`to` (an
 inclusive `booking_timestamp` range), and `q` (a case-insensitive
-substring match against `title` or `description`). It SHALL accept `sort`
-(`booking_timestamp`, the default, or `amount`) and `dir` (`desc`, the
-default, or `asc`). It SHALL accept `after`, an opaque cursor from a
-previous response's `next_cursor`, and `limit` (a page size). The response
-SHALL be `{ items, next_cursor }`, where `next_cursor` is `null` once no
-further matching entries remain. Every filter applies before pagination;
-results are always scoped to the caller's own, non-deleted accounts'
-non-deleted entries. `category_mode` without `category_id` has no effect.
+substring match against `title`, `description`, or `counterparty`). It
+SHALL accept `sort` (`booking_timestamp`, the default, or `amount`) and
+`dir` (`desc`, the default, or `asc`). It SHALL accept `after`, an opaque
+cursor from a previous response's `next_cursor`, and `limit` (a page
+size). The response SHALL be `{ items, next_cursor }`, where `next_cursor`
+is `null` once no further matching entries remain. Every filter applies
+before pagination; results are always scoped to the caller's own,
+non-deleted accounts' non-deleted entries. `category_mode` without
+`category_id` has no effect.
 
 #### Scenario: Filtering by account
 
@@ -519,8 +595,15 @@ non-deleted entries. `category_mode` without `category_id` has no effect.
 #### Scenario: Free-text search matches title or description
 
 - **WHEN** `GET /api/entries?q=coffee` is called
-- **THEN** only entries whose `title` or `description` contains "coffee"
-  (case-insensitive) are returned
+- **THEN** only entries whose `title`, `description`, or `counterparty`
+  contains "coffee" (case-insensitive) are returned
+
+#### Scenario: Free-text search matches counterparty alone
+
+- **WHEN** `GET /api/entries?q=rewe` is called and a matching entry's
+  `counterparty` is `"Rewe"` while its `title` and `description` contain
+  neither "rewe" nor any substring of it
+- **THEN** that entry is included in the results
 
 #### Scenario: Sorting by amount
 
@@ -539,6 +622,37 @@ non-deleted entries. `category_mode` without `category_id` has no effect.
 - **WHEN** a page of results is fetched that reaches the end of the
   matching entries
 - **THEN** `next_cursor` is `null`
+
+### Requirement: The caller's distinct in-use counterparty values are listable for autocomplete
+
+`GET /api/entries/counterparties` SHALL return a JSON array of strings:
+the distinct, non-empty `counterparty` values present on the authenticated
+caller's own non-deleted entries, compared verbatim (case-sensitively),
+sorted case-insensitively ascending — structurally identical to
+`GET /api/account-types`. It SHALL never include values from another
+user's entries. The endpoint is read-only — there is no way to create,
+rename, or delete a counterparty value independent of writing it onto an
+entry.
+
+#### Scenario: The caller's distinct in-use counterparties are returned
+
+- **WHEN** an authenticated user with entries whose counterparties are
+  `Rewe`, `Employer GmbH`, and a second `Rewe` calls
+  `GET /api/entries/counterparties`
+- **THEN** the response is `200` with `["Employer GmbH", "Rewe"]`
+
+#### Scenario: Another user's counterparties are not included
+
+- **WHEN** an authenticated user whose own entries all have counterparty
+  `Rewe` calls `GET /api/entries/counterparties`, while a different user
+  has an entry with counterparty `Spar`
+- **THEN** the response contains `Rewe` and does not contain `Spar`
+
+#### Scenario: A user with no counterparty values gets an empty list
+
+- **WHEN** an authenticated user with no entries carrying a non-empty
+  `counterparty` calls `GET /api/entries/counterparties`
+- **THEN** the response is `200` with `[]`
 
 ### Requirement: Entry amounts can be summed per currency without paging through results
 

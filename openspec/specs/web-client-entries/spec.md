@@ -114,6 +114,25 @@ exist yet."
 - **THEN** the page shows text indicating no entries match the current
   filters, distinct from having none at all
 
+### Requirement: Entries link in the toolbar to import
+
+`/entries`' toolbar SHALL offer an "Import" action alongside "New Entry",
+navigating to `/entries/import`. When the ledger's current view has an
+`account_id` filter applied, the Import action SHALL carry it as
+`/entries/import?account_id={id}`, the same way "New Entry" already
+carries the current filter.
+
+#### Scenario: Navigating to import from the ledger
+
+- **WHEN** an authenticated visitor activates "Import" on `/entries`
+- **THEN** the client navigates to `/entries/import`
+
+#### Scenario: The current account filter is carried over
+
+- **WHEN** an authenticated visitor is viewing `/entries?account_id={id}`
+  and activates "Import"
+- **THEN** the client navigates to `/entries/import?account_id={id}`
+
 ### Requirement: Entry amounts are colored by sign, with a distinct treatment for balance adjustments
 
 The entries list SHALL render each entry's amount in a color reflecting its
@@ -167,7 +186,13 @@ non-deleted shared account the visitor holds at least `append` permission
 on), kind, amount (entered and displayed at full stored precision,
 independent of the visitor's display-rounding preference), booking
 timestamp, title, description, a category (required unless kind is
-`balance_adjustment`), and tags. Submitting calls `POST /api/entries`.
+`balance_adjustment`), and tags. When kind is `transaction`, the form
+SHALL additionally offer a `counterparty` text input (suggested values
+from `GET /api/entries/counterparties` via a `<datalist>`) and a
+`location` field (a plain text input, editable directly, alongside a "Use
+GPS" button and a "Pick on map" button — see the location requirements
+below); both are hidden when kind is `balance_adjustment`, mirroring how
+category is treated. Submitting calls `POST /api/entries`.
 `/entries/{id}/edit` SHALL offer the same form pre-populated from the
 existing entry, with kind rendered read-only (immutable per the backend)
 and account rendered locked by default, changeable only through the
@@ -190,6 +215,20 @@ with no edit or delete action.
 - **WHEN** an authenticated visitor submits the create form with
   `kind: balance_adjustment` and no category selected
 - **THEN** the entry is created successfully
+
+#### Scenario: Counterparty and location are hidden for a balance adjustment
+
+- **WHEN** an authenticated visitor selects `kind: balance_adjustment` on
+  either the create or edit form
+- **THEN** the counterparty and location fields are not shown, and neither
+  is included in the submitted request
+
+#### Scenario: Counterparty input suggests the visitor's own history
+
+- **WHEN** an authenticated visitor focuses the counterparty field on a
+  `kind: transaction` form
+- **THEN** the suggestion list is populated from
+  `GET /api/entries/counterparties`
 
 #### Scenario: Account and kind are not editable
 
@@ -225,6 +264,113 @@ with no edit or delete action.
 - **THEN** the entry's details render read-only, with no edit or delete
   action
 
+### Requirement: The location field accepts a typed address, device GPS, or a dropped map pin, all as one text value
+
+The `location` field on a `kind: transaction` entry form SHALL be a plain
+text input the visitor can type into directly (e.g. a street address),
+alongside two buttons: **Use GPS**, which calls the browser's geolocation
+API and, on success, writes the coordinate into the field as a JSON string
+`{"lat":<number>,"lng":<number>}`; and **Pick on map**, which opens an
+interactive map modal with a click-to-place, draggable pin, and on
+confirmation writes the same JSON shape into the field. The field SHALL
+always display its literal current value, including raw JSON when that is
+what is stored — there is no separate, prettified display distinct from
+the field's actual content. The map modal SHALL center on the device's
+current GPS position when available, otherwise a world view, and SHALL
+NOT offer address search.
+
+#### Scenario: Typing an address sets the field to plain text
+
+- **WHEN** a visitor types "123 Main St" into the location field with
+  neither button used
+- **THEN** the field's value is the literal string "123 Main St"
+
+#### Scenario: Use GPS writes a coordinate JSON string
+
+- **WHEN** a visitor activates "Use GPS" and the browser reports a
+  position successfully
+- **THEN** the location field's value becomes
+  `{"lat":<latitude>,"lng":<longitude>}`, shown verbatim in the field
+
+#### Scenario: GPS failure shows an inline error, not a silent no-op
+
+- **WHEN** a visitor activates "Use GPS" and the browser denies permission
+  or the request times out
+- **THEN** an inline error is shown and the location field is left
+  unchanged
+
+#### Scenario: Pick on map writes the confirmed pin as a coordinate JSON string
+
+- **WHEN** a visitor opens "Pick on map", places or drags the pin, and
+  confirms
+- **THEN** the location field's value becomes the pin's
+  `{"lat":<latitude>,"lng":<longitude>}`, shown verbatim in the field
+
+#### Scenario: The map modal centers on the device position when available
+
+- **WHEN** a visitor opens "Pick on map" and the browser can report a
+  current position
+- **THEN** the map initially centers on that position
+
+#### Scenario: The map modal falls back to a world view without GPS
+
+- **WHEN** a visitor opens "Pick on map" and no current position is
+  available (denied or unsupported)
+- **THEN** the map initially shows a world view rather than failing to
+  open
+
+### Requirement: Linking or unlinking an existing entry to a recurring transaction happens only on the entry edit page
+
+`/entries/{id}/edit` SHALL offer a field to set or clear the entry's
+`recurring_transaction_id`, offering only recurring transactions on the
+entry's current account as choices. `/entries/new` SHALL NOT expose this
+field as a normal, visitor-facing control — the only way a newly created
+entry gets linked is via the recurring transaction's own "Create
+transaction" prefill flow (see `web-client-recurring-transactions`), which
+carries the id through without a picker.
+
+#### Scenario: Linking an existing entry from its edit page
+
+- **WHEN** the visitor opens `/entries/{id}/edit` and selects a recurring
+  transaction on the entry's account, then saves
+- **THEN** `PATCH /api/entries/{id}` is called with that
+  `recurring_transaction_id`, and the entry is now linked
+
+#### Scenario: Unlinking
+
+- **WHEN** the visitor clears the field on `/entries/{id}/edit` and saves
+- **THEN** `PATCH /api/entries/{id}` is called with
+  `recurring_transaction_id: null`
+
+#### Scenario: New entry form has no link picker
+
+- **WHEN** the visitor opens `/entries/new` directly (not via a recurring
+  transaction's "Create transaction" action)
+- **THEN** no recurring-transaction picker is shown on the form
+
+### Requirement: A linked entry shows a badge to its recurring transaction in the ledger
+
+`/entries` SHALL show a small icon/badge on any entry whose
+`recurring_transaction_id` is set, distinct from the row's other content,
+that navigates to that recurring transaction's edit page when activated.
+An entry with no `recurring_transaction_id` SHALL show no such badge.
+
+#### Scenario: Linked entry shows the badge
+
+- **WHEN** the ledger lists an entry with a non-null
+  `recurring_transaction_id`
+- **THEN** its row shows the recurring-transaction badge
+
+#### Scenario: Badge links to the recurring transaction
+
+- **WHEN** the visitor activates a linked entry's badge
+- **THEN** the browser navigates to that recurring transaction's edit page
+
+#### Scenario: Unlinked entry shows no badge
+
+- **WHEN** the ledger lists an entry with a null `recurring_transaction_id`
+- **THEN** no recurring-transaction badge is shown on its row
+
 ### Requirement: An entry not created by the current visitor shows who created it
 
 Wherever an entry is rendered — the ledger (`/entries`), an account's
@@ -246,6 +392,59 @@ exactly as before this capability, with no such annotation.
 - **WHEN** any of those views renders an entry the current visitor created
   themselves
 - **THEN** no creator annotation is shown, unchanged from before this
+  capability existed
+
+### Requirement: A valid coordinate location shows a globe icon in the ledger, opening a read-only map preview
+
+In the entry ledger (`/entries`), any entry whose `location` value parses
+as a JSON object with numeric `lat`/`lng` fields within valid coordinate
+ranges SHALL show a small globe icon next to its title. Activating it
+SHALL open a read-only map modal centered on that coordinate with a static
+(non-draggable) pin and no editing controls. An entry whose `location` is
+empty, or does not parse as such a coordinate object (including a plain
+typed address), SHALL show no globe icon.
+
+#### Scenario: A coordinate location shows the globe icon
+
+- **WHEN** the ledger renders an entry whose `location` is
+  `{"lat":48.2082,"lng":16.3738}`
+- **THEN** a globe icon appears next to that entry's title
+
+#### Scenario: Clicking the globe icon opens a read-only map centered on the point
+
+- **WHEN** a visitor clicks the globe icon on an entry with a coordinate
+  location
+- **THEN** a modal opens showing a map centered on that coordinate with a
+  static pin, and no control to move or confirm a different position
+
+#### Scenario: A plain address location shows no globe icon
+
+- **WHEN** the ledger renders an entry whose `location` is the plain
+  string "123 Main St"
+- **THEN** no globe icon appears for that entry
+
+#### Scenario: An entry with no location shows no globe icon
+
+- **WHEN** the ledger renders an entry whose `location` is empty or absent
+- **THEN** no globe icon appears for that entry
+
+### Requirement: A counterparty is shown as a second line under the entry's title in the ledger
+
+Wherever an entry's title is rendered in the ledger (`/entries`), a
+non-empty `counterparty` SHALL be shown as a second line beneath it, the
+same slot/style used for the creator annotation (`created_by_name`) — both
+may appear together when both apply. An entry with no counterparty SHALL
+render exactly as before this capability, with no such line.
+
+#### Scenario: An entry with a counterparty shows it under the title
+
+- **WHEN** the ledger renders an entry whose `counterparty` is "Rewe"
+- **THEN** "Rewe" appears on a line beneath that entry's title
+
+#### Scenario: An entry with no counterparty is unaffected
+
+- **WHEN** the ledger renders an entry with no `counterparty`
+- **THEN** no counterparty line is shown, unchanged from before this
   capability existed
 
 ### Requirement: The edit form's account field is locked by default and unlocked via a button
