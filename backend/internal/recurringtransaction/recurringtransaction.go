@@ -184,6 +184,58 @@ type Filter struct {
 	AccountIDs []string
 }
 
+// CategoryMode controls how PreviewFilter.CategoryID is resolved — a local
+// mirror of internal/entry's identical CategoryMode, kept package-local per
+// this repo's "domain packages don't share value types across a package
+// boundary" rule (see the local Date type above for the same reasoning).
+type CategoryMode string
+
+const (
+	// CategoryModeSubtree (the default) resolves CategoryID to itself plus
+	// every descendant the caller can see.
+	CategoryModeSubtree CategoryMode = "subtree"
+	// CategoryModeExact resolves CategoryID to itself alone.
+	CategoryModeExact CategoryMode = "exact"
+)
+
+func (m CategoryMode) valid() bool {
+	return m == "" || m == CategoryModeSubtree || m == CategoryModeExact
+}
+
+// PreviewFilter narrows a Preview call. AccountIDs is resolved the same way
+// Filter's is; CategoryID/CategoryMode/TagID are resolved in-process against
+// each candidate recurring transaction (see Service.Preview) rather than
+// pushed down to Store, since Preview's result set is always small (bounded
+// by To and the per-template occurrence cap) and never paginated. To is
+// required — Preview never computes an unbounded result.
+type PreviewFilter struct {
+	AccountIDs   []string
+	CategoryID   *string
+	CategoryMode CategoryMode
+	TagID        *string
+	To           time.Time
+}
+
+// PreviewItem is one projected future occurrence of a recurring
+// transaction — never persisted, computed fresh on every Preview call. It
+// carries the same content fields a materialized entry from that template
+// would, plus which template it came from, the projected date, and whether
+// that date is already in the past.
+type PreviewItem struct {
+	RecurringTransactionID string   `json:"recurring_transaction_id"`
+	AccountID              string   `json:"account_id"`
+	AccountCurrency        string   `json:"account_currency,omitempty"`
+	Title                  string   `json:"title"`
+	Description            string   `json:"description,omitempty"`
+	CategoryID             *string  `json:"category_id,omitempty"`
+	Counterparty           string   `json:"counterparty,omitempty"`
+	Location               string   `json:"location,omitempty"`
+	TagIDs                 []string `json:"tag_ids"`
+	Amount                 int64    `json:"amount"`
+	BookingTimestamp       Date     `json:"booking_timestamp"`
+	Overdue                bool     `json:"overdue"`
+}
+
 func validateNew(in New) error {
 	if strings.TrimSpace(in.AccountID) == "" {
 		return ErrInvalidValue
@@ -337,4 +389,46 @@ func Advance(t time.Time, unit Unit, count int) time.Time {
 	default:
 		return t
 	}
+}
+
+// maxPreviewOccurrences defensively bounds how many occurrences Preview
+// generates for a single recurring transaction, regardless of how far its
+// cutoff or ends_on reaches — see design.md's "defensive per-template
+// occurrence cap" decision.
+const maxPreviewOccurrences = 366
+
+// previewOccurrences generates anchor plus every subsequent occurrence of a
+// unit/count recurrence rule up to cutoff (inclusive) and endsOn (inclusive,
+// when set), implementing the single-overdue-row rule: anchor is always
+// included, however far before today it is; every later candidate that is
+// still before today is advanced past without being included, so at most
+// one returned date is ever before today. Generation stops after
+// maxPreviewOccurrences dates regardless of cutoff/endsOn.
+func previewOccurrences(anchor Date, unit Unit, count int, cutoff, today Date, endsOn *Date) []Date {
+	if anchor.After(cutoff) {
+		return nil
+	}
+	if endsOn != nil && anchor.After(*endsOn) {
+		return nil
+	}
+
+	dates := []Date{anchor}
+	current := anchor
+	for len(dates) < maxPreviewOccurrences {
+		next := NewDate(Advance(current.Time, unit, count))
+		if next.After(cutoff) {
+			break
+		}
+		if endsOn != nil && next.After(*endsOn) {
+			break
+		}
+		current = next
+		if next.Before(today) {
+			// Still overdue — advance past it without emitting another
+			// overdue row.
+			continue
+		}
+		dates = append(dates, next)
+	}
+	return dates
 }

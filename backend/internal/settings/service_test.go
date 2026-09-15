@@ -18,7 +18,7 @@ func TestGetResolvesDefaultsForMissingRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2, WeekStart: "monday"}
+	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2, WeekStart: "monday", RecurringPreviewHorizon: "end_of_this_month"}
 	if got != want {
 		t.Fatalf("Get = %+v, want %+v", got, want)
 	}
@@ -35,7 +35,7 @@ func TestUpdateOnlyChangesProvidedField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second update: %v", err)
 	}
-	want := settings.Settings{Language: "de", Timezone: "Europe/Vienna", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2, WeekStart: "monday"}
+	want := settings.Settings{Language: "de", Timezone: "Europe/Vienna", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2, WeekStart: "monday", RecurringPreviewHorizon: "end_of_this_month"}
 	if got != want {
 		t.Fatalf("Get after two updates = %+v, want %+v", got, want)
 	}
@@ -117,6 +117,24 @@ func TestUpdateWeekStart(t *testing.T) {
 	}
 	if got.WeekStart != "sunday" {
 		t.Fatalf("WeekStart = %q, want \"sunday\"", got.WeekStart)
+	}
+}
+
+func TestUpdateRejectsInvalidRecurringPreviewHorizon(t *testing.T) {
+	svc := settings.NewService(memory.NewSettingsStore())
+	if _, err := svc.Update(context.Background(), "u1", settings.Update{RecurringPreviewHorizon: ptr("6_months")}); !errors.Is(err, settings.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateRecurringPreviewHorizon(t *testing.T) {
+	svc := settings.NewService(memory.NewSettingsStore())
+	got, err := svc.Update(context.Background(), "u1", settings.Update{RecurringPreviewHorizon: ptr("3_months")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RecurringPreviewHorizon != "3_months" {
+		t.Fatalf("RecurringPreviewHorizon = %q, want \"3_months\"", got.RecurringPreviewHorizon)
 	}
 }
 

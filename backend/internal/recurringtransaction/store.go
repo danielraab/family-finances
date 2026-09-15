@@ -46,6 +46,12 @@ type CategoryLookup interface {
 	// Usable reports whether categoryID exists, is usable by callerID
 	// (owned, or shared at append tier), and is not disabled.
 	Usable(ctx context.Context, callerID, categoryID string) (bool, error)
+	// Subtree resolves categoryID to itself plus every descendant within
+	// callerID's own visible tree (an owned category), or to itself alone
+	// (no cascade) for one visible only via a share — used by Preview to
+	// resolve its category_id/category_mode filter, mirroring
+	// internal/entry's identical use of category.Service.Subtree.
+	Subtree(ctx context.Context, callerID, categoryID string) ([]string, error)
 }
 
 // TagLookup is the narrow view of internal/tag that recurringtransaction

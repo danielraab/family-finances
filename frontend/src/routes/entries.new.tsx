@@ -19,6 +19,7 @@ type EntryKind = components["schemas"]["EntryKind"];
 type NewEntrySearch = {
   account_id?: string | undefined;
   recurring_transaction_id?: string | undefined;
+  booking_timestamp?: string | undefined;
 };
 
 export const Route = createFileRoute("/entries/new")({
@@ -30,6 +31,14 @@ export const Route = createFileRoute("/entries/new")({
     recurring_transaction_id:
       typeof search["recurring_transaction_id"] === "string"
         ? search["recurring_transaction_id"]
+        : undefined,
+    // Only meaningful alongside recurring_transaction_id — overrides the
+    // fetched template's next_suggested_date, so an Upcoming-block row
+    // beyond a template's first projected occurrence can prefill its own
+    // specific date (see web-client-recurring-transactions).
+    booking_timestamp:
+      typeof search["booking_timestamp"] === "string"
+        ? search["booking_timestamp"]
         : undefined,
   }),
   component: NewEntry,
@@ -56,6 +65,7 @@ function NewEntry() {
   const {
     account_id: presetAccountId,
     recurring_transaction_id: recurringTransactionId,
+    booking_timestamp: bookingTimestampOverride,
   } = Route.useSearch();
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -119,7 +129,11 @@ function NewEntry() {
             setCategoryId(rt.category_id ?? "");
             setCounterparty(rt.counterparty ?? "");
             setLocation(rt.location ?? "");
-            setBookingTimestamp(dateOnlyToLocalInput(rt.next_suggested_date));
+            setBookingTimestamp(
+              dateOnlyToLocalInput(
+                bookingTimestampOverride ?? rt.next_suggested_date,
+              ),
+            );
             const allTags = tg.data ?? [];
             setTagNames(
               rt.tag_ids
@@ -129,7 +143,7 @@ function NewEntry() {
           });
       }
     });
-  }, [recurringTransactionId]);
+  }, [recurringTransactionId, bookingTimestampOverride]);
 
   const account = accounts.find((a) => a.id === accountId);
   const lockedAccountId = presetAccountId ?? recurringAccountId;

@@ -45,6 +45,9 @@ func (s *SettingsStore) Upsert(_ context.Context, userID string, upd settings.Up
 	if upd.WeekStart != nil {
 		row.WeekStart = upd.WeekStart
 	}
+	if upd.RecurringPreviewHorizon != nil {
+		row.RecurringPreviewHorizon = upd.RecurringPreviewHorizon
+	}
 	s.rows[userID] = row
 	return row, nil
 }

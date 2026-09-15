@@ -68,6 +68,7 @@ export function CardFormDialog({
   }>({});
   const [unit, setUnit] = useState<"month" | "day">("month");
   const [columns, setColumns] = useState(2);
+  const [showRecurringPreview, setShowRecurringPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -94,6 +95,9 @@ export function CardFormDialog({
       });
       setUnit(editingCard.config.unit === "day" ? "day" : "month");
       setColumns(editingCard.config.columns ?? 2);
+      setShowRecurringPreview(
+        editingCard.config.show_recurring_preview ?? false,
+      );
     } else {
       setType("account_stat");
       setTitle("");
@@ -104,6 +108,7 @@ export function CardFormDialog({
       setRange({});
       setUnit("month");
       setColumns(2);
+      setShowRecurringPreview(false);
     }
   }, [open, editingCard?.id]);
 
@@ -136,6 +141,10 @@ export function CardFormDialog({
           : undefined,
       unit: type === "bar_chart" ? unit : undefined,
       columns: type === "entry_list" ? columns : undefined,
+      show_recurring_preview:
+        type === "entry_list" || type === "bar_chart"
+          ? showRecurringPreview
+          : undefined,
     });
 
     setSaving(true);
@@ -315,6 +324,17 @@ export function CardFormDialog({
                   <option value={3}>{t("dashboard.addCard.columns3")}</option>
                   <option value={4}>{t("dashboard.addCard.columns4")}</option>
                 </select>
+              </label>
+            )}
+
+            {(type === "entry_list" || type === "bar_chart") && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={showRecurringPreview}
+                  onChange={(e) => setShowRecurringPreview(e.target.checked)}
+                />
+                {t("dashboard.addCard.showRecurringPreviewLabel")}
               </label>
             )}
 

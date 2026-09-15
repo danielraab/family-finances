@@ -80,6 +80,10 @@ const (
 //     regardless of any configured span.
 //   - bar_chart requires Unit and accepts AccountID, CategoryID,
 //     IncludeSubcategories, TagID, and Title besides it, but no Range.
+//   - entry_list and bar_chart additionally accept ShowRecurringPreview
+//     (default false) — whether the card additionally previews upcoming
+//     recurring-transaction occurrences via
+//     GET /api/recurring-transactions/preview. No other type may set it.
 //
 // Title is a free-text label the web client shows in place of its own
 // generated filter summary and makes clickable through to /reports with
@@ -99,6 +103,7 @@ type Config struct {
 	Unit                 *string `json:"unit,omitempty"`
 	Columns              *int    `json:"columns,omitempty"`
 	Title                *string `json:"title,omitempty"`
+	ShowRecurringPreview *bool   `json:"show_recurring_preview,omitempty"`
 }
 
 // Card is one node in a user's own, ordered dashboard. It has exactly one
@@ -137,11 +142,11 @@ func validateShape(typ CardType, c Config) error {
 		if c.AccountID == nil || strings.TrimSpace(*c.AccountID) == "" {
 			return ErrInvalidValue
 		}
-		if c.CategoryID != nil || c.IncludeSubcategories != nil || c.TagID != nil || c.Range != nil || c.Unit != nil || c.Columns != nil || c.Title != nil {
+		if c.CategoryID != nil || c.IncludeSubcategories != nil || c.TagID != nil || c.Range != nil || c.Unit != nil || c.Columns != nil || c.Title != nil || c.ShowRecurringPreview != nil {
 			return ErrInvalidValue
 		}
 	case CardTypeQueryStat:
-		if c.Unit != nil || c.Columns != nil {
+		if c.Unit != nil || c.Columns != nil || c.ShowRecurringPreview != nil {
 			return ErrInvalidValue
 		}
 	case CardTypeEntryList:

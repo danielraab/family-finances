@@ -111,11 +111,14 @@
       "columns2": "Schmal (2 Spalten)",
       "columns3": "Breit (3 Spalten)",
       "columns4": "Volle Breite (4 Spalten)",
+      "showRecurringPreviewLabel": "Anstehende wiederkehrende Buchungen anzeigen",
       "submit": "Karte hinzufügen"
     },
     "barChart": {
       "previous": "Vorheriger Zeitraum",
-      "next": "Nächster Zeitraum"
+      "next": "Nächster Zeitraum",
+      "projectedIncome": "Einnahmen (geplant)",
+      "projectedOutcome": "Ausgaben (geplant)"
     }
   },
   "flowChart": {
@@ -147,6 +150,15 @@
       "weekStartOption": {
         "monday": "Montag",
         "sunday": "Sonntag"
+      },
+      "recurringPreviewHorizon": "Vorschau-Zeitraum für wiederkehrende Buchungen",
+      "recurringPreviewHorizonOption": {
+        "oneMonth": "1 Monat ab heute",
+        "twoMonths": "2 Monate ab heute",
+        "threeMonths": "3 Monate ab heute",
+        "endOfThisMonth": "Ende dieses Monats",
+        "endOfNextMonth": "Ende nächsten Monats",
+        "endOfThisYear": "Ende dieses Jahres"
       },
       "saveError": "Speichern fehlgeschlagen — bitte versuche es erneut."
     },
@@ -573,6 +585,12 @@
       "confirmDeleteTitle": "Diese wiederkehrende Buchung löschen?",
       "confirmDeleteBody": "Dies kann hier nicht rückgängig gemacht werden."
     }
+  },
+  "recurringPreview": {
+    "toggleLabel": "Anstehende Buchungen anzeigen",
+    "heading": "Anstehend",
+    "empty": "In diesem Zeitraum stehen keine Buchungen an.",
+    "overdue": "Überfällig"
   },
   "categories": {
     "title": "Kategorien",

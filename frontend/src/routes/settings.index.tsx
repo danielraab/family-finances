@@ -6,6 +6,10 @@ import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
 import { CurrencySelect } from "../components/CurrencySelect";
 import i18n from "../i18n";
+import {
+  RECURRING_PREVIEW_HORIZON_I18N_KEYS,
+  RECURRING_PREVIEW_HORIZON_KEYS,
+} from "../lib/recurringPreview";
 
 export const Route = createFileRoute("/settings/")({
   component: ProfileSettingsTab,
@@ -261,6 +265,37 @@ function ProfileSettingsTab() {
           {WEEK_STARTS.map((day) => (
             <option key={day} value={day}>
               {t(`settings.profile.weekStartOption.${day}`)}
+            </option>
+          ))}
+        </select>
+      </SettingField>
+
+      <SettingField
+        id="settings-recurring-preview-horizon"
+        label={t("settings.profile.recurringPreviewHorizon")}
+        error={
+          errorField === "recurring_preview_horizon"
+            ? t("settings.profile.saveError")
+            : null
+        }
+      >
+        <select
+          id="settings-recurring-preview-horizon"
+          value={settings.recurring_preview_horizon}
+          onChange={(event) =>
+            update({
+              recurring_preview_horizon: event.target.value as NonNullable<
+                UserSettings["recurring_preview_horizon"]
+              >,
+            })
+          }
+          className={inputClass}
+        >
+          {RECURRING_PREVIEW_HORIZON_KEYS.map((horizon) => (
+            <option key={horizon} value={horizon}>
+              {t(
+                `settings.profile.recurringPreviewHorizonOption.${RECURRING_PREVIEW_HORIZON_I18N_KEYS[horizon]}`,
+              )}
             </option>
           ))}
         </select>

@@ -52,7 +52,7 @@ func TestHandlerGetReturnsDefaults(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2, WeekStart: "monday"}
+	want := settings.Settings{Language: "en", Timezone: "UTC", DefaultCurrency: "EUR", DisplayedDecimalPlaces: 2, WeekStart: "monday", RecurringPreviewHorizon: "end_of_this_month"}
 	if body != want {
 		t.Fatalf("body = %+v, want %+v", body, want)
 	}
@@ -95,6 +95,25 @@ func TestHandlerPutUpdatesWeekStart(t *testing.T) {
 	}
 	if body.WeekStart != "sunday" {
 		t.Fatalf("WeekStart = %q, want \"sunday\"", body.WeekStart)
+	}
+}
+
+func TestHandlerPutUpdatesRecurringPreviewHorizon(t *testing.T) {
+	h := newHandler(t)
+	req := withUser(httptest.NewRequest("PUT", "/api/settings", strings.NewReader(`{"recurring_preview_horizon":"3_months"}`)), auth.User{ID: "u1"})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, want 200", rec.Code)
+	}
+	conforms(t, "PUT", "/api/settings", rec)
+
+	var body settings.Settings
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.RecurringPreviewHorizon != "3_months" {
+		t.Fatalf("RecurringPreviewHorizon = %q, want \"3_months\"", body.RecurringPreviewHorizon)
 	}
 }
 

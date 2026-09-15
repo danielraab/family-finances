@@ -111,6 +111,26 @@ function resolveCardDateRange(
 }
 
 /**
+ * Resolves a card's stored `range.to` to a concrete calendar date string
+ * (`YYYY-MM-DD`, not RFC3339) — the input a show_recurring_preview-enabled
+ * entry_list card feeds into `resolvePreviewCutoff` alongside the caller's
+ * horizon setting. A bar_chart card has no `range` at all, so it always
+ * passes `undefined` here (the horizon alone determines its cutoff).
+ */
+export function resolveCardRangeToDateString(
+  range: DashboardCardConfig["range"],
+  weekStart: WeekStart,
+): string | undefined {
+  const effective = resolveEffectiveRange(
+    { range: range?.preset, from: range?.from, to: range?.to },
+    weekStart,
+    undefined,
+    new Date(),
+  );
+  return effective.to;
+}
+
+/**
  * Builds the query object shared by a query_stat/entry_list card's
  * `GET /api/entries` and `GET /api/entries/summary` calls, and a
  * bar_chart card's `GET /api/entries/flow-summary` call (which ignores

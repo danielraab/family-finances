@@ -61,22 +61,24 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Language               *string `json:"language"`
-		Timezone               *string `json:"timezone"`
-		DefaultCurrency        *string `json:"default_currency"`
-		DisplayedDecimalPlaces *int    `json:"displayed_decimal_places"`
-		WeekStart              *string `json:"week_start"`
+		Language                *string `json:"language"`
+		Timezone                *string `json:"timezone"`
+		DefaultCurrency         *string `json:"default_currency"`
+		DisplayedDecimalPlaces  *int    `json:"displayed_decimal_places"`
+		WeekStart               *string `json:"week_start"`
+		RecurringPreviewHorizon *string `json:"recurring_preview_horizon"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
 	s, err := h.svc.Update(r.Context(), user.ID, Update{
-		Language:               body.Language,
-		Timezone:               body.Timezone,
-		DefaultCurrency:        body.DefaultCurrency,
-		DisplayedDecimalPlaces: body.DisplayedDecimalPlaces,
-		WeekStart:              body.WeekStart,
+		Language:                body.Language,
+		Timezone:                body.Timezone,
+		DefaultCurrency:         body.DefaultCurrency,
+		DisplayedDecimalPlaces:  body.DisplayedDecimalPlaces,
+		WeekStart:               body.WeekStart,
+		RecurringPreviewHorizon: body.RecurringPreviewHorizon,
 	})
 	if err != nil {
 		h.renderError(w, r, err)

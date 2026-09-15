@@ -144,25 +144,37 @@ func (s *Service) decorate(ctx context.Context, callerID string, rt RecurringTra
 	rt.PerYearAmount = PerYearAmount(rt.Amount, rt.IntervalUnit, rt.IntervalCount)
 	rt.Ended = Ended(rt.EndsOn, s.today(ctx, callerID))
 
+	nextSuggested, err := s.nextSuggestedDate(ctx, rt)
+	if err != nil {
+		return RecurringTransaction{}, err
+	}
+	rt.NextSuggestedDate = nextSuggested
+
 	if s.entries != nil {
-		latest, err := s.entries.LatestLinkedBookingTime(ctx, rt.ID)
-		if err != nil {
-			return RecurringTransaction{}, err
-		}
-		if latest == nil {
-			rt.NextSuggestedDate = rt.StartsOn
-		} else {
-			rt.NextSuggestedDate = NewDate(Advance(*latest, rt.IntervalUnit, rt.IntervalCount))
-		}
 		count, err := s.entries.LinkedCount(ctx, rt.ID)
 		if err != nil {
 			return RecurringTransaction{}, err
 		}
 		rt.LinkedEntryCount = count
-	} else {
-		rt.NextSuggestedDate = rt.StartsOn
 	}
 	return rt, nil
+}
+
+// nextSuggestedDate computes rt's NextSuggestedDate — factored out of
+// decorate so Preview can anchor its occurrence generation at the same
+// value without duplicating the "latest linked entry, or starts_on" logic.
+func (s *Service) nextSuggestedDate(ctx context.Context, rt RecurringTransaction) (Date, error) {
+	if s.entries == nil {
+		return rt.StartsOn, nil
+	}
+	latest, err := s.entries.LatestLinkedBookingTime(ctx, rt.ID)
+	if err != nil {
+		return Date{}, err
+	}
+	if latest == nil {
+		return rt.StartsOn, nil
+	}
+	return NewDate(Advance(*latest, rt.IntervalUnit, rt.IntervalCount)), nil
 }
 
 // Create validates in, confirms callerID holds at least append permission
@@ -395,6 +407,114 @@ func (s *Service) Summary(ctx context.Context, callerID string, f Filter) (Summa
 		sums = append(sums, CurrencySum{Currency: currency, Amount: totals[currency]})
 	}
 	return Summary{Sums: sums, Count: count}, nil
+}
+
+// Preview resolves f's caller-supplied AccountIDs the same way List/Summary
+// do, then for each matching, non-deleted recurring transaction whose
+// category/tag also match f (when supplied), generates its projected future
+// occurrences up to min(f.To, that template's own EndsOn) via
+// previewOccurrences, and returns every template's occurrences merged and
+// sorted by BookingTimestamp ascending. f.To is required (ErrInvalidValue
+// when zero) — Preview never computes an unbounded result. See design.md's
+// "one new endpoint, no persistence" and "exactly one overdue row per
+// template" decisions.
+func (s *Service) Preview(ctx context.Context, callerID string, f PreviewFilter) ([]PreviewItem, error) {
+	if f.To.IsZero() {
+		return nil, ErrInvalidValue
+	}
+	if !f.CategoryMode.valid() {
+		return nil, ErrInvalidValue
+	}
+
+	resolved, err := s.resolveAccountIDs(ctx, callerID, Filter{AccountIDs: f.AccountIDs})
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.store.List(ctx, resolved)
+	if err != nil {
+		return nil, err
+	}
+
+	var allowedCategories map[string]bool
+	if f.CategoryID != nil {
+		permitted, err := s.categories.Subtree(ctx, callerID, *f.CategoryID)
+		if err != nil {
+			return nil, err
+		}
+		allowedCategories = map[string]bool{}
+		if f.CategoryMode == CategoryModeExact {
+			allowedCategories[*f.CategoryID] = true
+		} else {
+			for _, id := range permitted {
+				allowedCategories[id] = true
+			}
+		}
+	}
+
+	today := s.today(ctx, callerID)
+	cutoff := NewDate(f.To)
+
+	var items []PreviewItem
+	for _, rt := range rows {
+		// A template already ended (ends_on at or before today) never
+		// contributes, regardless of how stale its next_suggested_date is
+		// — mirrors Summary's own ended-exclusion above.
+		if Ended(rt.EndsOn, today) {
+			continue
+		}
+		if allowedCategories != nil {
+			if rt.CategoryID == nil || !allowedCategories[*rt.CategoryID] {
+				continue
+			}
+		}
+		if f.TagID != nil && !containsString(rt.TagIDs, *f.TagID) {
+			continue
+		}
+
+		anchor, err := s.nextSuggestedDate(ctx, rt)
+		if err != nil {
+			return nil, err
+		}
+		currency, _, _, err := s.accounts.Access(ctx, rt.AccountID, callerID)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, d := range previewOccurrences(anchor, rt.IntervalUnit, rt.IntervalCount, cutoff, today, rt.EndsOn) {
+			items = append(items, PreviewItem{
+				RecurringTransactionID: rt.ID,
+				AccountID:              rt.AccountID,
+				AccountCurrency:        currency,
+				Title:                  rt.Title,
+				Description:            rt.Description,
+				CategoryID:             rt.CategoryID,
+				Counterparty:           rt.Counterparty,
+				Location:               rt.Location,
+				TagIDs:                 rt.TagIDs,
+				Amount:                 rt.Amount,
+				BookingTimestamp:       d,
+				Overdue:                d.Before(today),
+			})
+		}
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].BookingTimestamp.Time.Equal(items[j].BookingTimestamp.Time) {
+			return items[i].RecurringTransactionID < items[j].RecurringTransactionID
+		}
+		return items[i].BookingTimestamp.Before(items[j].BookingTimestamp)
+	})
+	return items, nil
+}
+
+// containsString reports whether id appears in ids.
+func containsString(ids []string, id string) bool {
+	for _, v := range ids {
+		if v == id {
+			return true
+		}
+	}
+	return false
 }
 
 // CurrencySum is one currency's total within a Summary — same shape as
