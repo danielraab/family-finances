@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"at.draab/familyfinances/internal/auth"
 	"at.draab/familyfinances/internal/httpapi"
@@ -137,6 +139,66 @@ func TestHandlerListAndSummary(t *testing.T) {
 	}
 	if sum.Count != 1 || len(sum.Sums) != 1 || sum.Sums[0].Currency != "EUR" || sum.Sums[0].Amount != -960000 {
 		t.Fatalf("summary = %+v", sum)
+	}
+}
+
+func TestHandlerPreviewRequiresCutoff(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/recurring-transactions/preview", nil), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	conforms(t, "GET", "/api/recurring-transactions/preview", rec)
+}
+
+func TestHandlerPreviewRequiresAuth(t *testing.T) {
+	h, _, _ := newHandlerFixture()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/recurring-transactions/preview?to=2027-01-01T00:00:00Z", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestHandlerPreviewReturnsUpcomingOccurrences(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	starts := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	body := `{"account_id":"acc1","title":"Rent","category_id":"cat1","amount":-80000,"interval_unit":"month","interval_count":1,"starts_on":"` + starts + `"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/recurring-transactions", strings.NewReader(body)), user))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", rec.Code, rec.Body)
+	}
+
+	to := time.Now().AddDate(0, 2, 0).Format(time.RFC3339)
+	target := "/api/recurring-transactions/preview?to=" + url.QueryEscape(to)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", target, nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "GET", "/api/recurring-transactions/preview", rec)
+
+	var page struct {
+		Items []rt.PreviewItem `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) == 0 {
+		t.Fatal("expected at least one previewed occurrence")
+	}
+	if page.Items[0].AccountCurrency != "EUR" || page.Items[0].Overdue {
+		t.Fatalf("unexpected first item: %+v", page.Items[0])
 	}
 }
 

@@ -8,10 +8,19 @@ import {
   buildCardFilterQuery,
   cardReferencesResolve,
   type DashboardCardConfig,
+  resolveCardRangeToDateString,
 } from "../../lib/dashboardFilter";
 import type { WeekStart } from "../../lib/dateRangePresets";
+import {
+  fetchRecurringPreview,
+  type RecurringTransactionPreviewItem,
+  resolvePreviewCutoff,
+  todayDateString,
+} from "../../lib/recurringPreview";
 import type { Account } from "../../lib/useAccountsWithBalances";
+import { useRecurringPreviewHorizon } from "../../lib/useRecurringPreviewHorizon";
 import { AccountLabel } from "../AccountLabel";
+import { UpcomingBlock } from "../UpcomingBlock";
 import { CardTitleLink } from "./CardTitleLink";
 import { MissingReferenceCard } from "./MissingReferenceCard";
 
@@ -45,9 +54,24 @@ export function EntryListCard({
 }) {
   const { t } = useTranslation();
   const [items, setItems] = useState<Entry[] | null>(null);
+  const [previewItems, setPreviewItems] = useState<
+    RecurringTransactionPreviewItem[] | null
+  >(null);
+  const recurringPreviewHorizon = useRecurringPreviewHorizon();
 
   const resolves = cardReferencesResolve(config, accounts, categories, tags);
   const queryKey = JSON.stringify(config);
+
+  const today = new Date();
+  const previewCutoff = config.show_recurring_preview
+    ? resolvePreviewCutoff(
+        resolveCardRangeToDateString(config.range, weekStart),
+        recurringPreviewHorizon,
+        today,
+      )
+    : undefined;
+  const showUpcoming =
+    previewCutoff !== undefined && previewCutoff >= todayDateString(today);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: queryKey is config's stable stand-in; config itself is a new object identity each render.
   useEffect(() => {
@@ -74,6 +98,33 @@ export function EntryListCard({
     };
   }, [queryKey, weekStart, resolves]);
 
+  const previewKey = JSON.stringify({ queryKey, previewCutoff, showUpcoming });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: previewKey is the stable dependency for the values it embeds.
+  useEffect(() => {
+    if (!resolves || !showUpcoming || previewCutoff === undefined) {
+      setPreviewItems(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewItems(null);
+    fetchRecurringPreview({
+      accountIds: config.account_id ? [config.account_id] : undefined,
+      categoryId: config.category_id,
+      categoryMode:
+        config.category_id && config.include_subcategories === false
+          ? "exact"
+          : undefined,
+      tagId: config.tag_id,
+      to: previewCutoff,
+    }).then(({ data }) => {
+      if (!cancelled) setPreviewItems(data?.items ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewKey, resolves, showUpcoming, previewCutoff]);
+
   if (!resolves) {
     return <MissingReferenceCard />;
   }
@@ -87,6 +138,15 @@ export function EntryListCard({
         tags={tags}
         allLabel={t("dashboard.filterAllAccounts")}
       />
+
+      {showUpcoming && (
+        <UpcomingBlock
+          items={previewItems}
+          accounts={accounts}
+          displayedDecimalPlaces={displayedDecimalPlaces}
+          locale={locale}
+        />
+      )}
 
       {items === null ? (
         <span className="text-sm text-zinc-500 dark:text-zinc-400">…</span>

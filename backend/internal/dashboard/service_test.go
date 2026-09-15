@@ -286,6 +286,41 @@ func TestServiceCreateTitleRejectedOnAccountStat(t *testing.T) {
 	}
 }
 
+func TestServiceCreateShowRecurringPreviewAllowedOnEntryListAndBarChart(t *testing.T) {
+	svc, _, _, _ := newTestService()
+
+	if _, err := svc.Create(t.Context(), "u1", dashboard.New{
+		Type:   dashboard.CardTypeEntryList,
+		Config: dashboard.Config{ShowRecurringPreview: boolPtr(true)},
+	}); err != nil {
+		t.Fatalf("entry_list: %v", err)
+	}
+	if _, err := svc.Create(t.Context(), "u1", dashboard.New{
+		Type:   dashboard.CardTypeBarChart,
+		Config: dashboard.Config{Unit: strPtr("month"), ShowRecurringPreview: boolPtr(true)},
+	}); err != nil {
+		t.Fatalf("bar_chart: %v", err)
+	}
+}
+
+func TestServiceCreateShowRecurringPreviewRejectedOnAccountStatAndQueryStat(t *testing.T) {
+	svc, accounts, _, _ := newTestService()
+	accounts.add("acc1", "u1")
+
+	if _, err := svc.Create(t.Context(), "u1", dashboard.New{
+		Type:   dashboard.CardTypeAccountStat,
+		Config: dashboard.Config{AccountID: strPtr("acc1"), ShowRecurringPreview: boolPtr(true)},
+	}); !errors.Is(err, dashboard.ErrInvalidValue) {
+		t.Fatalf("account_stat: err = %v, want ErrInvalidValue", err)
+	}
+	if _, err := svc.Create(t.Context(), "u1", dashboard.New{
+		Type:   dashboard.CardTypeQueryStat,
+		Config: dashboard.Config{ShowRecurringPreview: boolPtr(true)},
+	}); !errors.Is(err, dashboard.ErrInvalidValue) {
+		t.Fatalf("query_stat: err = %v, want ErrInvalidValue", err)
+	}
+}
+
 func TestServiceCreateRejectsInaccessibleAccount(t *testing.T) {
 	svc, accounts, _, _ := newTestService()
 	accounts.add("acc1", "u2") // owned by someone else, no share

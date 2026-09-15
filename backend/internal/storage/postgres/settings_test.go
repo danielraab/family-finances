@@ -32,7 +32,7 @@ func TestPGSettingsGetMissingRowIsZeroValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if row.Language != nil || row.Timezone != nil || row.DefaultCurrency != nil || row.WeekStart != nil {
+	if row.Language != nil || row.Timezone != nil || row.DefaultCurrency != nil || row.WeekStart != nil || row.RecurringPreviewHorizon != nil {
 		t.Fatalf("row = %+v, want all nil", row)
 	}
 }
@@ -89,6 +89,28 @@ func TestPGSettingsWeekStartCheckConstraint(t *testing.T) {
 
 	if _, err := store.Upsert(ctx, u.ID, settings.Update{WeekStart: ptr("tuesday")}); err == nil {
 		t.Fatal("expected the DB CHECK constraint to reject an unsupported week_start")
+	}
+}
+
+func TestPGSettingsRecurringPreviewHorizonCheckConstraint(t *testing.T) {
+	store, authStore := newSettingsStore(t)
+	ctx := context.Background()
+
+	u, _, err := authStore.CreateUserWithIdentity(ctx, auth.NewUser{Email: "u3@example.com"}, emailIdentity("u3@example.com"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Upsert(ctx, u.ID, settings.Update{RecurringPreviewHorizon: ptr("6_months")}); err == nil {
+		t.Fatal("expected the DB CHECK constraint to reject an unsupported recurring_preview_horizon")
+	}
+
+	row, err := store.Upsert(ctx, u.ID, settings.Update{RecurringPreviewHorizon: ptr("3_months")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.RecurringPreviewHorizon == nil || *row.RecurringPreviewHorizon != "3_months" {
+		t.Fatalf("RecurringPreviewHorizon = %v, want \"3_months\"", row.RecurringPreviewHorizon)
 	}
 }
 

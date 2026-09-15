@@ -10,6 +10,7 @@ import { DateRangeFilter } from "../components/DateRangeFilter";
 import { LocationPreviewModal } from "../components/LocationPreviewModal";
 import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
 import { TagLabel } from "../components/TagLabel";
+import { UpcomingBlock } from "../components/UpcomingBlock";
 import {
   amountColorClass,
   formatAmount,
@@ -19,7 +20,14 @@ import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
 import { resolveEffectiveRange } from "../lib/dateRangePresets";
 import { type Coordinates, parseLocation } from "../lib/location";
+import {
+  fetchRecurringPreview,
+  type RecurringTransactionPreviewItem,
+  resolvePreviewCutoff,
+  todayDateString,
+} from "../lib/recurringPreview";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
+import { useRecurringPreviewHorizon } from "../lib/useRecurringPreviewHorizon";
 import { useWeekStart } from "../lib/useWeekStart";
 
 type Account = components["schemas"]["Account"];
@@ -41,6 +49,7 @@ type EntriesSearch = {
   q?: string | undefined;
   sort?: Sort | undefined;
   dir?: Dir | undefined;
+  show_recurring?: boolean | undefined;
 };
 
 const PAGE_SIZE = 30;
@@ -66,6 +75,10 @@ export const Route = createFileRoute("/entries/")({
     q: asString(search["q"]),
     sort: search["sort"] === "amount" ? "amount" : undefined,
     dir: search["dir"] === "asc" ? "asc" : undefined,
+    show_recurring:
+      typeof search["show_recurring"] === "boolean"
+        ? search["show_recurring"]
+        : undefined,
   }),
   component: EntriesListPage,
 });
@@ -87,12 +100,23 @@ function EntriesListPage() {
   const { user } = useAuth();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
   const weekStart = useWeekStart();
+  const recurringPreviewHorizon = useRecurringPreviewHorizon();
+  const today = new Date();
   const effectiveRange = resolveEffectiveRange(
     { range: search.range, from: search.from, to: search.to },
     weekStart,
     DEFAULT_RANGE_PRESET,
-    new Date(),
+    today,
   );
+  const previewCutoff = resolvePreviewCutoff(
+    effectiveRange.to,
+    recurringPreviewHorizon,
+    today,
+  );
+  // A cutoff already before today has nothing to preview — the toggle can
+  // be on, but the block simply doesn't render (see design.md).
+  const showUpcoming =
+    (search.show_recurring ?? false) && previewCutoff >= todayDateString(today);
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -101,6 +125,9 @@ function EntriesListPage() {
 
   const [items, setItems] = useState<Entry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [previewItems, setPreviewItems] = useState<
+    RecurringTransactionPreviewItem[] | null
+  >(null);
   const [previewLocation, setPreviewLocation] = useState<Coordinates | null>(
     null,
   );
@@ -156,6 +183,35 @@ function EntriesListPage() {
       cancelled = true;
     };
   }, [searchKey]);
+
+  const previewKey = JSON.stringify({
+    accountId: search.account_id,
+    categoryId: search.category_id,
+    tagId: search.tag_id,
+    cutoff: previewCutoff,
+    showUpcoming,
+  });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: previewKey is the stable dependency for the values it embeds.
+  useEffect(() => {
+    if (!showUpcoming) {
+      setPreviewItems(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewItems(null);
+    fetchRecurringPreview({
+      accountIds: search.account_id ? [search.account_id] : undefined,
+      categoryId: search.category_id,
+      tagId: search.tag_id,
+      to: previewCutoff,
+    }).then(({ data }) => {
+      if (!cancelled) setPreviewItems(data?.items ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [previewKey]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: loadMore is re-created each render and closes over current state; re-subscribing on it would just re-run this identically.
   useEffect(() => {
@@ -311,6 +367,17 @@ function EntriesListPage() {
           toLabel={t("entries.filters.to")}
         />
 
+        <label className="flex items-center gap-2 pb-1.5 text-sm">
+          <input
+            type="checkbox"
+            checked={search.show_recurring ?? false}
+            onChange={(e) =>
+              patchSearch({ show_recurring: e.target.checked || undefined })
+            }
+          />
+          {t("recurringPreview.toggleLabel")}
+        </label>
+
         <label className="flex flex-1 flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
           {t("entries.filters.search")}
           <input
@@ -329,6 +396,15 @@ function EntriesListPage() {
           />
         </label>
       </div>
+
+      {showUpcoming && (
+        <UpcomingBlock
+          items={previewItems}
+          accounts={accounts}
+          displayedDecimalPlaces={displayedDecimalPlaces}
+          locale={i18n.resolvedLanguage ?? "en"}
+        />
+      )}
 
       <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
         <table className="w-full text-left text-sm">

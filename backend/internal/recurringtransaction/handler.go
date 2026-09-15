@@ -3,6 +3,7 @@ package recurringtransaction
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"at.draab/familyfinances/internal/auth"
 )
@@ -38,6 +39,7 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("GET /api/recurring-transactions", h.list)
 	h.mux.HandleFunc("POST /api/recurring-transactions", h.create)
 	h.mux.HandleFunc("GET /api/recurring-transactions/summary", h.summary)
+	h.mux.HandleFunc("GET /api/recurring-transactions/preview", h.preview)
 	h.mux.HandleFunc("GET /api/recurring-transactions/{id}", h.get)
 	h.mux.HandleFunc("PATCH /api/recurring-transactions/{id}", h.update)
 	h.mux.HandleFunc("DELETE /api/recurring-transactions/{id}", h.delete)
@@ -221,6 +223,52 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, sum)
+}
+
+// previewResponse wraps Preview's result the way every other list endpoint
+// in this codebase wraps its items, under an "items" key.
+type previewResponse struct {
+	Items []PreviewItem `json:"items"`
+}
+
+func (h *Handler) preview(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	q := r.URL.Query()
+	toStr := q.Get("to")
+	if toStr == "" {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+	to, err := time.Parse(time.RFC3339, toStr)
+	if err != nil {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+	f := PreviewFilter{
+		AccountIDs:   q["account_id"],
+		CategoryMode: CategoryMode(q.Get("category_mode")),
+		To:           to,
+	}
+	if v := q.Get("category_id"); v != "" {
+		f.CategoryID = &v
+	}
+	if v := q.Get("tag_id"); v != "" {
+		f.TagID = &v
+	}
+
+	items, err := h.svc.Preview(r.Context(), user.ID, f)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	if items == nil {
+		items = []PreviewItem{}
+	}
+	writeJSON(w, http.StatusOK, previewResponse{Items: items})
 }
 
 func decodeJSON(r *http.Request, v any) error {

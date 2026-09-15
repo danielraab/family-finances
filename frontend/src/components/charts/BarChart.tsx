@@ -6,12 +6,28 @@ export type BarChartSeries = {
   label: string;
   /** Tailwind fill utility classes, e.g. "fill-[#008300] dark:fill-[#008300]" — see frontend/AGENTS.md's chart color convention. */
   fillClassName: string;
+  /**
+   * Optional: a muted/lighter fill for a second segment stacked on top of
+   * this series' real segment, representing a projected (not-yet-real)
+   * amount — see BarChartDatum.projectedValues. Only meaningful together
+   * with projectedLabel and at least one non-zero projectedValues entry;
+   * a series/datum with no projected data renders exactly as before this
+   * capability existed.
+   */
+  projectedFillClassName?: string;
+  /** The legend/tooltip label for this series' projected segment (e.g.
+   * "Income (projected)"). Required alongside projectedFillClassName. */
+  projectedLabel?: string;
 };
 
 /** One category's values, one per entry in `series`, same order. */
 export type BarChartDatum = {
   category: string;
   values: number[];
+  /** Parallel to `values` — an optional projected amount per series,
+   * stacked as a second segment on top of the real one. Omitted, or all
+   * zero/undefined, renders exactly as before this capability existed. */
+  projectedValues?: number[];
 };
 
 const CHART_HEIGHT = 220;
@@ -90,7 +106,11 @@ export function BarChart({
   const max = niceMax(
     Math.max(
       1,
-      ...data.flatMap((d) => d.values.filter((v) => Number.isFinite(v))),
+      ...data.flatMap((d) =>
+        d.values
+          .map((v, i) => v + (d.projectedValues?.[i] ?? 0))
+          .filter((v) => Number.isFinite(v)),
+      ),
     ),
   );
   const ticks = Array.from(
@@ -184,6 +204,28 @@ export function BarChart({
             {s.label}
           </li>
         ))}
+        {series
+          .filter((s) => s.projectedFillClassName && s.projectedLabel)
+          .map((s) => (
+            <li
+              key={`${s.label}-projected`}
+              className="flex items-center gap-1.5"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 10 10"
+                className="inline-block h-2.5 w-2.5"
+              >
+                <rect
+                  width="10"
+                  height="10"
+                  rx="2"
+                  className={s.projectedFillClassName}
+                />
+              </svg>
+              {s.projectedLabel}
+            </li>
+          ))}
       </ul>
 
       <div ref={wrapperRef} className="relative">
@@ -239,9 +281,13 @@ export function BarChart({
                   role="button"
                   aria-pressed={pinnedIndex === groupIndex}
                   aria-label={`${d.category}: ${series
-                    .map(
-                      (s, i) => `${s.label} ${formatValue(d.values[i] ?? 0)}`,
-                    )
+                    .map((s, i) => {
+                      const base = `${s.label} ${formatValue(d.values[i] ?? 0)}`;
+                      const projected = d.projectedValues?.[i];
+                      return s.projectedLabel && projected
+                        ? `${base}, ${s.projectedLabel} ${formatValue(projected)}`
+                        : base;
+                    })
                     .join(", ")}`}
                   onMouseEnter={() => setHoverIndex(groupIndex)}
                   onMouseLeave={() => setHoverIndex(null)}
@@ -276,24 +322,41 @@ export function BarChart({
                   />
                   {series.map((s, seriesIndex) => {
                     const value = Math.max(0, d.values[seriesIndex] ?? 0);
+                    const projectedValue = Math.max(
+                      0,
+                      d.projectedValues?.[seriesIndex] ?? 0,
+                    );
                     const barHeight = max > 0 ? (value / max) * plotHeight : 0;
+                    const projectedHeight =
+                      max > 0 ? (projectedValue / max) * plotHeight : 0;
                     const barX =
                       barsStart + seriesIndex * (barThickness + BAR_GAP);
                     const barY = MARGIN_TOP + plotHeight - barHeight;
+                    const opacityClass =
+                      activeIndex === null || activeIndex === groupIndex
+                        ? "opacity-100"
+                        : "opacity-40";
                     return (
-                      <rect
-                        key={s.label}
-                        x={barX}
-                        y={barY}
-                        width={barThickness}
-                        height={Math.max(barHeight, 0)}
-                        rx={4}
-                        className={`${s.fillClassName} transition-opacity ${
-                          activeIndex === null || activeIndex === groupIndex
-                            ? "opacity-100"
-                            : "opacity-40"
-                        }`}
-                      />
+                      <g key={s.label}>
+                        <rect
+                          x={barX}
+                          y={barY}
+                          width={barThickness}
+                          height={Math.max(barHeight, 0)}
+                          rx={4}
+                          className={`${s.fillClassName} transition-opacity ${opacityClass}`}
+                        />
+                        {s.projectedFillClassName && projectedValue > 0 && (
+                          <rect
+                            x={barX}
+                            y={barY - projectedHeight}
+                            width={barThickness}
+                            height={Math.max(projectedHeight, 0)}
+                            rx={4}
+                            className={`${s.projectedFillClassName} transition-opacity ${opacityClass}`}
+                          />
+                        )}
+                      </g>
                     );
                   })}
                   <text
@@ -349,6 +412,34 @@ export function BarChart({
                 </span>
               </span>
             ))}
+            {series.map((s, i) => {
+              if (!s.projectedFillClassName || !s.projectedLabel) return null;
+              return (
+                <span
+                  key={`${s.label}-projected`}
+                  className="flex items-center gap-1.5"
+                >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 8 8"
+                    className="inline-block h-2 w-2"
+                  >
+                    <rect
+                      width="8"
+                      height="8"
+                      rx="2"
+                      className={s.projectedFillClassName}
+                    />
+                  </svg>
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    {s.projectedLabel}
+                  </span>
+                  <span className="font-mono tabular-nums">
+                    {formatValue(tooltipDatum.projectedValues?.[i] ?? 0)}
+                  </span>
+                </span>
+              );
+            })}
           </div>
         )}
       </div>

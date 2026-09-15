@@ -874,6 +874,26 @@ export interface paths {
         patch: operations["patchRecurringTransaction"];
         trace?: never;
     };
+    "/api/recurring-transactions/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview upcoming occurrences of the caller's visible recurring transactions
+         * @description Never persisted — a read-only projection, computed fresh on every call. to is required; there is no default cutoff, so this never computes an unbounded result. Each recurring transaction's own ends_on (when set) additionally clamps its contribution, and generation for a single recurring transaction stops after 366 occurrences regardless of to/ends_on. A recurring transaction whose next_suggested_date is already before the current date still contributes exactly that one date, marked overdue — never one item per interval it has fallen behind by.
+         */
+        get: operations["getRecurringTransactionsPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/recurring-transactions/summary": {
         parameters: {
             query?: never;
@@ -1269,6 +1289,8 @@ export interface components {
                 /** Format: date */
                 to?: string;
             };
+            /** @description Only meaningful, and only settable, on entry_list/bar_chart. Absent means false. When true, the card additionally previews upcoming recurring-transaction occurrences (an Upcoming block on entry_list; stacked projected bar segments on bar_chart) via GET /api/recurring-transactions/preview, bounded by the caller's recurring_preview_horizon setting. */
+            show_recurring_preview?: boolean;
             /** @description Optional filter on query_stat/entry_list/bar_chart. */
             tag_id?: string;
             /** @description Optional custom heading, settable on query_stat/entry_list/ bar_chart only (never account_stat, whose heading is always its account's own name). The web client renders it — falling back to a generated summary of the filter when absent — as a link through to /reports with this card's account/category/ tag/date-range filter prefilled. */
@@ -1443,6 +1465,11 @@ export interface components {
             /** @description The user's full name. Trimmed of surrounding whitespace before it is stored; the trimmed value must match `^[\p{L} .'-]{0,150}$` (Unicode letters, spaces, `.`, `'`, `-`). An empty string is accepted and clears the name. */
             display_name: string;
         };
+        /**
+         * @description How far ahead a caller's recurring-preview toggle projects, resolved to a concrete date client-side — the backend never interprets this value itself.
+         * @enum {string}
+         */
+        RecurringPreviewHorizon: "1_month" | "2_months" | "3_months" | "end_of_this_month" | "end_of_next_month" | "end_of_this_year";
         RecurringTransaction: {
             /** @description The currency of account_id, resolved server-side — mirrors Entry's account_currency. */
             account_currency?: string;
@@ -1505,6 +1532,27 @@ export interface components {
             /** Format: date */
             starts_on: string;
             tag_ids?: string[];
+            title: string;
+        };
+        /** @description One projected future occurrence of a recurring transaction — never persisted, carries no id. */
+        RecurringTransactionPreviewItem: {
+            account_currency?: string;
+            account_id: string;
+            /** Format: int64 */
+            amount: number;
+            /**
+             * Format: date
+             * @description The projected date of this occurrence.
+             */
+            booking_timestamp: string;
+            category_id?: string;
+            counterparty?: string;
+            description?: string;
+            location?: string;
+            /** @description True when booking_timestamp is before the current date, in the caller's resolved timezone. */
+            overdue: boolean;
+            recurring_transaction_id: string;
+            tag_ids: string[];
             title: string;
         };
         RecurringTransactionUpdate: {
@@ -1599,6 +1647,7 @@ export interface components {
             displayed_decimal_places: number;
             /** @enum {string} */
             language: "en" | "de";
+            recurring_preview_horizon: components["schemas"]["RecurringPreviewHorizon"];
             timezone: string;
             /**
              * @description Which day a week starts on, used to anchor week-based date-range presets on the client.
@@ -1611,6 +1660,7 @@ export interface components {
             displayed_decimal_places?: number;
             /** @enum {string} */
             language?: "en" | "de";
+            recurring_preview_horizon?: components["schemas"]["RecurringPreviewHorizon"];
             timezone?: string;
             /** @enum {string} */
             week_start?: "monday" | "sunday";
@@ -3349,6 +3399,40 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getRecurringTransactionsPreview: {
+        parameters: {
+            query: {
+                /** @description Repeatable. Omitted means every non-deleted account the caller has any permission on. */
+                account_id?: string[];
+                /** @description Matches this category, plus every descendant unless category_mode=exact. */
+                category_id?: string;
+                /** @description Only meaningful together with category_id. subtree (the default) matches the category and every descendant; exact matches only that category. */
+                category_mode?: "subtree" | "exact";
+                tag_id?: string;
+                /** @description Inclusive cutoff for every previewed occurrence, RFC3339. */
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Projected future occurrences, sorted by booking_timestamp ascending. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["RecurringTransactionPreviewItem"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     getRecurringTransactionsSummary: {

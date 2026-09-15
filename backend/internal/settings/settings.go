@@ -14,13 +14,14 @@ import (
 // column. There is no per-instance override (Non-Goal: no instance_settings
 // table) — these are Go constants.
 const (
-	DefaultLanguage               = "en"
-	DefaultTimezone               = "UTC"
-	DefaultDefaultCurrency        = "EUR"
-	DefaultDisplayedDecimalPlaces = 2
-	MinDisplayedDecimalPlaces     = 0
-	MaxDisplayedDecimalPlaces     = 4
-	DefaultWeekStart              = "monday"
+	DefaultLanguage                = "en"
+	DefaultTimezone                = "UTC"
+	DefaultDefaultCurrency         = "EUR"
+	DefaultDisplayedDecimalPlaces  = 2
+	MinDisplayedDecimalPlaces      = 0
+	MaxDisplayedDecimalPlaces      = 4
+	DefaultWeekStart               = "monday"
+	DefaultRecurringPreviewHorizon = "end_of_this_month"
 )
 
 // SupportedLanguages mirrors the client's web-client-i18n language set.
@@ -29,45 +30,61 @@ var SupportedLanguages = map[string]bool{"en": true, "de": true}
 // SupportedWeekStarts is the only two valid week_start values.
 var SupportedWeekStarts = map[string]bool{"monday": true, "sunday": true}
 
+// SupportedRecurringPreviewHorizons is the six fixed presets a caller's
+// recurring-preview toggle projects up to — resolved to a concrete date
+// client-side, never interpreted by the backend itself.
+var SupportedRecurringPreviewHorizons = map[string]bool{
+	"1_month":           true,
+	"2_months":          true,
+	"3_months":          true,
+	"end_of_this_month": true,
+	"end_of_next_month": true,
+	"end_of_this_year":  true,
+}
+
 var currencyShape = regexp.MustCompile(`^[A-Z]{3}$`)
 
 // Row is a user's raw, possibly-partial stored preferences: nil means unset.
 // A user with no user_settings row is the zero Row (every field nil).
 type Row struct {
-	Language               *string
-	Timezone               *string
-	DefaultCurrency        *string
-	DisplayedDecimalPlaces *int
-	WeekStart              *string
+	Language                *string
+	Timezone                *string
+	DefaultCurrency         *string
+	DisplayedDecimalPlaces  *int
+	WeekStart               *string
+	RecurringPreviewHorizon *string
 }
 
 // Update is a partial change: only non-nil fields are applied.
 type Update struct {
-	Language               *string
-	Timezone               *string
-	DefaultCurrency        *string
-	DisplayedDecimalPlaces *int
-	WeekStart              *string
+	Language                *string
+	Timezone                *string
+	DefaultCurrency         *string
+	DisplayedDecimalPlaces  *int
+	WeekStart               *string
+	RecurringPreviewHorizon *string
 }
 
 // Settings is a user's fully-resolved preferences — every field always
 // populated, defaults already substituted.
 type Settings struct {
-	Language               string `json:"language"`
-	Timezone               string `json:"timezone"`
-	DefaultCurrency        string `json:"default_currency"`
-	DisplayedDecimalPlaces int    `json:"displayed_decimal_places"`
-	WeekStart              string `json:"week_start"`
+	Language                string `json:"language"`
+	Timezone                string `json:"timezone"`
+	DefaultCurrency         string `json:"default_currency"`
+	DisplayedDecimalPlaces  int    `json:"displayed_decimal_places"`
+	WeekStart               string `json:"week_start"`
+	RecurringPreviewHorizon string `json:"recurring_preview_horizon"`
 }
 
 // Resolve substitutes the hardcoded defaults for any unset field in row.
 func Resolve(row Row) Settings {
 	s := Settings{
-		Language:               DefaultLanguage,
-		Timezone:               DefaultTimezone,
-		DefaultCurrency:        DefaultDefaultCurrency,
-		DisplayedDecimalPlaces: DefaultDisplayedDecimalPlaces,
-		WeekStart:              DefaultWeekStart,
+		Language:                DefaultLanguage,
+		Timezone:                DefaultTimezone,
+		DefaultCurrency:         DefaultDefaultCurrency,
+		DisplayedDecimalPlaces:  DefaultDisplayedDecimalPlaces,
+		WeekStart:               DefaultWeekStart,
+		RecurringPreviewHorizon: DefaultRecurringPreviewHorizon,
 	}
 	if row.Language != nil {
 		s.Language = *row.Language
@@ -83,6 +100,9 @@ func Resolve(row Row) Settings {
 	}
 	if row.WeekStart != nil {
 		s.WeekStart = *row.WeekStart
+	}
+	if row.RecurringPreviewHorizon != nil {
+		s.RecurringPreviewHorizon = *row.RecurringPreviewHorizon
 	}
 	return s
 }
@@ -125,6 +145,14 @@ func ValidateDisplayedDecimalPlaces(v int) error {
 // ValidateWeekStart accepts only "monday" or "sunday".
 func ValidateWeekStart(v string) error {
 	if !SupportedWeekStarts[v] {
+		return ErrInvalidValue
+	}
+	return nil
+}
+
+// ValidateRecurringPreviewHorizon accepts only the six fixed preset values.
+func ValidateRecurringPreviewHorizon(v string) error {
+	if !SupportedRecurringPreviewHorizons[v] {
 		return ErrInvalidValue
 	}
 	return nil

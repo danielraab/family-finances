@@ -7,11 +7,19 @@ import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
+import { UpcomingBlock } from "../components/UpcomingBlock";
 import { amountColorClass, formatAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
 import { resolveEffectiveRange } from "../lib/dateRangePresets";
+import {
+  fetchRecurringPreview,
+  type RecurringTransactionPreviewItem,
+  resolvePreviewCutoff,
+  todayDateString,
+} from "../lib/recurringPreview";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
+import { useRecurringPreviewHorizon } from "../lib/useRecurringPreviewHorizon";
 import { useWeekStart } from "../lib/useWeekStart";
 
 type Account = components["schemas"]["Account"];
@@ -28,6 +36,7 @@ type ReportsSearch = {
   range?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
+  show_recurring?: boolean | undefined;
 };
 
 /** The filters "Generate report" was last activated with — a snapshot,
@@ -40,6 +49,13 @@ type GeneratedFilter = {
   accountId?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
+  showRecurring: boolean;
+  /** The resolved preview cutoff, only set when showRecurring is on AND it
+   * resolves on/after today — see design.md's "a cutoff already before
+   * today means the block simply doesn't render" rule. Drives both
+   * whether the preview is fetched and whether the Upcoming block
+   * renders. */
+  previewCutoff?: string | undefined;
 };
 
 const PAGE_SIZE = 30;
@@ -60,6 +76,10 @@ export const Route = createFileRoute("/reports")({
     range: asString(search["range"]),
     from: asString(search["from"]),
     to: asString(search["to"]),
+    show_recurring:
+      typeof search["show_recurring"] === "boolean"
+        ? search["show_recurring"]
+        : undefined,
   }),
   component: ReportsPage,
 });
@@ -114,6 +134,7 @@ function ReportsPage() {
   const { t, i18n } = useTranslation();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
   const weekStart = useWeekStart();
+  const recurringPreviewHorizon = useRecurringPreviewHorizon();
 
   useEffect(() => {
     if (status === "anonymous") {
@@ -144,6 +165,9 @@ function ReportsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [sums, setSums] = useState<CurrencySum[]>([]);
   const [count, setCount] = useState(0);
+  const [previewItems, setPreviewItems] = useState<
+    RecurringTransactionPreviewItem[] | null
+  >(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -155,6 +179,7 @@ function ReportsPage() {
     setNextCursor(null);
     setSums([]);
     setCount(0);
+    setPreviewItems(null);
     let cancelled = false;
     api
       .GET("/api/entries", {
@@ -175,6 +200,25 @@ function ReportsPage() {
         setSums(data?.sums ?? []);
         setCount(data?.count ?? 0);
       });
+    // The Upcoming preview is fetched alongside the entries/summary
+    // requests, but never folds into either — see web-client-reports'
+    // "Previewed occurrences never affect the report's per-currency sum".
+    if (generatedFilter.previewCutoff) {
+      fetchRecurringPreview({
+        accountIds: generatedFilter.accountId
+          ? [generatedFilter.accountId]
+          : undefined,
+        categoryId: generatedFilter.categoryId,
+        categoryMode:
+          generatedFilter.categoryId && !generatedFilter.includeSubcategories
+            ? "exact"
+            : undefined,
+        tagId: generatedFilter.tagId,
+        to: generatedFilter.previewCutoff,
+      }).then(({ data }) => {
+        if (!cancelled) setPreviewItems(data?.items ?? []);
+      });
+    }
     return () => {
       cancelled = true;
     };
@@ -222,11 +266,18 @@ function ReportsPage() {
   }
 
   function generateReport() {
+    const today = new Date();
     const effective = resolveEffectiveRange(
       { range: search.range, from: search.from, to: search.to },
       weekStart,
       undefined,
-      new Date(),
+      today,
+    );
+    const showRecurring = search.show_recurring ?? false;
+    const cutoff = resolvePreviewCutoff(
+      effective.to,
+      recurringPreviewHorizon,
+      today,
     );
     setGeneratedFilter({
       categoryId: search.category_id,
@@ -235,6 +286,9 @@ function ReportsPage() {
       accountId: search.account_id,
       from: effective.from,
       to: effective.to,
+      showRecurring,
+      previewCutoff:
+        showRecurring && cutoff >= todayDateString(today) ? cutoff : undefined,
     });
   }
 
@@ -257,7 +311,8 @@ function ReportsPage() {
       gf.tagId !== s.tag_id ||
       gf.accountId !== s.account_id ||
       gf.from !== liveEffective.from ||
-      gf.to !== liveEffective.to
+      gf.to !== liveEffective.to ||
+      gf.showRecurring !== (s.show_recurring ?? false)
     );
   }
 
@@ -355,6 +410,17 @@ function ReportsPage() {
           toLabel={t("reports.filters.to")}
         />
 
+        <label className="flex items-center gap-2 pb-1.5 text-sm">
+          <input
+            type="checkbox"
+            checked={search.show_recurring ?? false}
+            onChange={(e) =>
+              patchSearch({ show_recurring: e.target.checked || undefined })
+            }
+          />
+          {t("recurringPreview.toggleLabel")}
+        </label>
+
         <button
           type="button"
           onClick={generateReport}
@@ -395,6 +461,15 @@ function ReportsPage() {
             </span>
           ))}
         </div>
+      )}
+
+      {generatedFilter?.previewCutoff && (
+        <UpcomingBlock
+          items={previewItems}
+          accounts={accounts}
+          displayedDecimalPlaces={displayedDecimalPlaces}
+          locale={i18n.resolvedLanguage ?? "en"}
+        />
       )}
 
       {hasGenerated && (

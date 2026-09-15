@@ -20,9 +20,9 @@ func NewSettingsStore(pool *pgxpool.Pool) *SettingsStore { return &SettingsStore
 func (s *SettingsStore) Get(ctx context.Context, userID string) (settings.Row, error) {
 	var row settings.Row
 	err := s.pool.QueryRow(ctx,
-		`SELECT language, timezone, default_currency, displayed_decimal_places, week_start FROM user_settings WHERE user_id = $1`,
+		`SELECT language, timezone, default_currency, displayed_decimal_places, week_start, recurring_preview_horizon FROM user_settings WHERE user_id = $1`,
 		userID,
-	).Scan(&row.Language, &row.Timezone, &row.DefaultCurrency, &row.DisplayedDecimalPlaces, &row.WeekStart)
+	).Scan(&row.Language, &row.Timezone, &row.DefaultCurrency, &row.DisplayedDecimalPlaces, &row.WeekStart, &row.RecurringPreviewHorizon)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return settings.Row{}, nil
 	}
@@ -38,18 +38,19 @@ func (s *SettingsStore) Get(ctx context.Context, userID string) (settings.Row, e
 func (s *SettingsStore) Upsert(ctx context.Context, userID string, upd settings.Update) (settings.Row, error) {
 	var row settings.Row
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO user_settings (user_id, language, timezone, default_currency, displayed_decimal_places, week_start)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO user_settings (user_id, language, timezone, default_currency, displayed_decimal_places, week_start, recurring_preview_horizon)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (user_id) DO UPDATE SET
-			language                 = COALESCE($2, user_settings.language),
-			timezone                 = COALESCE($3, user_settings.timezone),
-			default_currency         = COALESCE($4, user_settings.default_currency),
-			displayed_decimal_places = COALESCE($5, user_settings.displayed_decimal_places),
-			week_start               = COALESCE($6, user_settings.week_start),
-			updated_at               = now()
-		RETURNING language, timezone, default_currency, displayed_decimal_places, week_start`,
-		userID, upd.Language, upd.Timezone, upd.DefaultCurrency, upd.DisplayedDecimalPlaces, upd.WeekStart,
-	).Scan(&row.Language, &row.Timezone, &row.DefaultCurrency, &row.DisplayedDecimalPlaces, &row.WeekStart)
+			language                   = COALESCE($2, user_settings.language),
+			timezone                   = COALESCE($3, user_settings.timezone),
+			default_currency           = COALESCE($4, user_settings.default_currency),
+			displayed_decimal_places   = COALESCE($5, user_settings.displayed_decimal_places),
+			week_start                 = COALESCE($6, user_settings.week_start),
+			recurring_preview_horizon  = COALESCE($7, user_settings.recurring_preview_horizon),
+			updated_at                 = now()
+		RETURNING language, timezone, default_currency, displayed_decimal_places, week_start, recurring_preview_horizon`,
+		userID, upd.Language, upd.Timezone, upd.DefaultCurrency, upd.DisplayedDecimalPlaces, upd.WeekStart, upd.RecurringPreviewHorizon,
+	).Scan(&row.Language, &row.Timezone, &row.DefaultCurrency, &row.DisplayedDecimalPlaces, &row.WeekStart, &row.RecurringPreviewHorizon)
 	if err != nil {
 		return settings.Row{}, err
 	}

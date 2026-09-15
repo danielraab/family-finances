@@ -73,14 +73,44 @@ func (s *stubAccounts) VisibleIDs(_ context.Context, callerID string) ([]string,
 
 type stubCategories struct {
 	usable map[string]bool
+	// children maps a category id to its direct children, for Subtree —
+	// mirrors internal/entry's own stubCategories.
+	children map[string][]string
 }
 
-func newStubCategories() *stubCategories { return &stubCategories{usable: map[string]bool{}} }
+func newStubCategories() *stubCategories {
+	return &stubCategories{usable: map[string]bool{}, children: map[string][]string{}}
+}
 
 func (c *stubCategories) add(id string) { c.usable[id] = true }
 
+// addChild registers child as a direct child of parent, for Subtree.
+func (c *stubCategories) addChild(parent, child string) {
+	c.usable[child] = true
+	c.children[parent] = append(c.children[parent], child)
+}
+
 func (c *stubCategories) Usable(_ context.Context, _, id string) (bool, error) {
 	return c.usable[id], nil
+}
+
+// Subtree mirrors category.Service.Subtree: id plus every registered
+// descendant, when id is usable by the caller at all; nil otherwise.
+func (c *stubCategories) Subtree(_ context.Context, _, id string) ([]string, error) {
+	if !c.usable[id] {
+		return nil, nil
+	}
+	out := []string{id}
+	queue := []string{id}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, child := range c.children[cur] {
+			out = append(out, child)
+			queue = append(queue, child)
+		}
+	}
+	return out, nil
 }
 
 type stubTags struct {
@@ -339,5 +369,261 @@ func TestSummaryExcludesEndedAndGroupsByCurrency(t *testing.T) {
 	}
 	if got["USD"] != 200000 {
 		t.Errorf("USD total = %d, want 200000", got["USD"])
+	}
+}
+
+func TestPreviewRequiresCutoff(t *testing.T) {
+	svc, accounts, categories, _, _ := newService()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	if _, err := svc.Create(context.Background(), "u1", baseNew("acc1", "cat1")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Preview(context.Background(), "u1", rt.PreviewFilter{}); !errors.Is(err, rt.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestPreviewBasicProjection(t *testing.T) {
+	svc, accounts, categories, _, _ := newService()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	in := baseNew("acc1", "cat1")
+	in.IntervalUnit = rt.UnitDay
+	in.IntervalCount = 10
+	in.StartsOn = rt.NewDate(time.Now().AddDate(0, 0, 5))
+	if _, err := svc.Create(context.Background(), "u1", in); err != nil {
+		t.Fatal(err)
+	}
+
+	// starts +5, then +15, +25, +35 fall within the cutoff; +45 doesn't.
+	cutoff := time.Now().AddDate(0, 0, 35)
+	items, err := svc.Preview(context.Background(), "u1", rt.PreviewFilter{To: cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 4 {
+		t.Fatalf("len(items) = %d, want 4", len(items))
+	}
+	for _, it := range items {
+		if it.Overdue {
+			t.Errorf("item dated %s marked overdue unexpectedly", it.BookingTimestamp)
+		}
+	}
+	if items[0].AccountCurrency != "EUR" || items[0].RecurringTransactionID == "" {
+		t.Errorf("unexpected item: %+v", items[0])
+	}
+}
+
+func TestPreviewSingleOverdueRow(t *testing.T) {
+	svc, accounts, categories, _, _ := newService()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	in := baseNew("acc1", "cat1")
+	in.IntervalUnit = rt.UnitDay
+	in.IntervalCount = 1
+	anchor := rt.NewDate(time.Now().AddDate(0, 0, -10))
+	in.StartsOn = anchor
+	if _, err := svc.Create(context.Background(), "u1", in); err != nil {
+		t.Fatal(err)
+	}
+
+	cutoff := time.Now().AddDate(0, 0, 5)
+	items, err := svc.Preview(context.Background(), "u1", rt.PreviewFilter{To: cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	overdueCount := 0
+	for _, it := range items {
+		if it.Overdue {
+			overdueCount++
+		}
+	}
+	if overdueCount != 1 {
+		t.Fatalf("overdue rows = %d, want exactly 1 (%d total items)", overdueCount, len(items))
+	}
+	if len(items) == 0 || !items[0].Overdue {
+		t.Fatalf("first item should be the overdue anchor row, got %+v", items)
+	}
+	if items[0].BookingTimestamp.String() != anchor.String() {
+		t.Errorf("overdue row date = %s, want anchor date %s", items[0].BookingTimestamp, anchor)
+	}
+}
+
+func TestPreviewEndsOnClampsTighterThanCutoff(t *testing.T) {
+	svc, accounts, categories, _, _ := newService()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	in := baseNew("acc1", "cat1")
+	in.IntervalUnit = rt.UnitDay
+	in.IntervalCount = 1
+	in.StartsOn = rt.NewDate(time.Now().AddDate(0, 0, 1))
+	endsOn := rt.NewDate(time.Now().AddDate(0, 0, 3))
+	in.EndsOn = &endsOn
+	if _, err := svc.Create(context.Background(), "u1", in); err != nil {
+		t.Fatal(err)
+	}
+
+	cutoff := time.Now().AddDate(0, 0, 30)
+	items, err := svc.Preview(context.Background(), "u1", rt.PreviewFilter{To: cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) == 0 {
+		t.Fatal("expected at least the first occurrence")
+	}
+	for _, it := range items {
+		if it.BookingTimestamp.After(endsOn) {
+			t.Errorf("item dated %s is after ends_on %s, despite a later cutoff", it.BookingTimestamp, endsOn)
+		}
+	}
+}
+
+func TestPreviewEndedTemplateContributesNothing(t *testing.T) {
+	svc, accounts, categories, _, _ := newService()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	in := baseNew("acc1", "cat1")
+	in.StartsOn = mustDateT(2020, 1, 1)
+	past := mustDateT(2020, 6, 1)
+	in.EndsOn = &past
+	if _, err := svc.Create(context.Background(), "u1", in); err != nil {
+		t.Fatal(err)
+	}
+
+	cutoff := time.Now().AddDate(1, 0, 0)
+	items, err := svc.Preview(context.Background(), "u1", rt.PreviewFilter{To: cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("len(items) = %d, want 0 (template already past its end date)", len(items))
+	}
+}
+
+func TestPreviewFiltersByAccountCategoryAndTag(t *testing.T) {
+	svc, accounts, categories, tags, _ := newService()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	categories.add("cat1")
+	categories.add("cat2")
+	tags.add("tag1", "u1")
+
+	future := rt.NewDate(time.Now().AddDate(0, 0, 1))
+	cutoff := time.Now().AddDate(0, 1, 0)
+
+	inAcc1 := baseNew("acc1", "cat1")
+	inAcc1.StartsOn = future
+	if _, err := svc.Create(context.Background(), "u1", inAcc1); err != nil {
+		t.Fatal(err)
+	}
+
+	inAcc2Cat2 := baseNew("acc2", "cat2")
+	inAcc2Cat2.StartsOn = future
+	inAcc2Cat2.TagIDs = []string{"tag1"}
+	if _, err := svc.Create(context.Background(), "u1", inAcc2Cat2); err != nil {
+		t.Fatal(err)
+	}
+
+	// Narrow by account.
+	items, err := svc.Preview(context.Background(), "u1", rt.PreviewFilter{AccountIDs: []string{"acc1"}, To: cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.AccountID != "acc1" {
+			t.Errorf("account_id filter leaked item from %s", it.AccountID)
+		}
+	}
+	if len(items) == 0 {
+		t.Fatal("expected at least one item for acc1")
+	}
+
+	// Narrow by category.
+	cat2 := "cat2"
+	items, err = svc.Preview(context.Background(), "u1", rt.PreviewFilter{CategoryID: &cat2, To: cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.AccountID != "acc2" {
+			t.Errorf("category filter should only match the acc2 template, got %s", it.AccountID)
+		}
+	}
+	if len(items) == 0 {
+		t.Fatal("expected at least one item for cat2")
+	}
+
+	// Narrow by tag.
+	tag1 := "tag1"
+	items, err = svc.Preview(context.Background(), "u1", rt.PreviewFilter{TagID: &tag1, To: cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.AccountID != "acc2" {
+			t.Errorf("tag filter should only match the acc2 template, got %s", it.AccountID)
+		}
+	}
+	if len(items) == 0 {
+		t.Fatal("expected at least one item for tag1")
+	}
+}
+
+func TestPreviewNoVisibleTemplatesReturnsEmpty(t *testing.T) {
+	svc, _, _, _, _ := newService()
+	items, err := svc.Preview(context.Background(), "u1", rt.PreviewFilter{To: time.Now().AddDate(0, 1, 0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("len(items) = %d, want 0", len(items))
+	}
+}
+
+func TestPreviewCapsOccurrencesPerTemplate(t *testing.T) {
+	svc, accounts, categories, _, _ := newService()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	in := baseNew("acc1", "cat1")
+	in.IntervalUnit = rt.UnitDay
+	in.IntervalCount = 1
+	in.StartsOn = rt.NewDate(time.Now().AddDate(0, 0, 1))
+	if _, err := svc.Create(context.Background(), "u1", in); err != nil {
+		t.Fatal(err)
+	}
+
+	// A cutoff far beyond the 366-occurrence cap for a daily template.
+	cutoff := time.Now().AddDate(3, 0, 0)
+	items, err := svc.Preview(context.Background(), "u1", rt.PreviewFilter{To: cutoff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 366 {
+		t.Fatalf("len(items) = %d, want 366 (defensive cap)", len(items))
+	}
+}
+
+func TestPreviewNoAccessibleAccountsReturnsEmpty(t *testing.T) {
+	svc, accounts, categories, _, _ := newService()
+	accounts.add("acc1", "u2", "EUR")
+	categories.add("cat1")
+	if _, err := svc.Create(context.Background(), "u2", baseNew("acc1", "cat1")); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := svc.Preview(context.Background(), "u1", rt.PreviewFilter{To: time.Now().AddDate(0, 1, 0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("len(items) = %d, want 0 (u1 has no permission on u2's account)", len(items))
 	}
 }
