@@ -11,7 +11,9 @@ import (
 	"at.draab/familyfinances/internal/account"
 	"at.draab/familyfinances/internal/auth"
 	"at.draab/familyfinances/internal/category"
+	"at.draab/familyfinances/internal/dashboard"
 	"at.draab/familyfinances/internal/entry"
+	"at.draab/familyfinances/internal/recurringtransaction"
 	"at.draab/familyfinances/internal/storage/memory"
 	"at.draab/familyfinances/internal/tag"
 )
@@ -28,7 +30,7 @@ var testEmails = []string{"tester1@draab.at", "tester2@draab.at", "tester3@draab
 // the instant it's created — Seed had exactly this bug until
 // TestSeedTestersTokensAreImmediatelyUsable below caught it against a real
 // server).
-func newFixtureDeps() (auth.Store, *auth.Service, *account.Service, *category.Service, *tag.Service, *entry.Service) {
+func newFixtureDeps() (auth.Store, *auth.Service, *account.Service, *category.Service, *tag.Service, *entry.Service, *recurringtransaction.Service, *dashboard.Service) {
 	authStore := memory.NewAuthStore()
 	authSvc := auth.NewService(authStore, nil, nil, auth.Params{
 		SessionTTL:    720 * time.Hour,
@@ -38,15 +40,18 @@ func newFixtureDeps() (auth.Store, *auth.Service, *account.Service, *category.Se
 	categorySvc := category.NewService(memory.NewCategoryStore())
 	tagSvc := tag.NewService(memory.NewTagStore())
 	entrySvc := entry.NewService(memory.NewEntryStore(), accountSvc, categorySvc, tagSvc)
-	return authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc
+	recurringSvc := recurringtransaction.NewService(memory.NewRecurringTransactionStore(), accountSvc, categorySvc, tagSvc)
+	recurringSvc.SetEntryLookup(entrySvc)
+	dashboardSvc := dashboard.NewService(memory.NewDashboardStore(), accountSvc, categorySvc, tagSvc)
+	return authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc
 }
 
 func TestSeedTestersCreatesAllThreeWithTester1Admin(t *testing.T) {
-	authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+	authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0, &stdout, &stderr)
+	code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
@@ -64,11 +69,11 @@ func TestSeedTestersCreatesAllThreeWithTester1Admin(t *testing.T) {
 }
 
 func TestSeedTestersSeedsStarterCategoriesAndTypedAccounts(t *testing.T) {
-	authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+	authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0, &stdout, &stderr); code != 0 {
+	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0, &stdout, &stderr); code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
@@ -96,11 +101,11 @@ func TestSeedTestersSeedsStarterCategoriesAndTypedAccounts(t *testing.T) {
 }
 
 func TestSeedTestersPrintsSessionTokens(t *testing.T) {
-	authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+	authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0, &stdout, &stderr); code != 0 {
+	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0, &stdout, &stderr); code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
@@ -123,11 +128,11 @@ func TestSeedTestersPrintsSessionTokens(t *testing.T) {
 // to its tester via authSvc.Authenticate, not just that stdout contains
 // the string "session=".
 func TestSeedTestersTokensAreImmediatelyUsable(t *testing.T) {
-	authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+	authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 	var stdout, stderr bytes.Buffer
 
-	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0, &stdout, &stderr); code != 0 {
+	if code := seedTesters(context.Background(), testEmails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0, &stdout, &stderr); code != 0 {
 		t.Fatalf("seedTesters exit = %d, stderr = %q", code, stderr.String())
 	}
 
@@ -147,7 +152,7 @@ func TestSeedTestersTokensAreImmediatelyUsable(t *testing.T) {
 }
 
 func TestGenerateFixturesCreatesAccountsAndEntriesInRange(t *testing.T) {
-	_, _, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+	_, _, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
 	ctx := context.Background()
 	const ownerID = "u1"
 
@@ -156,7 +161,7 @@ func TestGenerateFixturesCreatesAccountsAndEntriesInRange(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
-	if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0); err != nil {
+	if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0); err != nil {
 		t.Fatalf("generateFixtures: %v", err)
 	}
 
@@ -185,7 +190,7 @@ func TestGenerateFixturesCreatesAccountsAndEntriesInRange(t *testing.T) {
 }
 
 func TestGenerateFixturesCreatesTagsAndAttachesSome(t *testing.T) {
-	_, _, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+	_, _, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
 	ctx := context.Background()
 	const ownerID = "u1"
 
@@ -194,7 +199,7 @@ func TestGenerateFixturesCreatesTagsAndAttachesSome(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
-	if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0); err != nil {
+	if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0); err != nil {
 		t.Fatalf("generateFixtures: %v", err)
 	}
 
@@ -231,7 +236,7 @@ func TestGenerateFixturesCreatesTagsAndAttachesSome(t *testing.T) {
 }
 
 func TestGenerateFixturesSetsFinancialInstitute(t *testing.T) {
-	_, _, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+	_, _, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
 	ctx := context.Background()
 	const ownerID = "u1"
 
@@ -240,7 +245,7 @@ func TestGenerateFixturesSetsFinancialInstitute(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
-	if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0); err != nil {
+	if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0); err != nil {
 		t.Fatalf("generateFixtures: %v", err)
 	}
 
@@ -255,17 +260,140 @@ func TestGenerateFixturesSetsFinancialInstitute(t *testing.T) {
 	}
 }
 
+func TestGenerateFixturesCreatesRecurringTransactions(t *testing.T) {
+	_, _, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
+	ctx := context.Background()
+	const ownerID = "u1"
+
+	if err := categorySvc.SeedDefaults(ctx, ownerID); err != nil {
+		t.Fatal(err)
+	}
+
+	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
+	counts, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0)
+	if err != nil {
+		t.Fatalf("generateFixtures: %v", err)
+	}
+	if counts.recurring < 3 || counts.recurring > 5 {
+		t.Fatalf("recurring count = %d, want 3..5", counts.recurring)
+	}
+
+	recurring, err := recurringSvc.List(ctx, ownerID, recurringtransaction.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recurring) != counts.recurring {
+		t.Fatalf("List = %d recurring transactions, want %d", len(recurring), counts.recurring)
+	}
+
+	accounts, err := accountSvc.List(ctx, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accountIDs := map[string]bool{}
+	for _, acc := range accounts {
+		accountIDs[acc.ID] = true
+	}
+
+	overdue, upcoming := 0, 0
+	for _, rt := range recurring {
+		if !accountIDs[rt.AccountID] {
+			t.Fatalf("recurring transaction %s on an unknown account %s", rt.ID, rt.AccountID)
+		}
+		if rt.CategoryID == nil {
+			t.Fatalf("recurring transaction %s has no category", rt.ID)
+		}
+		if rt.NextSuggestedDate.Before(recurringtransaction.NewDate(time.Now())) {
+			overdue++
+		} else {
+			upcoming++
+		}
+	}
+	// The fixture pool mixes negative and positive startsOnDaysOffset
+	// deliberately, so a large-enough draw should include both a
+	// still-overdue and a still-upcoming template — not guaranteed for
+	// every possible draw, but true for this fixed RNG seed.
+	if overdue == 0 || upcoming == 0 {
+		t.Fatalf("recurring transactions: overdue=%d upcoming=%d, want at least one of each for this seed", overdue, upcoming)
+	}
+}
+
+func TestGenerateFixturesCreatesDashboardCards(t *testing.T) {
+	_, _, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
+	ctx := context.Background()
+	const ownerID = "u1"
+
+	if err := categorySvc.SeedDefaults(ctx, ownerID); err != nil {
+		t.Fatal(err)
+	}
+
+	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
+	counts, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0)
+	if err != nil {
+		t.Fatalf("generateFixtures: %v", err)
+	}
+
+	accounts, err := accountSvc.List(ctx, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One account_stat card per account, plus one query_stat, one
+	// entry_list, and one bar_chart.
+	wantCards := len(accounts) + 3
+	if counts.cards != wantCards {
+		t.Fatalf("cards count = %d, want %d", counts.cards, wantCards)
+	}
+
+	cards, err := dashboardSvc.List(ctx, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != wantCards {
+		t.Fatalf("List = %d cards, want %d", len(cards), wantCards)
+	}
+
+	var accountStats, queryStats, entryLists, barCharts int
+	var recurringPreviewOn int
+	for _, c := range cards {
+		switch c.Type {
+		case dashboard.CardTypeAccountStat:
+			accountStats++
+		case dashboard.CardTypeQueryStat:
+			queryStats++
+		case dashboard.CardTypeEntryList:
+			entryLists++
+			if c.Config.ShowRecurringPreview != nil && *c.Config.ShowRecurringPreview {
+				recurringPreviewOn++
+			}
+		case dashboard.CardTypeBarChart:
+			barCharts++
+			if c.Config.ShowRecurringPreview != nil && *c.Config.ShowRecurringPreview {
+				recurringPreviewOn++
+			}
+		}
+	}
+	if accountStats != len(accounts) {
+		t.Fatalf("account_stat cards = %d, want %d (one per account)", accountStats, len(accounts))
+	}
+	if queryStats != 1 || entryLists != 1 || barCharts != 1 {
+		t.Fatalf("card type counts = query_stat:%d entry_list:%d bar_chart:%d, want 1 each", queryStats, entryLists, barCharts)
+	}
+	if recurringPreviewOn != 2 {
+		t.Fatalf("cards with show_recurring_preview on = %d, want 2 (entry_list + bar_chart)", recurringPreviewOn)
+	}
+}
+
 func TestGenerateFixturesIsDeterministic(t *testing.T) {
 	ctx := context.Background()
 
 	run := func() []string {
-		_, _, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+		_, _, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
 		const ownerID = "u1"
 		if err := categorySvc.SeedDefaults(ctx, ownerID); err != nil {
 			t.Fatal(err)
 		}
 		rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
-		if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, 0); err != nil {
+		if _, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, 0); err != nil {
 			t.Fatal(err)
 		}
 		accounts, err := accountSvc.List(ctx, ownerID)
@@ -383,7 +511,7 @@ func TestParseSeedFlags(t *testing.T) {
 }
 
 func TestGenerateFixturesEntriesPerUserHitsTargetExactly(t *testing.T) {
-	_, _, accountSvc, categorySvc, tagSvc, entrySvc := newFixtureDeps()
+	_, _, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc := newFixtureDeps()
 	ctx := context.Background()
 	const ownerID = "u1"
 	const target = 317 // deliberately not divisible by any likely account count
@@ -393,12 +521,12 @@ func TestGenerateFixturesEntriesPerUserHitsTargetExactly(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
-	created, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, rng, target)
+	counts, err := generateFixtures(ctx, ownerID, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, target)
 	if err != nil {
 		t.Fatalf("generateFixtures: %v", err)
 	}
-	if created != target {
-		t.Fatalf("generateFixtures returned %d, want %d", created, target)
+	if counts.entries != target {
+		t.Fatalf("generateFixtures returned %d entries, want %d", counts.entries, target)
 	}
 
 	// Count every persisted entry, paging through with the keyset cursor

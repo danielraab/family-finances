@@ -13,7 +13,9 @@ import (
 	"at.draab/familyfinances/internal/auth"
 	"at.draab/familyfinances/internal/category"
 	"at.draab/familyfinances/internal/config"
+	"at.draab/familyfinances/internal/dashboard"
 	"at.draab/familyfinances/internal/entry"
+	"at.draab/familyfinances/internal/recurringtransaction"
 	"at.draab/familyfinances/internal/storage/postgres"
 	"at.draab/familyfinances/internal/tag"
 )
@@ -125,10 +127,13 @@ func Seed(ctx context.Context, args []string) int {
 	categorySvc := category.NewService(postgres.NewCategoryStore(pool))
 	tagSvc := tag.NewService(postgres.NewTagStore(pool))
 	entrySvc := entry.NewService(postgres.NewEntryStore(pool), accountSvc, categorySvc, tagSvc)
+	recurringSvc := recurringtransaction.NewService(postgres.NewRecurringTransactionStore(pool), accountSvc, categorySvc, tagSvc)
+	recurringSvc.SetEntryLookup(entrySvc)
+	dashboardSvc := dashboard.NewService(postgres.NewDashboardStore(pool), accountSvc, categorySvc, tagSvc)
 
 	rng := rand.New(rand.NewPCG(seedRNGSeed1, seedRNGSeed2))
 
-	return seedTesters(ctx, emails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, rng, flags.entries, os.Stdout, os.Stderr)
+	return seedTesters(ctx, emails, authStore, authSvc, accountSvc, categorySvc, tagSvc, entrySvc, recurringSvc, dashboardSvc, rng, flags.entries, os.Stdout, os.Stderr)
 }
 
 // parseSeedEmails splits raw on commas, trims and normalizes each address
