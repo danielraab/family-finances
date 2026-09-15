@@ -159,7 +159,7 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: backend/go.mod
       - name: gofmt
@@ -201,7 +201,7 @@ jobs:
       DATABASE_URL: postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: backend/go.mod
       - run: go test ./internal/storage/postgres/...
