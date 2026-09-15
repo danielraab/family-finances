@@ -587,8 +587,9 @@ filterable/searchable/sortable, cursor-paginated listing (`GET`/
 `server seed --yes [--entries N] <email1,email2,...>` (`internal/cli.Seed`,
 dispatched from `main.go` alongside `healthcheck`/`admin`) resets the
 database and creates one user per given email with randomly generated
-accounts and entries — for local/demo use, not anything a product feature
-depends on. Args are parsed with the stdlib `flag` package (`parseSeedFlags`):
+accounts, entries, recurring transactions, and a starter `/home` dashboard
+— for local/demo use, not anything a product feature depends on. Args are
+parsed with the stdlib `flag` package (`parseSeedFlags`):
 `--yes` (bool), `--entries N` (optional, `int`), and one trailing positional
 — the comma-separated email list. The emails are entirely CLI-supplied —
 nothing is hardcoded — via `parseSeedEmails` (splits on `,`,
@@ -599,13 +600,15 @@ list, an invalid address, or a duplicate before touching the database).
   spread as evenly as possible across that user's 2-4 accounts (the first
   `N % numAccounts` accounts take one extra). `0` / omitted keeps the
   default 15-60 random entries per account, and leaves the fixed-seed
-  fixture byte-identical to before this flag existed. `generateFixtures`
-  returns the count it created; `seedTesters` prints it (`entries=N`) on
-  each user's summary line. A negative `--entries`, an unknown flag, or an
-  extra positional is a usage error (exit `2`, nothing written); ~10k
-  entries takes roughly 30s since each goes through `entry.Service.Create`
-  (one insert + a cheap recompute lookup — there are no balance
-  adjustments in the fixture).
+  fixture byte-identical to before this flag existed. It only bounds
+  transaction entries — the recurring-transaction and dashboard-card
+  counts below are unaffected by it. `generateFixtures` returns a
+  `fixtureCounts{entries, recurring, cards}`; `seedTesters` prints all
+  three (`entries=N recurring=N cards=N`) on each user's summary line. A
+  negative `--entries`, an unknown flag, or an extra positional is a usage
+  error (exit `2`, nothing written); ~10k entries takes roughly 30s since
+  each goes through `entry.Service.Create` (one insert + a cheap recompute
+  lookup — there are no balance adjustments in the fixture).
 
 - **It is a full, irreversible reset**, not scoped to the given users:
   every table except `schema_migrations` is `TRUNCATE`d
@@ -650,6 +653,21 @@ list, an invalid address, or a duplicate before touching the database).
   category," not in a particular order — the account-type labels
   (`fixtureAccountTypes`) and tags don't need this, being fixed local
   slices in a stable order rather than read back via `List`.
+- Once accounts and entries exist, `generateRecurringTransactions` creates
+  3-5 recurring-transaction templates per user, drawn from a fixed pool
+  (`recurringFixturePool`: title, one of `category.DefaultNames`,
+  interval rule, signed amount, and a `starts_on` offset in days from
+  "today" — negative means it already has no linked entries and an
+  overdue `next_suggested_date`, positive means it's still upcoming), each
+  on a random one of that user's accounts — so a fresh seed always
+  exercises both the tinted-overdue-row and the ordinary-upcoming case of
+  `GET /api/recurring-transactions/preview` (`recurring-transactions`)
+  without any manual setup. `generateDashboardCards` then seeds a starter
+  `/home` layout: one `account_stat` card per account, one unfiltered
+  `query_stat` card, and one `entry_list` plus one `bar_chart` card, the
+  latter two with `show_recurring_preview` on — mirroring the pre-
+  customizable-dashboard fixed layout while also demonstrating the
+  recurring-transaction preview feature by default (`dashboard-cards`).
 
 ## Serving the frontend
 
