@@ -15,9 +15,11 @@ const config = defineConfig({
     // The client ships no backend URL and calls the Go backend at relative
     // /api/... paths. In dev the two toolchains run on separate ports, so
     // proxy /api through to the backend (replaces the old next.config rewrite).
+    // BACKEND_URL is a plain (non-VITE_-prefixed) env var read here in Node,
+    // not exposed to client code — it only retargets this dev-only proxy.
     proxy: {
       "/api": {
-        target: "http://localhost:8080",
+        target: process.env["BACKEND_URL"] ?? "http://localhost:8080",
         changeOrigin: false,
       },
     },

@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { niceMax, useContainerWidth, usePinnableSelection } from "./internal";
 
 /** One series (a fixed identity across every category — e.g. "Income"). */
@@ -29,6 +29,7 @@ const TICK_COUNT = 4;
 // clips anything outside it by default.
 const MARGIN_LEFT = 60;
 const MARGIN_TOP = 10;
+const TOOLTIP_GAP = 8; // px between the tooltip and the top of the plot area
 
 /**
  * A hand-rolled, dependency-free grouped bar chart — no charting library, per
@@ -47,9 +48,14 @@ const MARGIN_TOP = 10;
  * the baseline), a 2px surface gap between touching bars, hairline recessive
  * gridlines, a legend (always shown for 2+ series), and a per-group
  * hover/focus tooltip listing every series' value (not just the one under
- * the pointer). Clicking a group pins that tooltip and its highlight so they
- * stay after the pointer leaves; clicking it again, clicking another group,
- * clicking away, or pressing Escape releases the pin.
+ * the pointer) — floated directly above the active group instead of a
+ * permanent on-page value list. The tooltip is positioned from the active
+ * group's actual rendered bounding box (not its SVG coordinates) so it stays
+ * correctly anchored whether or not the `overflow-x-auto` wrapper is
+ * scrolled. Clicking a group (tapping, on touch/mobile) pins that tooltip
+ * and its highlight so they stay after the pointer leaves; clicking it
+ * again, clicking another group, clicking away, or pressing Escape releases
+ * the pin.
  */
 export function BarChart({
   series,
@@ -67,6 +73,19 @@ export function BarChart({
     usePinnableSelection();
   const { containerRef, containerWidth } = useContainerWidth();
   const titleId = useId();
+
+  // A wrapper around (not inside) the horizontally-scrolling container, so
+  // the tooltip's containing block is never itself a scroll container —
+  // nesting it inside `containerRef`'s `overflow-x-auto` element would clip
+  // it whenever it pokes above the chart, since setting overflow-x alone
+  // forces overflow-y to compute as "auto" too (a CSS quirk), turning that
+  // element into a vertical clip box as well.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
 
   const max = niceMax(
     Math.max(
@@ -100,11 +119,55 @@ export function BarChart({
   const barsWidth =
     series.length * barThickness + Math.max(series.length - 1, 0) * BAR_GAP;
 
-  // The tooltip box is always rendered (just visually hidden when nothing is
-  // selected) so hovering a group never shifts the page below it. When idle it
-  // shows the first group's shape purely to hold the right height.
   const tooltipVisible = activeIndex !== null && !!data[activeIndex];
-  const tooltipDatum = activeIndex !== null ? data[activeIndex] : data[0];
+  const tooltipDatum = activeIndex !== null ? data[activeIndex] : undefined;
+
+  // Re-anchor the tooltip to the active group's actual rendered position
+  // (and re-measure its own width, for horizontal clamping) whenever the
+  // active group changes, and keep it glued there across scroll/resize
+  // while it stays visible (a pinned tooltip can outlive the pointer, so
+  // the page can still scroll under it). The tooltip node itself is always
+  // rendered while `tooltipVisible` (just hidden until positioned, below)
+  // so `tooltipRef.current` already exists the first time this runs —
+  // otherwise, measuring its width would need a second effect pass, and
+  // that pass would be skipped because [tooltipVisible, activeIndex]
+  // wouldn't have changed since the first one.
+  useLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    const tooltipEl = tooltipRef.current;
+    if (!tooltipVisible || activeIndex === null || !wrapper || !tooltipEl) {
+      setTooltipPosition(null);
+      return;
+    }
+    const groupEl = wrapper.querySelector<SVGGElement>(
+      `[data-group-index="${activeIndex}"]`,
+    );
+    if (!groupEl) {
+      setTooltipPosition(null);
+      return;
+    }
+    const update = () => {
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const groupRect = groupEl.getBoundingClientRect();
+      const tooltipWidth = tooltipEl.offsetWidth;
+      const anchorLeft =
+        groupRect.left + groupRect.width / 2 - wrapperRect.left;
+      // Clamp horizontally within the wrapper's own (visible) width so the
+      // tooltip never spills off-screen for an edge group or a scrolled chart.
+      const left = Math.min(
+        Math.max(anchorLeft, tooltipWidth / 2),
+        Math.max(wrapperRect.width - tooltipWidth / 2, tooltipWidth / 2),
+      );
+      setTooltipPosition({ left, top: groupRect.top - wrapperRect.top });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [tooltipVisible, activeIndex]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -123,148 +186,171 @@ export function BarChart({
         ))}
       </ul>
 
-      <div ref={containerRef} className="overflow-x-auto">
-        <svg
-          role="img"
-          aria-labelledby={titleId}
-          viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
-          width={chartWidth}
-          height={CHART_HEIGHT}
-          className="block"
-        >
-          <title id={titleId}>
-            {series.map((s) => s.label).join(" / ")} by{" "}
-            {data.map((d) => d.category).join(", ")}
-          </title>
+      <div ref={wrapperRef} className="relative">
+        <div ref={containerRef} className="overflow-x-auto">
+          <svg
+            role="img"
+            aria-labelledby={titleId}
+            viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
+            width={chartWidth}
+            height={CHART_HEIGHT}
+            className="block"
+          >
+            <title id={titleId}>
+              {series.map((s) => s.label).join(" / ")} by{" "}
+              {data.map((d) => d.category).join(", ")}
+            </title>
 
-          {ticks.map((tick) => {
-            const y = MARGIN_TOP + plotHeight - (tick / max) * plotHeight;
-            return (
-              <g key={tick}>
-                <line
-                  x1={MARGIN_LEFT}
-                  x2={chartWidth}
-                  y1={y}
-                  y2={y}
-                  className="stroke-zinc-200 dark:stroke-zinc-800"
-                  strokeWidth={1}
-                />
-                <text
-                  x={MARGIN_LEFT - 8}
-                  y={y}
-                  textAnchor="end"
-                  dominantBaseline="middle"
-                  className="fill-zinc-500 text-[9px] dark:fill-zinc-400"
-                >
-                  {formatValue(tick)}
-                </text>
-              </g>
-            );
-          })}
+            {ticks.map((tick) => {
+              const y = MARGIN_TOP + plotHeight - (tick / max) * plotHeight;
+              return (
+                <g key={tick}>
+                  <line
+                    x1={MARGIN_LEFT}
+                    x2={chartWidth}
+                    y1={y}
+                    y2={y}
+                    className="stroke-zinc-200 dark:stroke-zinc-800"
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={MARGIN_LEFT - 8}
+                    y={y}
+                    textAnchor="end"
+                    dominantBaseline="middle"
+                    className="fill-zinc-500 text-[9px] dark:fill-zinc-400"
+                  >
+                    {formatValue(tick)}
+                  </text>
+                </g>
+              );
+            })}
 
-          {data.map((d, groupIndex) => {
-            const groupX =
-              MARGIN_LEFT + GROUP_GAP + groupIndex * (groupWidth + GROUP_GAP);
-            const barsStart = groupX + (groupWidth - barsWidth) / 2;
-            return (
-              // biome-ignore lint/a11y/useSemanticElements: an SVG group has no native interactive equivalent; role+tabIndex is the correct fallback.
-              <g
-                key={d.category}
-                tabIndex={0}
-                role="button"
-                aria-pressed={pinnedIndex === groupIndex}
-                aria-label={`${d.category}: ${series
-                  .map((s, i) => `${s.label} ${formatValue(d.values[i] ?? 0)}`)
-                  .join(", ")}`}
-                onMouseEnter={() => setHoverIndex(groupIndex)}
-                onMouseLeave={() => setHoverIndex(null)}
-                onFocus={() => setHoverIndex(groupIndex)}
-                onBlur={() => setHoverIndex(null)}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePin(groupIndex);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
+            {data.map((d, groupIndex) => {
+              const groupX =
+                MARGIN_LEFT + GROUP_GAP + groupIndex * (groupWidth + GROUP_GAP);
+              const barsStart = groupX + (groupWidth - barsWidth) / 2;
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: an SVG group has no native interactive equivalent; role+tabIndex is the correct fallback.
+                <g
+                  key={d.category}
+                  data-group-index={groupIndex}
+                  tabIndex={0}
+                  role="button"
+                  aria-pressed={pinnedIndex === groupIndex}
+                  aria-label={`${d.category}: ${series
+                    .map(
+                      (s, i) => `${s.label} ${formatValue(d.values[i] ?? 0)}`,
+                    )
+                    .join(", ")}`}
+                  onMouseEnter={() => setHoverIndex(groupIndex)}
+                  onMouseLeave={() => setHoverIndex(null)}
+                  onFocus={() => setHoverIndex(groupIndex)}
+                  onBlur={() => setHoverIndex(null)}
+                  onClick={(e) => {
                     e.stopPropagation();
                     togglePin(groupIndex);
-                  }
-                }}
-                className="cursor-pointer outline-none"
-              >
-                <rect
-                  x={groupX}
-                  y={MARGIN_TOP}
-                  width={groupWidth}
-                  height={plotHeight}
-                  rx={4}
-                  fill="transparent"
-                  strokeWidth={1}
-                  className={
-                    pinnedIndex === groupIndex
-                      ? "stroke-zinc-300 dark:stroke-zinc-600"
-                      : "stroke-transparent"
-                  }
-                />
-                {series.map((s, seriesIndex) => {
-                  const value = Math.max(0, d.values[seriesIndex] ?? 0);
-                  const barHeight = max > 0 ? (value / max) * plotHeight : 0;
-                  const barX =
-                    barsStart + seriesIndex * (barThickness + BAR_GAP);
-                  const barY = MARGIN_TOP + plotHeight - barHeight;
-                  return (
-                    <rect
-                      key={s.label}
-                      x={barX}
-                      y={barY}
-                      width={barThickness}
-                      height={Math.max(barHeight, 0)}
-                      rx={4}
-                      className={`${s.fillClassName} transition-opacity ${
-                        activeIndex === null || activeIndex === groupIndex
-                          ? "opacity-100"
-                          : "opacity-40"
-                      }`}
-                    />
-                  );
-                })}
-                <text
-                  x={groupX + groupWidth / 2}
-                  y={MARGIN_TOP + plotHeight + 14}
-                  textAnchor="middle"
-                  className="fill-zinc-500 text-[9px] dark:fill-zinc-400"
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      togglePin(groupIndex);
+                    }
+                  }}
+                  className="cursor-pointer outline-none"
                 >
-                  {d.category}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
+                  <rect
+                    x={groupX}
+                    y={MARGIN_TOP}
+                    width={groupWidth}
+                    height={plotHeight}
+                    rx={4}
+                    fill="transparent"
+                    strokeWidth={1}
+                    className={
+                      pinnedIndex === groupIndex
+                        ? "stroke-zinc-300 dark:stroke-zinc-600"
+                        : "stroke-transparent"
+                    }
+                  />
+                  {series.map((s, seriesIndex) => {
+                    const value = Math.max(0, d.values[seriesIndex] ?? 0);
+                    const barHeight = max > 0 ? (value / max) * plotHeight : 0;
+                    const barX =
+                      barsStart + seriesIndex * (barThickness + BAR_GAP);
+                    const barY = MARGIN_TOP + plotHeight - barHeight;
+                    return (
+                      <rect
+                        key={s.label}
+                        x={barX}
+                        y={barY}
+                        width={barThickness}
+                        height={Math.max(barHeight, 0)}
+                        rx={4}
+                        className={`${s.fillClassName} transition-opacity ${
+                          activeIndex === null || activeIndex === groupIndex
+                            ? "opacity-100"
+                            : "opacity-40"
+                        }`}
+                      />
+                    );
+                  })}
+                  <text
+                    x={groupX + groupWidth / 2}
+                    y={MARGIN_TOP + plotHeight + 14}
+                    textAnchor="middle"
+                    className="fill-zinc-500 text-[9px] dark:fill-zinc-400"
+                  >
+                    {d.category}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
 
-      <div
-        aria-hidden={!tooltipVisible}
-        className={`flex flex-col gap-1 rounded-md border border-black/10 bg-white px-3 py-2 text-xs shadow-sm dark:border-white/10 dark:bg-neutral-900${
-          tooltipVisible ? "" : " invisible"
-        }`}
-      >
-        <span className="font-medium">{tooltipDatum?.category ?? " "}</span>
-        {series.map((s, i) => (
-          <span key={s.label} className="flex items-center gap-1.5">
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 8 8"
-              className="inline-block h-2 w-2"
-            >
-              <rect width="8" height="8" rx="2" className={s.fillClassName} />
-            </svg>
-            <span className="text-zinc-500 dark:text-zinc-400">{s.label}</span>
-            <span className="font-mono tabular-nums">
-              {formatValue(tooltipDatum?.values[i] ?? 0)}
-            </span>
-          </span>
-        ))}
+        {tooltipVisible && tooltipDatum && (
+          <div
+            ref={tooltipRef}
+            role="status"
+            style={
+              tooltipPosition
+                ? {
+                    left: tooltipPosition.left,
+                    top: tooltipPosition.top - TOOLTIP_GAP,
+                  }
+                : undefined
+            }
+            className={`pointer-events-none absolute z-10 flex -translate-x-1/2 -translate-y-full flex-col gap-1 rounded-md border border-black/10 bg-white px-3 py-2 text-xs shadow-md dark:border-white/10 dark:bg-neutral-900${
+              tooltipPosition ? "" : " invisible"
+            }`}
+          >
+            <span className="font-medium">{tooltipDatum.category}</span>
+            {series.map((s, i) => (
+              <span key={s.label} className="flex items-center gap-1.5">
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 8 8"
+                  className="inline-block h-2 w-2"
+                >
+                  <rect
+                    width="8"
+                    height="8"
+                    rx="2"
+                    className={s.fillClassName}
+                  />
+                </svg>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  {s.label}
+                </span>
+                <span className="font-mono tabular-nums">
+                  {formatValue(tooltipDatum.values[i] ?? 0)}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
