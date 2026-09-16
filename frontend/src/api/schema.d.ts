@@ -1289,7 +1289,7 @@ export interface components {
                 /** Format: date */
                 to?: string;
             };
-            /** @description Only meaningful, and only settable, on entry_list/bar_chart. Absent means false. When true, the card additionally previews upcoming recurring-transaction occurrences (an Upcoming block on entry_list; stacked projected bar segments on bar_chart) via GET /api/recurring-transactions/preview, bounded by the caller's recurring_preview_horizon setting. */
+            /** @description Only meaningful, and only settable, on entry_list/bar_chart/ line_chart. Absent means false. When true, the card additionally previews upcoming recurring-transaction occurrences (an Upcoming block on entry_list; stacked projected bar segments on bar_chart; a projected balance line on line_chart) via GET /api/recurring-transactions/preview, bounded by the caller's recurring_preview_horizon setting. */
             show_recurring_preview?: boolean;
             /** @description Optional filter on query_stat/entry_list/bar_chart. */
             tag_id?: string;

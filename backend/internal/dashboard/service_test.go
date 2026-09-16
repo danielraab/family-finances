@@ -299,7 +299,7 @@ func TestServiceCreateTitleRejectedOnAccountStat(t *testing.T) {
 	}
 }
 
-func TestServiceCreateShowRecurringPreviewAllowedOnEntryListAndBarChart(t *testing.T) {
+func TestServiceCreateShowRecurringPreviewAllowedOnEntryListBarChartAndLineChart(t *testing.T) {
 	svc, _, _, _ := newTestService()
 
 	if _, err := svc.Create(t.Context(), "u1", dashboard.New{
@@ -313,6 +313,12 @@ func TestServiceCreateShowRecurringPreviewAllowedOnEntryListAndBarChart(t *testi
 		Config: dashboard.Config{Unit: strPtr("month"), ShowRecurringPreview: boolPtr(true)},
 	}); err != nil {
 		t.Fatalf("bar_chart: %v", err)
+	}
+	if _, err := svc.Create(t.Context(), "u1", dashboard.New{
+		Type:   dashboard.CardTypeLineChart,
+		Config: dashboard.Config{ShowRecurringPreview: boolPtr(true)},
+	}); err != nil {
+		t.Fatalf("line_chart: %v", err)
 	}
 }
 
@@ -369,6 +375,20 @@ func TestServiceCreateLineChartRejectsCategoryTagRangeUnit(t *testing.T) {
 		}); !errors.Is(err, dashboard.ErrInvalidValue) {
 			t.Fatalf("%s: err = %v, want ErrInvalidValue", name, err)
 		}
+	}
+}
+
+func TestServiceCreateLineChartWithShowRecurringPreviewStillRejectsForeignFields(t *testing.T) {
+	svc, _, _, _ := newTestService()
+	_, err := svc.Create(t.Context(), "u1", dashboard.New{
+		Type: dashboard.CardTypeLineChart,
+		Config: dashboard.Config{
+			ShowRecurringPreview: boolPtr(true),
+			CategoryID:           strPtr("cat1"),
+		},
+	})
+	if !errors.Is(err, dashboard.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
 	}
 }
 

@@ -123,7 +123,8 @@
     },
     "lineChart": {
       "previous": "Previous month",
-      "next": "Next month"
+      "next": "Next month",
+      "projectedBalance": "Balance (projected)"
     }
   },
   "flowChart": {
@@ -269,7 +270,8 @@
         "title": "Balance over the month",
         "series": "Balance",
         "previousMonth": "Previous month",
-        "nextMonth": "Next month"
+        "nextMonth": "Next month",
+        "showRecurringAssumptions": "Show recurring assumptions"
       },
       "recentEntries": "Recent entries",
       "seeAll": "See all",

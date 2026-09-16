@@ -13,6 +13,18 @@ export type LineChartSeries = {
   strokeClassName: string;
   /** Tailwind fill utility classes for the point dots, matching the stroke color, e.g. "fill-[#4269d0] dark:fill-[#a5b8ef]". Passed as its own literal string so Tailwind's scanner emits the class. */
   dotClassName: string;
+  /**
+   * Optional: a muted/lighter stroke for a second, dashed line continuing
+   * this series' real line, representing a projected (not-yet-real) value
+   * — see LineChartDatum.projectedValues. Only meaningful together with
+   * projectedLabel and at least one datum with a defined projectedValues
+   * entry; a series/datum with no projected data renders exactly as before
+   * this capability existed.
+   */
+  projectedStrokeClassName?: string;
+  /** The legend/tooltip label for this series' projected line (e.g.
+   * "Balance (projected)"). Required alongside projectedStrokeClassName. */
+  projectedLabel?: string;
 };
 
 /**
@@ -24,6 +36,14 @@ export type LineChartSeries = {
 export type LineChartDatum = {
   category: string;
   values: number[];
+  /** Parallel to `values` — an optional projected value per series, drawn
+   * as a second, dashed line. Omitted (undefined) at a given index draws
+   * no projected segment there; a caller should make the projected value
+   * equal the real value at the first index it defines one, so the dashed
+   * line visually continues from the solid one rather than floating
+   * separately (see lib/recurringPreview.ts's
+   * cumulativePreviewDeltaByPeriod, one caller that builds this). */
+  projectedValues?: number[];
 };
 
 const CHART_HEIGHT = 220;
@@ -83,7 +103,9 @@ export function LineChart({
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   const finiteValues = data.flatMap((d) =>
-    d.values.filter((v) => Number.isFinite(v)),
+    [...d.values, ...(d.projectedValues ?? [])].filter((v) =>
+      Number.isFinite(v),
+    ),
   );
   const domain = niceExtent(
     finiteValues.length ? Math.min(...finiteValues) : 0,
@@ -120,7 +142,8 @@ export function LineChart({
 
   return (
     <div className="flex flex-col gap-3">
-      {series.length > 1 && (
+      {(series.length > 1 ||
+        series.some((s) => s.projectedStrokeClassName && s.projectedLabel)) && (
         <ul className="flex flex-wrap gap-4 text-xs text-zinc-600 dark:text-zinc-400">
           {series.map((s) => (
             <li key={s.label} className="flex items-center gap-1.5">
@@ -141,6 +164,31 @@ export function LineChart({
               {s.label}
             </li>
           ))}
+          {series
+            .filter((s) => s.projectedStrokeClassName && s.projectedLabel)
+            .map((s) => (
+              <li
+                key={`${s.label}-projected`}
+                className="flex items-center gap-1.5"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 12 12"
+                  className="inline-block h-2.5 w-2.5"
+                >
+                  <line
+                    x1="0"
+                    y1="6"
+                    x2="12"
+                    y2="6"
+                    strokeWidth="2"
+                    strokeDasharray="3 2"
+                    className={s.projectedStrokeClassName}
+                  />
+                </svg>
+                {s.projectedLabel}
+              </li>
+            ))}
         </ul>
       )}
 
@@ -213,6 +261,45 @@ export function LineChart({
               );
             })}
 
+            {series.map((s, seriesIndex) => {
+              if (!s.projectedStrokeClassName) return null;
+              // Only the indices this series actually projects a value for
+              // (in practice a trailing contiguous run starting "today") —
+              // no bridging logic needed here since the caller guarantees
+              // the first such index's value equals the real line's value
+              // there, so this path starts exactly on the solid one.
+              const projectedIndexes = data
+                .map((d, i) =>
+                  d.projectedValues?.[seriesIndex] !== undefined ? i : null,
+                )
+                .filter((i): i is number => i !== null);
+              if (projectedIndexes.length === 0) return null;
+              const segments = projectedIndexes.map((i, k) => {
+                const value = data[i]?.projectedValues?.[seriesIndex] ?? 0;
+                const y = yAt(value);
+                const x = xAt(i);
+                if (k === 0) return `M ${x} ${y}`;
+                const prevI = projectedIndexes[k - 1] ?? i;
+                const prevValue =
+                  data[prevI]?.projectedValues?.[seriesIndex] ?? 0;
+                const prevY = yAt(prevValue);
+                return `L ${x} ${prevY} L ${x} ${y}`;
+              });
+              return (
+                <path
+                  key={`${s.label}-projected`}
+                  d={segments.join(" ")}
+                  fill="none"
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  strokeDasharray="5 4"
+                  className={`${s.projectedStrokeClassName} transition-opacity ${
+                    activeIndex === null ? "opacity-100" : "opacity-70"
+                  }`}
+                />
+              );
+            })}
+
             {data.map((d, pointIndex) => {
               const x = xAt(pointIndex);
               const isActive = activeIndex === pointIndex;
@@ -225,9 +312,13 @@ export function LineChart({
                   role="button"
                   aria-pressed={pinnedIndex === pointIndex}
                   aria-label={`${d.category}: ${series
-                    .map(
-                      (s, i) => `${s.label} ${formatValue(d.values[i] ?? 0)}`,
-                    )
+                    .map((s, i) => {
+                      const base = `${s.label} ${formatValue(d.values[i] ?? 0)}`;
+                      const projected = d.projectedValues?.[i];
+                      return s.projectedLabel && projected !== undefined
+                        ? `${base}, ${s.projectedLabel} ${formatValue(projected)}`
+                        : base;
+                    })
                     .join(", ")}`}
                   onMouseEnter={() => setHoverIndex(pointIndex)}
                   onMouseLeave={() => setHoverIndex(null)}
@@ -330,6 +421,39 @@ export function LineChart({
                 </span>
               </span>
             ))}
+            {series.map((s, i) => {
+              if (!s.projectedStrokeClassName || !s.projectedLabel) return null;
+              const projected = tooltipDatum.projectedValues?.[i];
+              if (projected === undefined) return null;
+              return (
+                <span
+                  key={`${s.label}-projected`}
+                  className="flex items-center gap-1.5"
+                >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 12 12"
+                    className="inline-block h-2 w-2"
+                  >
+                    <line
+                      x1="0"
+                      y1="6"
+                      x2="12"
+                      y2="6"
+                      strokeWidth="2"
+                      strokeDasharray="3 2"
+                      className={s.projectedStrokeClassName}
+                    />
+                  </svg>
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    {s.projectedLabel}
+                  </span>
+                  <span className="font-mono tabular-nums">
+                    {formatValue(projected)}
+                  </span>
+                </span>
+              );
+            })}
           </div>
         )}
       </div>
