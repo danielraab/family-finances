@@ -248,6 +248,13 @@ func TestServiceCreateColumnsRejectedOnOtherTypes(t *testing.T) {
 	}); !errors.Is(err, dashboard.ErrInvalidValue) {
 		t.Fatalf("bar_chart: err = %v, want ErrInvalidValue", err)
 	}
+
+	if _, err := svc.Create(t.Context(), "u1", dashboard.New{
+		Type:   dashboard.CardTypeLineChart,
+		Config: dashboard.Config{Columns: intPtr(2)},
+	}); !errors.Is(err, dashboard.ErrInvalidValue) {
+		t.Fatalf("line_chart: err = %v, want ErrInvalidValue", err)
+	}
 }
 
 func TestServiceCreateTitleAllowedOnFilterBearingTypes(t *testing.T) {
@@ -270,6 +277,12 @@ func TestServiceCreateTitleAllowedOnFilterBearingTypes(t *testing.T) {
 		Config: dashboard.Config{Unit: strPtr("month"), Title: strPtr("Spending trend")},
 	}); err != nil {
 		t.Fatalf("bar_chart: %v", err)
+	}
+	if _, err := svc.Create(t.Context(), "u1", dashboard.New{
+		Type:   dashboard.CardTypeLineChart,
+		Config: dashboard.Config{Title: strPtr("Balance trend")},
+	}); err != nil {
+		t.Fatalf("line_chart: %v", err)
 	}
 }
 
@@ -318,6 +331,44 @@ func TestServiceCreateShowRecurringPreviewRejectedOnAccountStatAndQueryStat(t *t
 		Config: dashboard.Config{ShowRecurringPreview: boolPtr(true)},
 	}); !errors.Is(err, dashboard.ErrInvalidValue) {
 		t.Fatalf("query_stat: err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestServiceCreateLineChartWithEmptyConfigSucceeds(t *testing.T) {
+	svc, _, _, _ := newTestService()
+	_, err := svc.Create(t.Context(), "u1", dashboard.New{Type: dashboard.CardTypeLineChart, Config: dashboard.Config{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServiceCreateLineChartAcceptsAccountAndTitle(t *testing.T) {
+	svc, accounts, _, _ := newTestService()
+	accounts.add("acc1", "u1")
+	_, err := svc.Create(t.Context(), "u1", dashboard.New{
+		Type:   dashboard.CardTypeLineChart,
+		Config: dashboard.Config{AccountID: strPtr("acc1"), Title: strPtr("Balance trend")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServiceCreateLineChartRejectsCategoryTagRangeUnit(t *testing.T) {
+	svc, _, _, _ := newTestService()
+	for name, cfg := range map[string]dashboard.Config{
+		"category_id": {CategoryID: strPtr("cat1")},
+		"tag_id":      {TagID: strPtr("tag1")},
+		"range":       {Range: &dashboard.Range{Preset: "this_month"}},
+		"unit":        {Unit: strPtr("month")},
+		"columns":     {Columns: intPtr(2)},
+	} {
+		if _, err := svc.Create(t.Context(), "u1", dashboard.New{
+			Type:   dashboard.CardTypeLineChart,
+			Config: cfg,
+		}); !errors.Is(err, dashboard.ErrInvalidValue) {
+			t.Fatalf("%s: err = %v, want ErrInvalidValue", name, err)
+		}
 	}
 }
 

@@ -1,9 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 /**
  * Shared scaffolding for the hand-rolled charts in this directory
  * (`BarChart`, `LineChart`) — deliberately not a charting library, per
- * frontend/AGENTS.md. Pure layout math plus two small hooks; every chart
+ * frontend/AGENTS.md. Pure layout math plus a few small hooks; every chart
  * stays presentational and owns its own SVG.
  */
 
@@ -108,4 +114,77 @@ export function usePinnableSelection() {
     setHoverIndex,
     togglePin,
   };
+}
+
+/**
+ * Positions a chart's floating overlay tooltip against the element
+ * matching `anchorSelector` inside `wrapperRef` — the container-relative,
+ * scroll/resize-tracking, horizontally-clamped math `BarChart` originated
+ * for its own tooltip, generalized so `LineChart` can anchor to a point
+ * instead of a bar group without duplicating it. `wrapperRef` must be a
+ * non-scrolling `position: relative` ancestor of both the anchor element
+ * and `tooltipRef` (never the `overflow-x-auto` container itself — that
+ * would clip a tooltip poking above the chart, since setting `overflow-x`
+ * alone forces `overflow-y` to compute as `auto` too).
+ *
+ * `anchorSelector` is `null` when nothing is active; the hook then returns
+ * `null` and does nothing else. Otherwise it measures the anchor and
+ * tooltip via `getBoundingClientRect()`, clamps `left` within the
+ * wrapper's own visible width, anchors `top` to the element's own top
+ * edge, and re-measures on `scroll`/`resize` while `visible` stays true
+ * (a pinned tooltip can outlive the pointer, so the page can still scroll
+ * under it).
+ */
+export function useOverlayTooltipPosition({
+  wrapperRef,
+  tooltipRef,
+  visible,
+  anchorSelector,
+}: {
+  wrapperRef: RefObject<HTMLDivElement | null>;
+  tooltipRef: RefObject<HTMLDivElement | null>;
+  visible: boolean;
+  anchorSelector: string | null;
+}): { left: number; top: number } | null {
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    const tooltipEl = tooltipRef.current;
+    if (!visible || anchorSelector === null || !wrapper || !tooltipEl) {
+      setPosition(null);
+      return;
+    }
+    const anchorEl = wrapper.querySelector<Element>(anchorSelector);
+    if (!anchorEl) {
+      setPosition(null);
+      return;
+    }
+    const update = () => {
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const anchorRect = anchorEl.getBoundingClientRect();
+      const tooltipWidth = tooltipEl.offsetWidth;
+      const anchorLeft =
+        anchorRect.left + anchorRect.width / 2 - wrapperRect.left;
+      // Clamp horizontally within the wrapper's own (visible) width so the
+      // tooltip never spills off-screen for an edge anchor or a scrolled chart.
+      const left = Math.min(
+        Math.max(anchorLeft, tooltipWidth / 2),
+        Math.max(wrapperRect.width - tooltipWidth / 2, tooltipWidth / 2),
+      );
+      setPosition({ left, top: anchorRect.top - wrapperRect.top });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [wrapperRef, tooltipRef, visible, anchorSelector]);
+
+  return position;
 }

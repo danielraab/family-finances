@@ -23,6 +23,7 @@ const CARD_TYPES: DashboardCardType[] = [
   "query_stat",
   "entry_list",
   "bar_chart",
+  "line_chart",
 ];
 
 /**
@@ -121,16 +122,14 @@ export function CardFormDialog({
       return;
     }
 
+    const filterFields = type !== "account_stat" && type !== "line_chart";
     const config = compact({
       title: type !== "account_stat" ? title.trim() || undefined : undefined,
       account_id: accountId || undefined,
-      category_id:
-        type !== "account_stat" ? categoryId || undefined : undefined,
+      category_id: filterFields ? categoryId || undefined : undefined,
       include_subcategories:
-        type !== "account_stat" && categoryId
-          ? includeSubcategories
-          : undefined,
-      tag_id: type !== "account_stat" ? tagId || undefined : undefined,
+        filterFields && categoryId ? includeSubcategories : undefined,
+      tag_id: filterFields ? tagId || undefined : undefined,
       range:
         type === "query_stat" || type === "entry_list"
           ? compact({
@@ -233,7 +232,7 @@ export function CardFormDialog({
               </select>
             </label>
 
-            {type !== "account_stat" && (
+            {type !== "account_stat" && type !== "line_chart" && (
               <>
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   {t("reports.filters.category")}

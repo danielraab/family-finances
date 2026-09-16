@@ -1,7 +1,8 @@
-import { useId } from "react";
+import { useId, useRef } from "react";
 import {
   niceExtent,
   useContainerWidth,
+  useOverlayTooltipPosition,
   usePinnableSelection,
 } from "./internal";
 
@@ -35,6 +36,7 @@ const MARGIN_TOP = 10;
 const PLOT_INSET = 8; // keeps the first/last point off the plot edges
 const MIN_STEP = 14; // min horizontal spacing per point before the wrapper scrolls
 const DOT_RADIUS = 2.5;
+const TOOLTIP_GAP = 8; // px between the tooltip and the top of the plot area
 
 /**
  * A hand-rolled, dependency-free line chart — no charting library, per
@@ -52,9 +54,13 @@ const DOT_RADIUS = 2.5;
  * Width is responsive: the chart measures its container and lays the points
  * out to fill it. Only when that would push points below ~14px apart does
  * it keep an intrinsic min-width and let the `overflow-x-auto` wrapper
- * scroll. A per-point hover/focus tooltip lists every series' value at that
- * point; clicking pins it (click away, click again, or Escape to release),
- * mirroring `BarChart`.
+ * scroll. A per-point hover/focus tooltip listing every series' value at
+ * that point floats directly above the active point — positioned from its
+ * actual rendered bounding box via `useOverlayTooltipPosition`, mirroring
+ * `BarChart`'s own tooltip exactly. Clicking a point (tapping, on
+ * touch/mobile) pins that tooltip so it stays after the pointer leaves;
+ * clicking it again, clicking another point, clicking away, or pressing
+ * Escape releases the pin.
  */
 export function LineChart({
   series,
@@ -69,6 +75,12 @@ export function LineChart({
     usePinnableSelection();
   const { containerRef, containerWidth } = useContainerWidth();
   const titleId = useId();
+
+  // A wrapper around (not inside) the horizontally-scrolling container, so
+  // the tooltip's containing block is never itself a scroll container —
+  // see BarChart's identical comment for why.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   const finiteValues = data.flatMap((d) =>
     d.values.filter((v) => Number.isFinite(v)),
@@ -95,11 +107,16 @@ export function LineChart({
   const yAt = (value: number) =>
     MARGIN_TOP + plotHeight - ((value - domain.min) / span) * plotHeight;
 
-  // The tooltip box is always rendered (just visually hidden when nothing is
-  // selected) so hovering a point never shifts the page below it. When idle it
-  // shows the first point's shape purely to hold the right height.
   const tooltipVisible = activeIndex !== null && !!data[activeIndex];
-  const tooltipDatum = activeIndex !== null ? data[activeIndex] : data[0];
+  const tooltipDatum = activeIndex !== null ? data[activeIndex] : undefined;
+
+  const tooltipPosition = useOverlayTooltipPosition({
+    wrapperRef,
+    tooltipRef,
+    visible: tooltipVisible,
+    anchorSelector:
+      activeIndex !== null ? `[data-point-index="${activeIndex}"]` : null,
+  });
 
   return (
     <div className="flex flex-col gap-3">
@@ -127,176 +144,194 @@ export function LineChart({
         </ul>
       )}
 
-      <div ref={containerRef} className="overflow-x-auto">
-        <svg
-          role="img"
-          aria-labelledby={titleId}
-          viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
-          width={chartWidth}
-          height={CHART_HEIGHT}
-          className="block"
-        >
-          <title id={titleId}>
-            {series.map((s) => s.label).join(" / ")} by{" "}
-            {data.map((d) => d.category).join(", ")}
-          </title>
+      <div ref={wrapperRef} className="relative">
+        <div ref={containerRef} className="overflow-x-auto">
+          <svg
+            role="img"
+            aria-labelledby={titleId}
+            viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
+            width={chartWidth}
+            height={CHART_HEIGHT}
+            className="block"
+          >
+            <title id={titleId}>
+              {series.map((s) => s.label).join(" / ")} by{" "}
+              {data.map((d) => d.category).join(", ")}
+            </title>
 
-          {domain.ticks.map((tick) => {
-            const y = yAt(tick);
-            const isZero = tick === 0 && domain.zeroInDomain;
-            return (
-              <g key={tick}>
-                <line
-                  x1={MARGIN_LEFT}
-                  x2={chartWidth}
-                  y1={y}
-                  y2={y}
-                  className={
-                    isZero
-                      ? "stroke-zinc-300 dark:stroke-zinc-700"
-                      : "stroke-zinc-200 dark:stroke-zinc-800"
-                  }
-                  strokeWidth={1}
-                />
-                <text
-                  x={MARGIN_LEFT - 8}
-                  y={y}
-                  textAnchor="end"
-                  dominantBaseline="middle"
-                  className="fill-zinc-500 text-[9px] dark:fill-zinc-400"
-                >
-                  {formatValue(tick)}
-                </text>
-              </g>
-            );
-          })}
-
-          {series.map((s, seriesIndex) => {
-            // stepAfter: hold each point's value flat until the next x, then
-            // jump — the truthful shape for a balance.
-            const segments = data.map((d, i) => {
-              const y = yAt(d.values[seriesIndex] ?? 0);
-              const x = xAt(i);
-              if (i === 0) return `M ${x} ${y}`;
-              const prevY = yAt(data[i - 1]?.values[seriesIndex] ?? 0);
-              return `L ${x} ${prevY} L ${x} ${y}`;
-            });
-            return (
-              <path
-                key={s.label}
-                d={segments.join(" ")}
-                fill="none"
-                strokeWidth={2}
-                strokeLinejoin="round"
-                className={`${s.strokeClassName} transition-opacity ${
-                  activeIndex === null ? "opacity-100" : "opacity-70"
-                }`}
-              />
-            );
-          })}
-
-          {data.map((d, pointIndex) => {
-            const x = xAt(pointIndex);
-            const isActive = activeIndex === pointIndex;
-            return (
-              // biome-ignore lint/a11y/useSemanticElements: an SVG group has no native interactive equivalent; role+tabIndex is the correct fallback.
-              <g
-                key={d.category}
-                tabIndex={0}
-                role="button"
-                aria-pressed={pinnedIndex === pointIndex}
-                aria-label={`${d.category}: ${series
-                  .map((s, i) => `${s.label} ${formatValue(d.values[i] ?? 0)}`)
-                  .join(", ")}`}
-                onMouseEnter={() => setHoverIndex(pointIndex)}
-                onMouseLeave={() => setHoverIndex(null)}
-                onFocus={() => setHoverIndex(pointIndex)}
-                onBlur={() => setHoverIndex(null)}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePin(pointIndex);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    togglePin(pointIndex);
-                  }
-                }}
-                className="cursor-pointer outline-none"
-              >
-                {/* full-height band so the whole column is a hover/click target */}
-                <rect
-                  x={x - Math.max(innerWidth / pointCount / 2, MIN_STEP / 2)}
-                  y={MARGIN_TOP}
-                  width={Math.max(innerWidth / pointCount, MIN_STEP)}
-                  height={plotHeight}
-                  fill="transparent"
-                />
-                {isActive && (
+            {domain.ticks.map((tick) => {
+              const y = yAt(tick);
+              const isZero = tick === 0 && domain.zeroInDomain;
+              return (
+                <g key={tick}>
                   <line
-                    x1={x}
-                    x2={x}
-                    y1={MARGIN_TOP}
-                    y2={MARGIN_TOP + plotHeight}
-                    className="stroke-zinc-300 dark:stroke-zinc-600"
+                    x1={MARGIN_LEFT}
+                    x2={chartWidth}
+                    y1={y}
+                    y2={y}
+                    className={
+                      isZero
+                        ? "stroke-zinc-300 dark:stroke-zinc-700"
+                        : "stroke-zinc-200 dark:stroke-zinc-800"
+                    }
                     strokeWidth={1}
                   />
-                )}
-                {series.map((s, seriesIndex) => (
-                  <circle
-                    key={s.label}
-                    cx={x}
-                    cy={yAt(d.values[seriesIndex] ?? 0)}
-                    r={isActive ? DOT_RADIUS + 1.5 : DOT_RADIUS}
-                    className={s.dotClassName}
-                  />
-                ))}
-                {pointIndex % Math.ceil(pointCount / 8) === 0 && (
                   <text
-                    x={x}
-                    y={MARGIN_TOP + plotHeight + 14}
-                    textAnchor="middle"
+                    x={MARGIN_LEFT - 8}
+                    y={y}
+                    textAnchor="end"
+                    dominantBaseline="middle"
                     className="fill-zinc-500 text-[9px] dark:fill-zinc-400"
                   >
-                    {d.category}
+                    {formatValue(tick)}
                   </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
-      </div>
+                </g>
+              );
+            })}
 
-      <div
-        aria-hidden={!tooltipVisible}
-        className={`flex flex-col gap-1 rounded-md border border-black/10 bg-white px-3 py-2 text-xs shadow-sm dark:border-white/10 dark:bg-neutral-900${
-          tooltipVisible ? "" : " invisible"
-        }`}
-      >
-        <span className="font-medium">{tooltipDatum?.category ?? " "}</span>
-        {series.map((s, i) => (
-          <span key={s.label} className="flex items-center gap-1.5">
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 12 12"
-              className="inline-block h-2 w-2"
-            >
-              <line
-                x1="0"
-                y1="6"
-                x2="12"
-                y2="6"
-                strokeWidth="2"
-                className={s.strokeClassName}
-              />
-            </svg>
-            <span className="text-zinc-500 dark:text-zinc-400">{s.label}</span>
-            <span className="font-mono tabular-nums">
-              {formatValue(tooltipDatum?.values[i] ?? 0)}
-            </span>
-          </span>
-        ))}
+            {series.map((s, seriesIndex) => {
+              // stepAfter: hold each point's value flat until the next x, then
+              // jump — the truthful shape for a balance.
+              const segments = data.map((d, i) => {
+                const y = yAt(d.values[seriesIndex] ?? 0);
+                const x = xAt(i);
+                if (i === 0) return `M ${x} ${y}`;
+                const prevY = yAt(data[i - 1]?.values[seriesIndex] ?? 0);
+                return `L ${x} ${prevY} L ${x} ${y}`;
+              });
+              return (
+                <path
+                  key={s.label}
+                  d={segments.join(" ")}
+                  fill="none"
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  className={`${s.strokeClassName} transition-opacity ${
+                    activeIndex === null ? "opacity-100" : "opacity-70"
+                  }`}
+                />
+              );
+            })}
+
+            {data.map((d, pointIndex) => {
+              const x = xAt(pointIndex);
+              const isActive = activeIndex === pointIndex;
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: an SVG group has no native interactive equivalent; role+tabIndex is the correct fallback.
+                <g
+                  key={d.category}
+                  data-point-index={pointIndex}
+                  tabIndex={0}
+                  role="button"
+                  aria-pressed={pinnedIndex === pointIndex}
+                  aria-label={`${d.category}: ${series
+                    .map(
+                      (s, i) => `${s.label} ${formatValue(d.values[i] ?? 0)}`,
+                    )
+                    .join(", ")}`}
+                  onMouseEnter={() => setHoverIndex(pointIndex)}
+                  onMouseLeave={() => setHoverIndex(null)}
+                  onFocus={() => setHoverIndex(pointIndex)}
+                  onBlur={() => setHoverIndex(null)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    togglePin(pointIndex);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      togglePin(pointIndex);
+                    }
+                  }}
+                  className="cursor-pointer outline-none"
+                >
+                  {/* full-height band so the whole column is a hover/click target */}
+                  <rect
+                    x={x - Math.max(innerWidth / pointCount / 2, MIN_STEP / 2)}
+                    y={MARGIN_TOP}
+                    width={Math.max(innerWidth / pointCount, MIN_STEP)}
+                    height={plotHeight}
+                    fill="transparent"
+                  />
+                  {isActive && (
+                    <line
+                      x1={x}
+                      x2={x}
+                      y1={MARGIN_TOP}
+                      y2={MARGIN_TOP + plotHeight}
+                      className="stroke-zinc-300 dark:stroke-zinc-600"
+                      strokeWidth={1}
+                    />
+                  )}
+                  {series.map((s, seriesIndex) => (
+                    <circle
+                      key={s.label}
+                      cx={x}
+                      cy={yAt(d.values[seriesIndex] ?? 0)}
+                      r={isActive ? DOT_RADIUS + 1.5 : DOT_RADIUS}
+                      className={s.dotClassName}
+                    />
+                  ))}
+                  {pointIndex % Math.ceil(pointCount / 8) === 0 && (
+                    <text
+                      x={x}
+                      y={MARGIN_TOP + plotHeight + 14}
+                      textAnchor="middle"
+                      className="fill-zinc-500 text-[9px] dark:fill-zinc-400"
+                    >
+                      {d.category}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {tooltipVisible && tooltipDatum && (
+          <div
+            ref={tooltipRef}
+            role="status"
+            style={
+              tooltipPosition
+                ? {
+                    left: tooltipPosition.left,
+                    top: tooltipPosition.top - TOOLTIP_GAP,
+                  }
+                : undefined
+            }
+            className={`pointer-events-none absolute z-10 flex -translate-x-1/2 -translate-y-full flex-col gap-1 rounded-md border border-black/10 bg-white px-3 py-2 text-xs shadow-md dark:border-white/10 dark:bg-neutral-900${
+              tooltipPosition ? "" : " invisible"
+            }`}
+          >
+            <span className="font-medium">{tooltipDatum.category}</span>
+            {series.map((s, i) => (
+              <span key={s.label} className="flex items-center gap-1.5">
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 12 12"
+                  className="inline-block h-2 w-2"
+                >
+                  <line
+                    x1="0"
+                    y1="6"
+                    x2="12"
+                    y2="6"
+                    strokeWidth="2"
+                    className={s.strokeClassName}
+                  />
+                </svg>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  {s.label}
+                </span>
+                <span className="font-mono tabular-nums">
+                  {formatValue(tooltipDatum.values[i] ?? 0)}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

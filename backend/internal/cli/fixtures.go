@@ -336,11 +336,12 @@ func generateRecurringTransactions(
 
 // generateDashboardCards seeds a starter /home layout for ownerID: one
 // account_stat card per account in accountIDs (mirroring the app's old
-// fixed dashboard), a query_stat card summing every account, and an
+// fixed dashboard), a query_stat card summing every account, an
 // entry_list plus a bar_chart card, both with their recurring-transaction
 // preview toggle on — so a freshly seeded dashboard already demonstrates
-// that feature rather than needing it turned on by hand. Returns the
-// number of cards created.
+// that feature rather than needing it turned on by hand — and an
+// unfiltered line_chart card (every account, summed per currency).
+// Returns the number of cards created.
 func generateDashboardCards(
 	ctx context.Context,
 	ownerID string,
@@ -384,6 +385,13 @@ func generateDashboardCards(
 			Unit:                 &barChartUnit,
 			ShowRecurringPreview: &showRecurringPreview,
 		},
+	}); err != nil {
+		return created, err
+	}
+	created++
+
+	if _, err := dashboardSvc.Create(ctx, ownerID, dashboard.New{
+		Type: dashboard.CardTypeLineChart,
 	}); err != nil {
 		return created, err
 	}

@@ -81,7 +81,8 @@
       "account_stat": "Account balance",
       "query_stat": "Sum",
       "entry_list": "Recent entries",
-      "bar_chart": "Bar chart"
+      "bar_chart": "Bar chart",
+      "line_chart": "Line chart"
     },
     "edit": {
       "toggle": "Edit dashboard",
@@ -119,6 +120,10 @@
       "next": "Next period",
       "projectedIncome": "Income (projected)",
       "projectedOutcome": "Outcome (projected)"
+    },
+    "lineChart": {
+      "previous": "Previous month",
+      "next": "Next month"
     }
   },
   "flowChart": {

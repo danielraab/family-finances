@@ -1272,11 +1272,11 @@ export interface components {
         };
         /** @description A plain object whose meaningful fields depend on the card's type (see DashboardCardType) — not a discriminated union at the schema level; the backend validates the required/allowed field set per type. account_id/category_id/tag_id, when present, must each name an entity the caller has at least view permission on. range (on query_stat/entry_list) is never interpreted server-side — it is resolved to concrete from/to timestamps by the client at render time, the same way /reports resolves its own date-range presets. */
         DashboardCardConfig: {
-            /** @description Required on account_stat. Optional filter on query_stat/ entry_list/bar_chart (omitted means every account the caller can see). */
+            /** @description Required on account_stat. Optional filter on query_stat/ entry_list/bar_chart/line_chart (omitted means every account the caller can see). */
             account_id?: string;
             /** @description Optional filter on query_stat/entry_list/bar_chart. */
             category_id?: string;
-            /** @description Only meaningful, and only settable, on entry_list — how many columns of the dashboard's responsive grid the card spans. Absent means 2 (the minimum). account_stat/query_stat always occupy exactly one column and bar_chart is always full width, neither configurable. */
+            /** @description Only meaningful, and only settable, on entry_list — how many columns of the dashboard's responsive grid the card spans. Absent means 2 (the minimum). account_stat/query_stat always occupy exactly one column and bar_chart/line_chart are always full width, neither configurable. */
             columns?: number;
             /** @description Only meaningful alongside category_id. Absent means true (the default), mirroring /reports' own checkbox. */
             include_subcategories?: boolean;
@@ -1293,7 +1293,7 @@ export interface components {
             show_recurring_preview?: boolean;
             /** @description Optional filter on query_stat/entry_list/bar_chart. */
             tag_id?: string;
-            /** @description Optional custom heading, settable on query_stat/entry_list/ bar_chart only (never account_stat, whose heading is always its account's own name). The web client renders it — falling back to a generated summary of the filter when absent — as a link through to /reports with this card's account/category/ tag/date-range filter prefilled. */
+            /** @description Optional custom heading, settable on query_stat/entry_list/ bar_chart/line_chart only (never account_stat, whose heading is always its account's own name). The web client renders it — falling back to a generated summary of the filter when absent — as a link through to /reports with this card's account/category/tag/date-range filter prefilled. */
             title?: string;
             /**
              * @description Required on bar_chart. month renders a year of monthly bars; day renders a month of daily bars.
@@ -1306,10 +1306,10 @@ export interface components {
             type: components["schemas"]["DashboardCardType"];
         };
         /**
-         * @description Immutable after creation. account_stat: one account's live balance. query_stat: a per-currency sum for an inline filter. entry_list: the 10 most recent entries matching an inline filter. bar_chart: an income/outcome bar chart for an account or an inline-filtered query.
+         * @description Immutable after creation. account_stat: one account's live balance. query_stat: a per-currency sum for an inline filter. entry_list: the 10 most recent entries matching an inline filter. bar_chart: an income/outcome bar chart for an account or an inline-filtered query. line_chart: a running-balance line chart for an account or every account.
          * @enum {string}
          */
-        DashboardCardType: "account_stat" | "query_stat" | "entry_list" | "bar_chart";
+        DashboardCardType: "account_stat" | "query_stat" | "entry_list" | "bar_chart" | "line_chart";
         DashboardCardUpdate: {
             config: components["schemas"]["DashboardCardConfig"];
         };
