@@ -5,6 +5,7 @@
 [![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](frontend/package.json)
 [![pnpm](https://img.shields.io/badge/pnpm-only-F69220?logo=pnpm&logoColor=white)](frontend/package.json)
 [![Conventional Commits](https://img.shields.io/badge/commits-conventional-yellow.svg)](https://www.conventionalcommits.org)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 A self-hosted family/household finance tracker: accounts, transactions,
 recurring costs, categories, tags, reports, and a customizable dashboard —
@@ -27,6 +28,7 @@ It ships as a Go HTTP API (`backend/`) plus a client-only web app
 - [Build & run the container](#build--run-the-container)
 - [Working on the code](#working-on-the-code)
 - [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
@@ -179,3 +181,7 @@ type one of `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `build`,
 `ci`, `perf`, with an optional package scope, e.g.
 `feat(backend): add accounts endpoint`. See [CHANGELOG.md](CHANGELOG.md) for
 release history.
+
+## License
+
+Licensed under the [GNU General Public License v3.0](LICENSE) (GPL-3.0).
