@@ -354,6 +354,7 @@ func TestGenerateFixturesCreatesDashboardCards(t *testing.T) {
 
 	var accountStats, queryStats, entryLists, barCharts, lineCharts int
 	var recurringPreviewOn int
+	var lineChartAccountID *string
 	for _, c := range cards {
 		switch c.Type {
 		case dashboard.CardTypeAccountStat:
@@ -372,6 +373,7 @@ func TestGenerateFixturesCreatesDashboardCards(t *testing.T) {
 			}
 		case dashboard.CardTypeLineChart:
 			lineCharts++
+			lineChartAccountID = c.Config.AccountID
 		}
 	}
 	if accountStats != len(accounts) {
@@ -379,6 +381,13 @@ func TestGenerateFixturesCreatesDashboardCards(t *testing.T) {
 	}
 	if queryStats != 1 || entryLists != 1 || barCharts != 1 || lineCharts != 1 {
 		t.Fatalf("card type counts = query_stat:%d entry_list:%d bar_chart:%d line_chart:%d, want 1 each", queryStats, entryLists, barCharts, lineCharts)
+	}
+	// Scoped to exactly one account, not left unfiltered — see
+	// generateDashboardCards' doc comment for why: an unfiltered card
+	// would render one line graph per currency present across the
+	// caller's accounts, often more than one.
+	if lineChartAccountID == nil || *lineChartAccountID != accounts[0].ID {
+		t.Fatalf("line_chart card account_id = %v, want %s (the first account)", lineChartAccountID, accounts[0].ID)
 	}
 	if recurringPreviewOn != 2 {
 		t.Fatalf("cards with show_recurring_preview on = %d, want 2 (entry_list + bar_chart)", recurringPreviewOn)

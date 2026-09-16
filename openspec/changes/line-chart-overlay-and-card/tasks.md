@@ -41,8 +41,16 @@
 
 - [x] 3.1 In `backend/internal/cli/fixtures.go`'s `generateDashboardCards`,
   add one more `dashboardSvc.Create` call after the `bar_chart` card:
-  `Type: dashboard.CardTypeLineChart`, empty `Config{}` (every account,
-  summed per currency). Update the function's doc comment to mention it.
+  `Type: dashboard.CardTypeLineChart`. Update the function's doc comment
+  to mention it.
+- [x] 3.2 (Refined after initial implementation.) Scope the seeded
+  `line_chart` card to `accountIDs[0]` rather than leaving it unfiltered
+  — a generated account's currency is drawn randomly from a 3-currency
+  pool, so an unfiltered card often rendered two or three stacked
+  per-currency line graphs instead of the single demonstrative one a
+  fresh dashboard should show. Update `backend/AGENTS.md`'s "Seeding
+  fake data" section and `TestGenerateFixturesCreatesDashboardCards` to
+  match.
 
 ## 4. Frontend: shared overlay-tooltip positioning hook
 
