@@ -7,6 +7,7 @@ import { AccountLabel } from "../components/AccountLabel";
 import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
 import { DateRangeFilter } from "../components/DateRangeFilter";
+import { BulkActionToolbar } from "../components/entries/BulkActionToolbar";
 import { LocationPreviewModal } from "../components/LocationPreviewModal";
 import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
 import { TagLabel } from "../components/TagLabel";
@@ -125,6 +126,7 @@ function EntriesListPage() {
 
   const [items, setItems] = useState<Entry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [previewItems, setPreviewItems] = useState<
     RecurringTransactionPreviewItem[] | null
   >(null);
@@ -169,6 +171,7 @@ function EntriesListPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: searchKey is the stable dependency; search itself is a new object each render.
   useEffect(() => {
     setQDraft(search.q ?? "");
+    setSelectedIds(new Set());
     setLoading(true);
     let cancelled = false;
     api
@@ -236,6 +239,47 @@ function EntriesListPage() {
     setItems((prev) => [...prev, ...(data?.items ?? [])]);
     setNextCursor(data?.next_cursor ?? null);
     setLoadingMore(false);
+  }
+
+  // Reloads the ledger's first page under the current filters without
+  // touching the URL — used by the bulk-action run modal's "Reload list",
+  // since the applied changes may have moved entries out of the active
+  // filter (e.g. a bulk recategorize while filtered by category). Also
+  // re-fetches tags: "Add tags"/"Set tags" can create a brand-new tag via
+  // resolveTagIds, and without this the toolbar's stale `tags` list would
+  // neither offer it as a suggestion nor recognize it as already existing
+  // on a follow-up bulk action, creating a duplicate instead of reusing it.
+  async function reloadAfterBulkAction() {
+    setLoading(true);
+    const [{ data }, { data: tg }] = await Promise.all([
+      api.GET("/api/entries", { params: { query: buildQuery() } }),
+      api.GET("/api/tags"),
+    ]);
+    setItems(data?.items ?? []);
+    setNextCursor(data?.next_cursor ?? null);
+    setTags(tg ?? []);
+    setLoading(false);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) =>
+      items.length > 0 && items.every((e) => prev.has(e.id))
+        ? new Set()
+        : new Set(items.map((e) => e.id)),
+    );
+  }
+
+  function toggleSelectOne(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   }
 
   function patchSearch(patch: Partial<EntriesSearch>) {
@@ -406,10 +450,32 @@ function EntriesListPage() {
         />
       )}
 
+      {selectedIds.size > 0 && (
+        <BulkActionToolbar
+          items={items}
+          selectedIds={selectedIds}
+          onClear={() => setSelectedIds(new Set())}
+          categories={categories}
+          tags={tags}
+          onReload={reloadAfterBulkAction}
+        />
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-black/10 text-xs uppercase text-zinc-500 dark:border-white/10 dark:text-zinc-400">
             <tr>
+              <th className="w-8 px-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={
+                    items.length > 0 &&
+                    items.every((e) => selectedIds.has(e.id))
+                  }
+                  onChange={toggleSelectAll}
+                  aria-label={t("entries.bulk.selectAll")}
+                />
+              </th>
               <th className="px-3 py-2 font-medium">
                 <button
                   type="button"
@@ -455,6 +521,16 @@ function EntriesListPage() {
                 key={entry.id}
                 className="border-b border-black/5 last:border-0 dark:border-white/5"
               >
+                <td className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(entry.id)}
+                    onChange={() => toggleSelectOne(entry.id)}
+                    aria-label={t("entries.bulk.selectEntry", {
+                      title: entry.title,
+                    })}
+                  />
+                </td>
                 <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
                   {(() => {
                     const bookedAt = new Date(entry.booking_timestamp);

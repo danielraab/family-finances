@@ -446,6 +446,59 @@
     },
     "viewLocation": "View location",
     "createdBy": "Logged by {{name}}",
+    "bulk": {
+      "selectAll": "Select all loaded entries",
+      "selectEntry": "Select {{title}}",
+      "selectedCount": "{{count}} selected",
+      "clear": "Clear",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "actions": {
+        "setCategory": "Set category",
+        "addTags": "Add tags",
+        "removeTags": "Remove tags",
+        "setTags": "Set tags",
+        "linkRecurring": "Link to recurring transaction",
+        "delete": "Delete"
+      },
+      "setCategory": {
+        "title": "Set category",
+        "none": "No category"
+      },
+      "addTags": {
+        "title": "Add tags"
+      },
+      "removeTags": {
+        "title": "Remove tags"
+      },
+      "setTags": {
+        "title": "Set tags"
+      },
+      "linkRecurring": {
+        "title": "Link to recurring transaction",
+        "none": "Not linked",
+        "disabledHint": "Select entries from a single account to link a recurring transaction."
+      },
+      "delete": {
+        "title_one": "Delete {{count}} entry?",
+        "title_other": "Delete {{count}} entries?",
+        "body": "This cannot be undone here.",
+        "confirm": "Delete entries"
+      },
+      "run": {
+        "title": "Applying bulk action",
+        "progress": "{{done}} of {{total}} applied…",
+        "result": "{{succeeded}} succeeded, {{failed}} failed",
+        "reasons": {
+          "forbidden": "not allowed",
+          "notFound": "not found",
+          "invalid": "rejected — invalid for this entry",
+          "generic": "failed"
+        },
+        "reload": "Reload list",
+        "close": "Close"
+      }
+    },
     "import": {
       "linkLabel": "Import",
       "title": "Import entries",

@@ -446,6 +446,59 @@
     },
     "viewLocation": "Ort anzeigen",
     "createdBy": "Erfasst von {{name}}",
+    "bulk": {
+      "selectAll": "Alle geladenen Einträge auswählen",
+      "selectEntry": "{{title}} auswählen",
+      "selectedCount": "{{count}} ausgewählt",
+      "clear": "Auswahl aufheben",
+      "cancel": "Abbrechen",
+      "apply": "Anwenden",
+      "actions": {
+        "setCategory": "Kategorie setzen",
+        "addTags": "Tags hinzufügen",
+        "removeTags": "Tags entfernen",
+        "setTags": "Tags setzen",
+        "linkRecurring": "Mit wiederkehrender Buchung verknüpfen",
+        "delete": "Löschen"
+      },
+      "setCategory": {
+        "title": "Kategorie setzen",
+        "none": "Keine Kategorie"
+      },
+      "addTags": {
+        "title": "Tags hinzufügen"
+      },
+      "removeTags": {
+        "title": "Tags entfernen"
+      },
+      "setTags": {
+        "title": "Tags setzen"
+      },
+      "linkRecurring": {
+        "title": "Mit wiederkehrender Buchung verknüpfen",
+        "none": "Nicht verknüpft",
+        "disabledHint": "Wähle Einträge aus nur einem Konto aus, um eine wiederkehrende Buchung zu verknüpfen."
+      },
+      "delete": {
+        "title_one": "{{count}} Eintrag löschen?",
+        "title_other": "{{count}} Einträge löschen?",
+        "body": "Dies kann hier nicht rückgängig gemacht werden.",
+        "confirm": "Einträge löschen"
+      },
+      "run": {
+        "title": "Sammelaktion wird angewendet",
+        "progress": "{{done}} von {{total}} angewendet…",
+        "result": "{{succeeded}} erfolgreich, {{failed}} fehlgeschlagen",
+        "reasons": {
+          "forbidden": "nicht erlaubt",
+          "notFound": "nicht gefunden",
+          "invalid": "abgelehnt — für diesen Eintrag ungültig",
+          "generic": "fehlgeschlagen"
+        },
+        "reload": "Liste neu laden",
+        "close": "Schließen"
+      }
+    },
     "import": {
       "linkLabel": "Importieren",
       "title": "Buchungen importieren",
