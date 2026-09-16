@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-16
+
+### Added
+
+- Bulk actions on the `/entries` ledger: select entries via row/header
+  checkboxes and act on all of them at once — set category, add/remove/set
+  tags, link to a recurring transaction (disabled across a multi-account
+  selection), or delete. Each action confirms in a dialog and reports
+  progress and any failures in a shared result modal.
+
 ## [0.3.0] - 2026-09-16
 
 ### Added
@@ -139,7 +149,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/danielraab/family-finances/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/danielraab/family-finances/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/danielraab/family-finances/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/danielraab/family-finances/compare/v0.1.1...v0.1.2
