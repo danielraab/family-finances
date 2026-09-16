@@ -51,9 +51,7 @@ services:
         condition: service_healthy
 
 
-
-
-  adminer:
+  adminer:  # pgAdmin would be an alternative 
     image: adminer:latest
     profiles:
       - "dev"
@@ -65,6 +63,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
 
   mailpit:
     image: axllent/mailpit:latest
