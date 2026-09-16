@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-16
+
+### Added
+
+- Recurring transactions: a new `/recurring` page for defining recurring
+  costs and income (rent, subscriptions, salary, insurance) as templates
+  with an interval, start date, and optional end date. Each shows its
+  per-year amount and a total grouped by currency. "Create transaction"
+  always requires a manual click — nothing is created automatically — and
+  opens the entry form prefilled from the template. Entries linked to a
+  recurring transaction show a badge on the `/entries` ledger and `/reports`
+  results.
+- A bounded, opt-in preview of upcoming recurring occurrences on
+  `/entries`, `/reports`, and the dashboard's entry-list and bar-chart
+  cards, with a new "recurring preview horizon" profile setting (1/2/3
+  months from now, end of this/next month, or end of this year).
+- A "Show recurring assumptions" toggle on the account balance chart and
+  on the dashboard's new `line_chart` card, overlaying a projected balance
+  line built from upcoming recurring occurrences.
+- New `line_chart` dashboard card type: a running-balance chart, scoped to
+  one account or summed across every account, with a month pager.
+- Shared date-range presets (Today, Last 7/14/30 days, This week, Last
+  week, Last 2 weeks, This month, Last month, This year) on `/entries` and
+  `/reports`, plus a per-user week-start setting (Monday or Sunday).
+- Category and tag filtering on the flow-summary data behind dashboard bar
+  charts.
+
+### Changed
+
+- The landing page now redirects an already-authenticated visitor
+  straight to `/home` instead of showing the marketing page.
+- `LineChart` now uses the same floating, click-to-pin tooltip `BarChart`
+  already had, in place of its fixed value box below the chart.
+- Improved `BarChart` tooltip positioning so it stays anchored correctly
+  on scroll and resize.
+
 ## [0.2.0] - 2026-09-13
 
 ### Added
@@ -103,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/danielraab/family-finances/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/danielraab/family-finances/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/danielraab/family-finances/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/danielraab/family-finances/compare/v0.1.0...v0.1.1
