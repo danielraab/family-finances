@@ -98,6 +98,23 @@ func TestHandlerCreateUnknownTypeRejected(t *testing.T) {
 	conforms(t, "POST", "/api/dashboard/cards", rec)
 }
 
+func TestHandlerCreateLineChart(t *testing.T) {
+	h, accounts, _, _ := newHandlerFixture()
+	accounts.add("acc1", "u1")
+	user := auth.User{ID: "u1"}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/dashboard/cards",
+		strings.NewReader(`{"type":"line_chart","config":{"account_id":"acc1"}}`)), user))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "POST", "/api/dashboard/cards", rec)
+	if !strings.Contains(rec.Body.String(), `"line_chart"`) {
+		t.Fatalf("body = %s, want line_chart", rec.Body)
+	}
+}
+
 func TestHandlerCreateInaccessibleAccountRejected(t *testing.T) {
 	h, accounts, _, _ := newHandlerFixture()
 	accounts.add("acc1", "someone-else")

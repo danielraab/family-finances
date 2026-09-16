@@ -1,5 +1,10 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
-import { niceMax, useContainerWidth, usePinnableSelection } from "./internal";
+import { useId, useRef } from "react";
+import {
+  niceMax,
+  useContainerWidth,
+  useOverlayTooltipPosition,
+  usePinnableSelection,
+} from "./internal";
 
 /** One series (a fixed identity across every category — e.g. "Income"). */
 export type BarChartSeries = {
@@ -98,10 +103,6 @@ export function BarChart({
   // element into a vertical clip box as well.
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const [tooltipPosition, setTooltipPosition] = useState<{
-    left: number;
-    top: number;
-  } | null>(null);
 
   const max = niceMax(
     Math.max(
@@ -142,52 +143,17 @@ export function BarChart({
   const tooltipVisible = activeIndex !== null && !!data[activeIndex];
   const tooltipDatum = activeIndex !== null ? data[activeIndex] : undefined;
 
-  // Re-anchor the tooltip to the active group's actual rendered position
-  // (and re-measure its own width, for horizontal clamping) whenever the
-  // active group changes, and keep it glued there across scroll/resize
+  // Re-anchors the tooltip to the active group's actual rendered position
+  // whenever it changes, and keeps it glued there across scroll/resize
   // while it stays visible (a pinned tooltip can outlive the pointer, so
-  // the page can still scroll under it). The tooltip node itself is always
-  // rendered while `tooltipVisible` (just hidden until positioned, below)
-  // so `tooltipRef.current` already exists the first time this runs —
-  // otherwise, measuring its width would need a second effect pass, and
-  // that pass would be skipped because [tooltipVisible, activeIndex]
-  // wouldn't have changed since the first one.
-  useLayoutEffect(() => {
-    const wrapper = wrapperRef.current;
-    const tooltipEl = tooltipRef.current;
-    if (!tooltipVisible || activeIndex === null || !wrapper || !tooltipEl) {
-      setTooltipPosition(null);
-      return;
-    }
-    const groupEl = wrapper.querySelector<SVGGElement>(
-      `[data-group-index="${activeIndex}"]`,
-    );
-    if (!groupEl) {
-      setTooltipPosition(null);
-      return;
-    }
-    const update = () => {
-      const wrapperRect = wrapper.getBoundingClientRect();
-      const groupRect = groupEl.getBoundingClientRect();
-      const tooltipWidth = tooltipEl.offsetWidth;
-      const anchorLeft =
-        groupRect.left + groupRect.width / 2 - wrapperRect.left;
-      // Clamp horizontally within the wrapper's own (visible) width so the
-      // tooltip never spills off-screen for an edge group or a scrolled chart.
-      const left = Math.min(
-        Math.max(anchorLeft, tooltipWidth / 2),
-        Math.max(wrapperRect.width - tooltipWidth / 2, tooltipWidth / 2),
-      );
-      setTooltipPosition({ left, top: groupRect.top - wrapperRect.top });
-    };
-    update();
-    window.addEventListener("scroll", update, true);
-    window.addEventListener("resize", update);
-    return () => {
-      window.removeEventListener("scroll", update, true);
-      window.removeEventListener("resize", update);
-    };
-  }, [tooltipVisible, activeIndex]);
+  // the page can still scroll under it) — see useOverlayTooltipPosition.
+  const tooltipPosition = useOverlayTooltipPosition({
+    wrapperRef,
+    tooltipRef,
+    visible: tooltipVisible,
+    anchorSelector:
+      activeIndex !== null ? `[data-group-index="${activeIndex}"]` : null,
+  });
 
   return (
     <div className="flex flex-col gap-3">

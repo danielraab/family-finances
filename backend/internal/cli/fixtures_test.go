@@ -338,8 +338,8 @@ func TestGenerateFixturesCreatesDashboardCards(t *testing.T) {
 		t.Fatal(err)
 	}
 	// One account_stat card per account, plus one query_stat, one
-	// entry_list, and one bar_chart.
-	wantCards := len(accounts) + 3
+	// entry_list, one bar_chart, and one line_chart.
+	wantCards := len(accounts) + 4
 	if counts.cards != wantCards {
 		t.Fatalf("cards count = %d, want %d", counts.cards, wantCards)
 	}
@@ -352,8 +352,9 @@ func TestGenerateFixturesCreatesDashboardCards(t *testing.T) {
 		t.Fatalf("List = %d cards, want %d", len(cards), wantCards)
 	}
 
-	var accountStats, queryStats, entryLists, barCharts int
+	var accountStats, queryStats, entryLists, barCharts, lineCharts int
 	var recurringPreviewOn int
+	var lineChartAccountID *string
 	for _, c := range cards {
 		switch c.Type {
 		case dashboard.CardTypeAccountStat:
@@ -370,13 +371,23 @@ func TestGenerateFixturesCreatesDashboardCards(t *testing.T) {
 			if c.Config.ShowRecurringPreview != nil && *c.Config.ShowRecurringPreview {
 				recurringPreviewOn++
 			}
+		case dashboard.CardTypeLineChart:
+			lineCharts++
+			lineChartAccountID = c.Config.AccountID
 		}
 	}
 	if accountStats != len(accounts) {
 		t.Fatalf("account_stat cards = %d, want %d (one per account)", accountStats, len(accounts))
 	}
-	if queryStats != 1 || entryLists != 1 || barCharts != 1 {
-		t.Fatalf("card type counts = query_stat:%d entry_list:%d bar_chart:%d, want 1 each", queryStats, entryLists, barCharts)
+	if queryStats != 1 || entryLists != 1 || barCharts != 1 || lineCharts != 1 {
+		t.Fatalf("card type counts = query_stat:%d entry_list:%d bar_chart:%d line_chart:%d, want 1 each", queryStats, entryLists, barCharts, lineCharts)
+	}
+	// Scoped to exactly one account, not left unfiltered — see
+	// generateDashboardCards' doc comment for why: an unfiltered card
+	// would render one line graph per currency present across the
+	// caller's accounts, often more than one.
+	if lineChartAccountID == nil || *lineChartAccountID != accounts[0].ID {
+		t.Fatalf("line_chart card account_id = %v, want %s (the first account)", lineChartAccountID, accounts[0].ID)
 	}
 	if recurringPreviewOn != 2 {
 		t.Fatalf("cards with show_recurring_preview on = %d, want 2 (entry_list + bar_chart)", recurringPreviewOn)

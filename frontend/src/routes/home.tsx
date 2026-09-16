@@ -9,6 +9,7 @@ import { BarChartCard } from "../components/dashboard/BarChartCard";
 import { CardFormDialog } from "../components/dashboard/CardFormDialog";
 import { DashboardCardFrame } from "../components/dashboard/DashboardCardFrame";
 import { EntryListCard } from "../components/dashboard/EntryListCard";
+import { LineChartCard } from "../components/dashboard/LineChartCard";
 import { QueryStatCard } from "../components/dashboard/QueryStatCard";
 import type { DashboardCard } from "../lib/dashboardFilter";
 import { useAccountsWithBalances } from "../lib/useAccountsWithBalances";
@@ -46,7 +47,7 @@ function HomePage() {
 }
 
 /** Segments an ordered card list into grid runs (3-4 per row) broken by
- * standalone, always-full-width bar_chart cards — see
+ * standalone, always-full-width bar_chart/line_chart cards — see
  * web-client-home's layout requirement. */
 type Segment =
   | { kind: "grid"; cards: DashboardCard[] }
@@ -55,10 +56,10 @@ type Segment =
 /** entry_list is the only card type with a configurable grid span (2-4
  * columns of the responsive 1/2/3/4-column grid, default 2 — see
  * dashboard-cards' spec). account_stat/query_stat always occupy exactly
- * one column (no class needed); bar_chart is handled separately, always
- * full width. Literal, statically-written class strings — required for
- * Tailwind's scanner to emit them, since it never evaluates
- * runtime-constructed class names. */
+ * one column (no class needed); bar_chart/line_chart are handled
+ * separately, always full width. Literal, statically-written class
+ * strings — required for Tailwind's scanner to emit them, since it never
+ * evaluates runtime-constructed class names. */
 function entryListSpanClass(columns: number | undefined): string {
   switch (columns) {
     case 3:
@@ -73,7 +74,7 @@ function entryListSpanClass(columns: number | undefined): string {
 function segmentCards(cards: DashboardCard[]): Segment[] {
   const segments: Segment[] = [];
   for (const card of cards) {
-    if (card.type === "bar_chart") {
+    if (card.type === "bar_chart" || card.type === "line_chart") {
       segments.push({ kind: "chart", card });
       continue;
     }
@@ -197,6 +198,17 @@ function HomeDashboard() {
       case "bar_chart":
         return (
           <BarChartCard
+            config={card.config}
+            accounts={accounts ?? []}
+            categories={categories}
+            tags={tags}
+            displayedDecimalPlaces={displayedDecimalPlaces}
+            locale={locale}
+          />
+        );
+      case "line_chart":
+        return (
+          <LineChartCard
             config={card.config}
             accounts={accounts ?? []}
             categories={categories}

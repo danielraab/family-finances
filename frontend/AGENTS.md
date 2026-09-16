@@ -404,9 +404,12 @@ to whichever page first needed it. Two exist today — `BarChart.tsx`
 with a signed, data-framed y-axis and a zero rule line) — and both build on
 `internal.ts`, which holds the shared scaffolding: `useContainerWidth`
 (responsive `ResizeObserver` width), `niceMax` / `niceExtent` (axis-tick
-rounding), and `usePinnableSelection` (the hover-preview / click-to-pin /
-Escape-to-release tooltip state). Extend a chart by lifting anything
-genuinely shared into `internal.ts` rather than duplicating it.
+rounding), `usePinnableSelection` (the hover-preview / click-to-pin /
+Escape-to-release tooltip state), and `useOverlayTooltipPosition` (anchors
+a floating tooltip to the active bar group's/point's actual rendered
+position, container-relative and horizontally clamped, tracking
+scroll/resize). Extend a chart by lifting anything genuinely shared into
+`internal.ts` rather than duplicating it.
 
 Before building a new one, consult the `dataviz` skill for
 form/color/mark/interaction guidance rather than improvising — series

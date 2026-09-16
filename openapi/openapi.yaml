@@ -3789,13 +3789,14 @@ components:
 
     DashboardCardType:
       type: string
-      enum: [account_stat, query_stat, entry_list, bar_chart]
+      enum: [account_stat, query_stat, entry_list, bar_chart, line_chart]
       description: >-
         Immutable after creation. account_stat: one account's live
         balance. query_stat: a per-currency sum for an inline filter.
         entry_list: the 10 most recent entries matching an inline filter.
         bar_chart: an income/outcome bar chart for an account or an
-        inline-filtered query.
+        inline-filtered query. line_chart: a running-balance line chart
+        for an account or every account.
 
     DashboardCardConfig:
       type: object
@@ -3813,8 +3814,8 @@ components:
           type: string
           description: >-
             Required on account_stat. Optional filter on query_stat/
-            entry_list/bar_chart (omitted means every account the caller
-            can see).
+            entry_list/bar_chart/line_chart (omitted means every account
+            the caller can see).
         category_id:
           type: string
           description: Optional filter on query_stat/entry_list/bar_chart.
@@ -3857,17 +3858,17 @@ components:
             Only meaningful, and only settable, on entry_list — how many
             columns of the dashboard's responsive grid the card spans.
             Absent means 2 (the minimum). account_stat/query_stat always
-            occupy exactly one column and bar_chart is always full width,
-            neither configurable.
+            occupy exactly one column and bar_chart/line_chart are always
+            full width, neither configurable.
         title:
           type: string
           description: >-
             Optional custom heading, settable on query_stat/entry_list/
-            bar_chart only (never account_stat, whose heading is always
-            its account's own name). The web client renders it — falling
-            back to a generated summary of the filter when absent — as a
-            link through to /reports with this card's account/category/
-            tag/date-range filter prefilled.
+            bar_chart/line_chart only (never account_stat, whose heading
+            is always its account's own name). The web client renders it
+            — falling back to a generated summary of the filter when
+            absent — as a link through to /reports with this card's
+            account/category/tag/date-range filter prefilled.
         show_recurring_preview:
           type: boolean
           description: >-

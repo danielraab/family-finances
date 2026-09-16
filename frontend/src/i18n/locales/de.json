@@ -81,7 +81,8 @@
       "account_stat": "Kontostand",
       "query_stat": "Summe",
       "entry_list": "Letzte Einträge",
-      "bar_chart": "Balkendiagramm"
+      "bar_chart": "Balkendiagramm",
+      "line_chart": "Liniendiagramm"
     },
     "edit": {
       "toggle": "Dashboard bearbeiten",
@@ -119,6 +120,10 @@
       "next": "Nächster Zeitraum",
       "projectedIncome": "Einnahmen (geplant)",
       "projectedOutcome": "Ausgaben (geplant)"
+    },
+    "lineChart": {
+      "previous": "Vorheriger Monat",
+      "next": "Nächster Monat"
     }
   },
   "flowChart": {

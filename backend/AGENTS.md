@@ -664,10 +664,14 @@ list, an invalid address, or a duplicate before touching the database).
   `GET /api/recurring-transactions/preview` (`recurring-transactions`)
   without any manual setup. `generateDashboardCards` then seeds a starter
   `/home` layout: one `account_stat` card per account, one unfiltered
-  `query_stat` card, and one `entry_list` plus one `bar_chart` card, the
+  `query_stat` card, one `entry_list` plus one `bar_chart` card (the
   latter two with `show_recurring_preview` on — mirroring the pre-
   customizable-dashboard fixed layout while also demonstrating the
-  recurring-transaction preview feature by default (`dashboard-cards`).
+  recurring-transaction preview feature by default), and one `line_chart`
+  card scoped to the first account (not left unfiltered, since a
+  generated account's currency is random — an unfiltered card would
+  often render two or three stacked per-currency graphs instead of the
+  one a fresh dashboard should demonstrate) (`dashboard-cards`).
 
 ## Serving the frontend
 

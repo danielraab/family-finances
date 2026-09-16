@@ -28,11 +28,14 @@ const (
 	// CardTypeBarChart shows an income/outcome bar chart for an account
 	// or an inline-filtered query.
 	CardTypeBarChart CardType = "bar_chart"
+	// CardTypeLineChart shows a running-balance line chart for an
+	// account or every account.
+	CardTypeLineChart CardType = "line_chart"
 )
 
 func (t CardType) valid() bool {
 	switch t {
-	case CardTypeAccountStat, CardTypeQueryStat, CardTypeEntryList, CardTypeBarChart:
+	case CardTypeAccountStat, CardTypeQueryStat, CardTypeEntryList, CardTypeBarChart, CardTypeLineChart:
 		return true
 	default:
 		return false
@@ -80,6 +83,10 @@ const (
 //     regardless of any configured span.
 //   - bar_chart requires Unit and accepts AccountID, CategoryID,
 //     IncludeSubcategories, TagID, and Title besides it, but no Range.
+//   - line_chart accepts only AccountID and Title, both optional, and no
+//     other field — its running balance
+//     (GET /api/entries/balance-series) has no category/tag filter or
+//     bucketing choice to expose.
 //   - entry_list and bar_chart additionally accept ShowRecurringPreview
 //     (default false) — whether the card additionally previews upcoming
 //     recurring-transaction occurrences via
@@ -164,6 +171,10 @@ func validateShape(typ CardType, c Config) error {
 			return ErrInvalidValue
 		}
 		if *c.Unit != string(UnitMonth) && *c.Unit != string(UnitDay) {
+			return ErrInvalidValue
+		}
+	case CardTypeLineChart:
+		if c.CategoryID != nil || c.IncludeSubcategories != nil || c.TagID != nil || c.Range != nil || c.Unit != nil || c.Columns != nil || c.ShowRecurringPreview != nil {
 			return ErrInvalidValue
 		}
 	}
