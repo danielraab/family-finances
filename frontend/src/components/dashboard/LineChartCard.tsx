@@ -6,7 +6,15 @@ import { formatAmount } from "../../lib/amount";
 import { compact } from "../../lib/compact";
 import type { DashboardCardConfig } from "../../lib/dashboardFilter";
 import { cardReferencesResolve } from "../../lib/dashboardFilter";
+import {
+  cumulativePreviewDeltaByPeriod,
+  fetchRecurringPreview,
+  type RecurringTransactionPreviewItem,
+  resolvePreviewCutoff,
+  todayDateString,
+} from "../../lib/recurringPreview";
 import type { Account } from "../../lib/useAccountsWithBalances";
+import { useRecurringPreviewHorizon } from "../../lib/useRecurringPreviewHorizon";
 import { LineChart, type LineChartSeries } from "../charts/LineChart";
 import { CardTitleLink } from "./CardTitleLink";
 import { MissingReferenceCard } from "./MissingReferenceCard";
@@ -19,6 +27,9 @@ type BalancePoint = components["schemas"]["BalancePoint"];
 // page's own balance-chart colouring.
 const BALANCE_STROKE = "stroke-[#2a78d6] dark:stroke-[#3987e5]";
 const BALANCE_DOT = "fill-[#2a78d6] dark:fill-[#3987e5]";
+// Muted variant (opacity-reduced) of the same hue for the projected
+// balance line, mirroring accounts.$accountId.index.tsx's own constant.
+const BALANCE_PROJECTED_STROKE = "stroke-[#2a78d6]/40 dark:stroke-[#3987e5]/50";
 
 /**
  * A line_chart card: a running-balance line chart via
@@ -52,6 +63,10 @@ export function LineChartCard({
   const [balancePoints, setBalancePoints] = useState<BalancePoint[] | null>(
     null,
   );
+  const [previewItems, setPreviewItems] = useState<
+    RecurringTransactionPreviewItem[]
+  >([]);
+  const recurringPreviewHorizon = useRecurringPreviewHorizon();
 
   const resolves = cardReferencesResolve(config, accounts, categories, tags);
   const filterKey = JSON.stringify(config);
@@ -82,11 +97,46 @@ export function LineChartCard({
     };
   }, [filterKey, year, month, resolves]);
 
+  // The preview cutoff never depends on the displayed month — a line_chart
+  // card has no date-range filter to intersect with, only the horizon
+  // setting, mirroring BarChartCard's own cutoff resolution.
+  const previewCutoff = config.show_recurring_preview
+    ? resolvePreviewCutoff(undefined, recurringPreviewHorizon, today)
+    : undefined;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filterKey is config's stable stand-in; config itself is a new object identity each render.
+  useEffect(() => {
+    if (!resolves || !previewCutoff) {
+      setPreviewItems([]);
+      return;
+    }
+    let cancelled = false;
+    fetchRecurringPreview({
+      accountIds: config.account_id ? [config.account_id] : undefined,
+      to: previewCutoff,
+    }).then(({ data }) => {
+      if (!cancelled) setPreviewItems(data?.items ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filterKey, previewCutoff, resolves]);
+
   if (!resolves) {
     return <MissingReferenceCard />;
   }
 
   const points = balancePoints ?? [];
+  const todayStr = todayDateString(today);
+  const projectedDeltaByPeriod =
+    config.show_recurring_preview && previewCutoff
+      ? cumulativePreviewDeltaByPeriod(
+          previewItems,
+          points.map((p) => p.period),
+          todayStr,
+          previewCutoff,
+        )
+      : {};
 
   const dataFor = (code: string) =>
     points.map((point, i) => {
@@ -97,6 +147,9 @@ export function LineChartCard({
       // so it doesn't read as a duplicate "1".
       const day = Number(point.period.slice(8, 10));
       const isClosing = i === points.length - 1 && day === 1;
+      const realValue =
+        point.balances.find((b) => b.currency === code)?.amount ?? 0;
+      const delta = projectedDeltaByPeriod[code]?.[i];
       return {
         category: isClosing
           ? new Date(`${point.period}T00:00:00`).toLocaleDateString(locale, {
@@ -104,7 +157,10 @@ export function LineChartCard({
               month: "short",
             })
           : String(day),
-        values: [point.balances.find((b) => b.currency === code)?.amount ?? 0],
+        values: [realValue],
+        ...(config.show_recurring_preview && delta !== undefined
+          ? { projectedValues: [realValue + delta] }
+          : {}),
       };
     });
 
@@ -178,6 +234,12 @@ export function LineChartCard({
               label: t("accounts.details.balanceChart.series"),
               strokeClassName: BALANCE_STROKE,
               dotClassName: BALANCE_DOT,
+              ...(config.show_recurring_preview
+                ? {
+                    projectedStrokeClassName: BALANCE_PROJECTED_STROKE,
+                    projectedLabel: t("dashboard.lineChart.projectedBalance"),
+                  }
+                : {}),
             },
           ];
           return (

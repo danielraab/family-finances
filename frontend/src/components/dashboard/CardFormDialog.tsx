@@ -141,7 +141,7 @@ export function CardFormDialog({
       unit: type === "bar_chart" ? unit : undefined,
       columns: type === "entry_list" ? columns : undefined,
       show_recurring_preview:
-        type === "entry_list" || type === "bar_chart"
+        type === "entry_list" || type === "bar_chart" || type === "line_chart"
           ? showRecurringPreview
           : undefined,
     });
@@ -326,7 +326,9 @@ export function CardFormDialog({
               </label>
             )}
 
-            {(type === "entry_list" || type === "bar_chart") && (
+            {(type === "entry_list" ||
+              type === "bar_chart" ||
+              type === "line_chart") && (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"

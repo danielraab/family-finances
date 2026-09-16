@@ -83,14 +83,16 @@ const (
 //     regardless of any configured span.
 //   - bar_chart requires Unit and accepts AccountID, CategoryID,
 //     IncludeSubcategories, TagID, and Title besides it, but no Range.
-//   - line_chart accepts only AccountID and Title, both optional, and no
-//     other field — its running balance
+//   - line_chart accepts only AccountID, Title, and ShowRecurringPreview,
+//     all optional, and no other field — its running balance
 //     (GET /api/entries/balance-series) has no category/tag filter or
 //     bucketing choice to expose.
-//   - entry_list and bar_chart additionally accept ShowRecurringPreview
-//     (default false) — whether the card additionally previews upcoming
-//     recurring-transaction occurrences via
-//     GET /api/recurring-transactions/preview. No other type may set it.
+//   - entry_list, bar_chart, and line_chart additionally accept
+//     ShowRecurringPreview (default false) — whether the card additionally
+//     previews upcoming recurring-transaction occurrences via
+//     GET /api/recurring-transactions/preview (an Upcoming block on
+//     entry_list, a stacked projected bar segment on bar_chart, a
+//     projected balance line on line_chart). No other type may set it.
 //
 // Title is a free-text label the web client shows in place of its own
 // generated filter summary and makes clickable through to /reports with
@@ -174,7 +176,7 @@ func validateShape(typ CardType, c Config) error {
 			return ErrInvalidValue
 		}
 	case CardTypeLineChart:
-		if c.CategoryID != nil || c.IncludeSubcategories != nil || c.TagID != nil || c.Range != nil || c.Unit != nil || c.Columns != nil || c.ShowRecurringPreview != nil {
+		if c.CategoryID != nil || c.IncludeSubcategories != nil || c.TagID != nil || c.Range != nil || c.Unit != nil || c.Columns != nil {
 			return ErrInvalidValue
 		}
 	}

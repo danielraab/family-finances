@@ -143,3 +143,67 @@ export function fetchRecurringPreview(input: PreviewFilterInput) {
 export function previewItemKey(item: RecurringTransactionPreviewItem): string {
   return `${item.recurring_transaction_id}-${item.booking_timestamp}`;
 }
+
+/**
+ * Turns a flat preview item list into a per-currency cumulative delta
+ * aligned to a balance chart's own day points (e.g. BalancePoint.period),
+ * for overlaying a projected balance line on top of a real one (LineChart's
+ * projected-segment capability). `periods` must be ascending "YYYY-MM-DD"
+ * strings.
+ *
+ * Index i of a currency's array is `undefined` when periods[i] is before
+ * today (nothing to project — the real and projected value are the same,
+ * and the chart should draw no dashed segment there) or after `cutoff`
+ * (the fetch that produced `items` was itself bounded by that same cutoff,
+ * so nothing beyond it is known — holding the last cumulative value flat
+ * forever would misrepresent "no further data" as "no further activity");
+ * otherwise it's the sum of that currency's non-overdue items whose
+ * booking_timestamp falls in the half-open interval [today, periods[i]) —
+ * mirroring GET /api/entries/balance-series' own point semantics, where an
+ * entry booked exactly on a point's day only moves the *next* point, not
+ * the one that opens it. At periods[i] === today, that interval is empty,
+ * so the result is always 0 there — the anchor a projected line's dashed
+ * segment continues from, by construction rather than a rendering special
+ * case. Overdue items (booking_timestamp < today) are excluded entirely,
+ * mirroring BarChartCard.tsx's bucketPreviewItems.
+ */
+export function cumulativePreviewDeltaByPeriod(
+  items: RecurringTransactionPreviewItem[],
+  periods: string[],
+  today: string,
+  cutoff: string,
+): Record<string, (number | undefined)[]> {
+  const currencies = new Set(
+    items
+      .filter((item) => item.booking_timestamp >= today)
+      .map((item) => item.account_currency ?? ""),
+  );
+
+  const result: Record<string, (number | undefined)[]> = {};
+  for (const currency of currencies) {
+    let cumulative = 0;
+    let itemIndex = 0;
+    const sorted = items
+      .filter(
+        (item) =>
+          (item.account_currency ?? "") === currency &&
+          item.booking_timestamp >= today,
+      )
+      .sort((a, b) => a.booking_timestamp.localeCompare(b.booking_timestamp));
+
+    result[currency] = periods.map((period) => {
+      if (period < today || period > cutoff) return undefined;
+      while (
+        itemIndex < sorted.length &&
+        (sorted[itemIndex] as RecurringTransactionPreviewItem)
+          .booking_timestamp < period
+      ) {
+        cumulative += (sorted[itemIndex] as RecurringTransactionPreviewItem)
+          .amount;
+        itemIndex++;
+      }
+      return cumulative;
+    });
+  }
+  return result;
+}

@@ -15,7 +15,15 @@ import {
   formatAmount,
   formatSignedAmount,
 } from "../lib/amount";
+import {
+  cumulativePreviewDeltaByPeriod,
+  fetchRecurringPreview,
+  type RecurringTransactionPreviewItem,
+  resolvePreviewCutoff,
+  todayDateString,
+} from "../lib/recurringPreview";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
+import { useRecurringPreviewHorizon } from "../lib/useRecurringPreviewHorizon";
 
 export const Route = createFileRoute("/accounts/$accountId/")({
   component: AccountDetails,
@@ -35,6 +43,10 @@ const RECENT_LIMIT = 5;
 // series needs no CVD-pair check.
 const BALANCE_STROKE = "stroke-[#2a78d6] dark:stroke-[#3987e5]";
 const BALANCE_DOT = "fill-[#2a78d6] dark:fill-[#3987e5]";
+// Muted variant (opacity-reduced) of the same hue for the projected
+// balance line — same colour identity as the real line, visually receded,
+// mirroring BarChartCard.tsx's own projected-fill convention.
+const BALANCE_PROJECTED_STROKE = "stroke-[#2a78d6]/40 dark:stroke-[#3987e5]/50";
 
 function AccountDetails() {
   const { accountId } = Route.useParams();
@@ -54,6 +66,12 @@ function AccountDetails() {
   const [balancePoints, setBalancePoints] = useState<BalancePoint[] | null>(
     null,
   );
+  const [showRecurringAssumptions, setShowRecurringAssumptions] =
+    useState(false);
+  const [previewItems, setPreviewItems] = useState<
+    RecurringTransactionPreviewItem[]
+  >([]);
+  const recurringPreviewHorizon = useRecurringPreviewHorizon();
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +131,29 @@ function AccountDetails() {
     };
   }, [accountId, balanceMonth, chartView]);
 
+  // The preview cutoff never depends on the displayed month — the chart's
+  // month pager is a display window, not a query filter — only the
+  // horizon setting, mirroring BarChartCard's own cutoff resolution.
+  const previewCutoff = showRecurringAssumptions
+    ? resolvePreviewCutoff(undefined, recurringPreviewHorizon, new Date())
+    : undefined;
+
+  useEffect(() => {
+    if (chartView !== "balance" || !previewCutoff) {
+      setPreviewItems([]);
+      return;
+    }
+    let cancelled = false;
+    fetchRecurringPreview({ accountIds: [accountId], to: previewCutoff }).then(
+      ({ data }) => {
+        if (!cancelled) setPreviewItems(data?.items ?? []);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, chartView, previewCutoff]);
+
   if (account === undefined) {
     return null;
   }
@@ -131,9 +172,25 @@ function AccountDetails() {
       label: t("accounts.details.balanceChart.series"),
       strokeClassName: BALANCE_STROKE,
       dotClassName: BALANCE_DOT,
+      ...(showRecurringAssumptions
+        ? {
+            projectedStrokeClassName: BALANCE_PROJECTED_STROKE,
+            projectedLabel: t("dashboard.lineChart.projectedBalance"),
+          }
+        : {}),
     },
   ];
   const points = balancePoints ?? [];
+  const today = todayDateString(new Date());
+  const projectedDeltaByPeriod =
+    showRecurringAssumptions && previewCutoff
+      ? cumulativePreviewDeltaByPeriod(
+          previewItems,
+          points.map((p) => p.period),
+          today,
+          previewCutoff,
+        )
+      : {};
   const balanceData = points.map((point, i) => {
     // The period is a local-day string ("YYYY-MM-DD"); read the day off it
     // directly rather than through a Date, which would shift under a
@@ -142,6 +199,9 @@ function AccountDetails() {
     // it doesn't read as a duplicate "1".
     const day = Number(point.period.slice(8, 10));
     const isClosing = i === points.length - 1 && day === 1;
+    const realValue =
+      point.balances.find((b) => b.currency === account.currency)?.amount ?? 0;
+    const delta = projectedDeltaByPeriod[account.currency]?.[i];
     return {
       category: isClosing
         ? new Date(`${point.period}T00:00:00`).toLocaleDateString(
@@ -149,10 +209,10 @@ function AccountDetails() {
             { day: "numeric", month: "short" },
           )
         : String(day),
-      values: [
-        point.balances.find((b) => b.currency === account.currency)?.amount ??
-          0,
-      ],
+      values: [realValue],
+      ...(showRecurringAssumptions && delta !== undefined
+        ? { projectedValues: [realValue + delta] }
+        : {}),
     };
   });
 
@@ -304,6 +364,17 @@ function AccountDetails() {
             </div>
           )}
         </div>
+
+        {chartView === "balance" && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showRecurringAssumptions}
+              onChange={(e) => setShowRecurringAssumptions(e.target.checked)}
+            />
+            {t("accounts.details.balanceChart.showRecurringAssumptions")}
+          </label>
+        )}
 
         {chartView === "flow" ? (
           <FlowChart

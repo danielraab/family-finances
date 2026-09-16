@@ -123,7 +123,8 @@
     },
     "lineChart": {
       "previous": "Vorheriger Monat",
-      "next": "Nächster Monat"
+      "next": "Nächster Monat",
+      "projectedBalance": "Kontostand (geplant)"
     }
   },
   "flowChart": {
@@ -269,7 +270,8 @@
         "title": "Kontostand im Monatsverlauf",
         "series": "Kontostand",
         "previousMonth": "Vorheriger Monat",
-        "nextMonth": "Nächster Monat"
+        "nextMonth": "Nächster Monat",
+        "showRecurringAssumptions": "Wiederkehrende Annahmen anzeigen"
       },
       "recentEntries": "Letzte Buchungen",
       "seeAll": "Alle anzeigen",
