@@ -9,7 +9,8 @@
     "reports": "Auswertungen"
   },
   "sidebar": {
-    "closeSidebar": "Seitenleiste schließen"
+    "closeSidebar": "Seitenleiste schließen",
+    "githubRepo": "Quellcode auf GitHub ansehen"
   },
   "topbar": {
     "expandSidebar": "Seitenleiste ausklappen",

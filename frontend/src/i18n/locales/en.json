@@ -9,7 +9,8 @@
     "reports": "Reports"
   },
   "sidebar": {
-    "closeSidebar": "Close sidebar"
+    "closeSidebar": "Close sidebar",
+    "githubRepo": "View source on GitHub"
   },
   "topbar": {
     "expandSidebar": "Expand sidebar",

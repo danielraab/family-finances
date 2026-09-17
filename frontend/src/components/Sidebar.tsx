@@ -178,6 +178,23 @@ const GLYPHS = {
   reports: ReportsGlyph,
 } as const;
 
+const GITHUB_REPO_URL = "https://github.com/danielraab/family-finances";
+
+function GitHubGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12 2C6.48 2 2 6.58 2 12.2c0 4.5 2.87 8.31 6.84 9.66.5.1.68-.22.68-.5 0-.24-.01-1.04-.01-1.9-2.78.62-3.37-1.22-3.37-1.22-.45-1.18-1.11-1.49-1.11-1.49-.91-.63.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.9 1.55 2.36 1.11 2.94.85.09-.65.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05a9.34 9.34 0 0 1 5 0c1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.35 4.79-4.58 5.05.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .28.18.61.69.5A10.02 10.02 0 0 0 22 12.2C22 6.58 17.52 2 12 2Z" />
+    </svg>
+  );
+}
+
 /**
  * Mobile-first: below `md` the sidebar is an off-canvas drawer, closed by
  * default, that slides over the page (with a backdrop) when `mobileOpen`.
@@ -277,8 +294,22 @@ export function Sidebar({
         </nav>
 
         <div className="flex flex-col gap-1 border-t border-black/10 px-2 py-2 dark:border-white/10">
-          <div className={`flex ${effectiveCollapsed ? "justify-center" : ""}`}>
+          <div
+            className={`flex items-center gap-1 ${
+              effectiveCollapsed ? "flex-col" : "justify-between"
+            }`}
+          >
             <ThemeSwitch collapsed={effectiveCollapsed} />
+            <a
+              href={GITHUB_REPO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={t("sidebar.githubRepo")}
+              aria-label={t("sidebar.githubRepo")}
+              className="inline-flex shrink-0 rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-black/[.04] hover:text-zinc-600 dark:text-zinc-500 dark:hover:bg-white/[.06] dark:hover:text-zinc-300"
+            >
+              <GitHubGlyph />
+            </a>
           </div>
           <SidebarUser collapsed={effectiveCollapsed} />
         </div>
