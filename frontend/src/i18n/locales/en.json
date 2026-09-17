@@ -237,6 +237,7 @@
       "currency": "Currency",
       "currencyPlaceholder": "Select a currency…",
       "currencyInvalid": "Currency must be three uppercase letters (e.g. EUR).",
+      "currencyLocked": "Currency can no longer be changed once the account has entries.",
       "financialInstitute": "Financial institute",
       "openingDate": "Opening date",
       "closingDate": "Closing date",
@@ -382,12 +383,16 @@
     },
     "kind": {
       "transaction": "Transaction",
-      "balanceAdjustment": "Balance adjustment"
+      "balanceAdjustment": "Balance adjustment",
+      "selfTransfer": "Self-transfer"
     },
     "form": {
       "account": "Account",
       "accountPlaceholder": "Select an account…",
       "accountRequired": "Account is required.",
+      "toAccount": "To account",
+      "toAccountPlaceholder": "Select a receiving account…",
+      "toAccountRequired": "A receiving account is required.",
       "kind": "Kind",
       "amount": "Amount ({{currency}})",
       "amountInvalid": "Enter a valid amount.",
@@ -425,6 +430,7 @@
       "linkedRecurringTransactionNone": "Not linked"
     },
     "recurringBadge": "Linked to a recurring transaction",
+    "selfTransferBadge": "Self-transfer — view the other side",
     "new": {
       "title": "New entry"
     },

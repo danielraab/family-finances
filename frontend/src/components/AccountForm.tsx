@@ -76,12 +76,17 @@ export function AccountForm({
   submitting,
   onSubmit,
   serverError,
+  currencyLocked,
 }: {
   initial: AccountFormValues;
   submitLabel: string;
   submitting: boolean;
   onSubmit: (values: AccountCreate) => void;
   serverError: string | null;
+  /** True once the account has any entry — currency becomes immutable then
+   * (see account-entries). Always false/omitted on the create form, since a
+   * new account never has entries yet. */
+  currencyLocked?: boolean;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
@@ -149,6 +154,14 @@ export function AccountForm({
         closing_date: values.closing_date || undefined,
       }),
     };
+    if (currencyLocked) {
+      // Omitted entirely, not just left unchanged — the backend rejects any
+      // currency key at all once the account has entries, even one
+      // resubmitting the account's own current value (see account-entries).
+      const { currency: _currency, ...rest } = body;
+      onSubmit(rest as AccountCreate);
+      return;
+    }
     onSubmit(body);
   }
 
@@ -217,13 +230,19 @@ export function AccountForm({
             id={currencyId}
             value={values.currency}
             onChange={(value) => set("currency", value)}
-            className={inputClass}
+            className={`${inputClass} disabled:opacity-60`}
             placeholder={t("accounts.form.currencyPlaceholder")}
             required
+            disabled={currencyLocked ?? false}
           />
           {invalidField === "currency" && (
             <span className="text-xs font-normal text-red-600 dark:text-red-400">
               {t("accounts.form.currencyInvalid")}
+            </span>
+          )}
+          {currencyLocked && (
+            <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+              {t("accounts.form.currencyLocked")}
             </span>
           )}
         </label>

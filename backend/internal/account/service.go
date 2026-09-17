@@ -37,11 +37,13 @@ type Mailer interface {
 }
 
 // Service is the account use-case layer. It depends on the Store interface
-// plus the optional UserLookup/Mailer side-effect interfaces sharing uses.
+// plus the optional UserLookup/Mailer side-effect interfaces sharing uses,
+// and the optional EntryLookup the currency-immutability rule uses.
 type Service struct {
 	store   Store
-	users   UserLookup // nil until SetUserLookup is called
-	mailer  Mailer     // nil disables the share-notification email
+	users   UserLookup  // nil until SetUserLookup is called
+	mailer  Mailer      // nil disables the share-notification email
+	entries EntryLookup // nil until SetEntryLookup is called
 	baseURL string
 }
 
@@ -73,6 +75,15 @@ func NewService(store Store, opts ...Option) *Service {
 // once auth.Service exists. A nil users (never called) makes every sharing
 // email-invite fail closed (ErrInvalidValue), never panic.
 func (s *Service) SetUserLookup(u UserLookup) { s.users = u }
+
+// SetEntryLookup wires the EntryLookup dependency after construction —
+// account.Service and entry.Service have the same kind of wiring cycle
+// SetUserLookup's doc comment describes (entry.Service already needs
+// *account.Service as its AccountLookup, so the reverse can only be an
+// interface, wired once both exist). A nil entries (never called) makes
+// HasEntries below always report false, leaving currency freely editable —
+// the safe default for a caller (e.g. a test) that never wires this in.
+func (s *Service) SetEntryLookup(e EntryLookup) { s.entries = e }
 
 // Create validates in and creates an account owned by ownerID — the real
 // owner, always the caller.
@@ -151,6 +162,15 @@ func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (
 	}
 	if err := validateUpdate(current, upd); err != nil {
 		return Account{}, err
+	}
+	if upd.Currency != nil && s.entries != nil {
+		hasEntries, err := s.entries.HasEntries(ctx, id)
+		if err != nil {
+			return Account{}, err
+		}
+		if hasEntries {
+			return Account{}, ErrInvalidValue
+		}
 	}
 	if upd.Type != nil {
 		trimmed := strings.TrimSpace(*upd.Type)

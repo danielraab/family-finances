@@ -173,4 +173,11 @@ type Store interface {
 	// Service's recurringtransaction.EntryLookup satisfaction
 	// (delete-blocked-while-linked).
 	CountByRecurringTransaction(ctx context.Context, recurringTransactionID string) (int, error)
+
+	// HasEntriesForAccount reports whether accountID has any non-deleted
+	// entry at all, on either side (AccountID or, for a self_transfer,
+	// ToAccountID) — backs Service.HasEntries, which satisfies internal/
+	// account's EntryLookup interface for its currency-immutability rule.
+	// A cheap existence check, not a count.
+	HasEntriesForAccount(ctx context.Context, accountID string) (bool, error)
 }

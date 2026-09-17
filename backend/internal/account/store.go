@@ -25,6 +25,19 @@ var (
 // Sentinels is every error above, for the httpapi mapping.
 var Sentinels = []error{ErrNotFound, ErrInvalidValue, ErrForbidden}
 
+// EntryLookup is the narrow view of internal/entry that account needs for
+// its currency-immutability rule: whether an account has any entry at all
+// (on either side, for a self_transfer — entry.Service satisfies this via
+// its own store, transparently to this package). *entry.Service satisfies
+// this structurally. Wired in after both services are constructed (see
+// SetEntryLookup) — entry already imports account for its own AccountLookup,
+// so this dependency can only run this direction as an interface, never a
+// direct import, mirroring recurringtransaction.Service's own
+// SetEntryLookup pattern.
+type EntryLookup interface {
+	HasEntries(ctx context.Context, accountID string) (bool, error)
+}
+
 // Store is the persistence contract account declares. internal/storage/memory
 // and internal/storage/postgres implement it; package main injects one.
 type Store interface {

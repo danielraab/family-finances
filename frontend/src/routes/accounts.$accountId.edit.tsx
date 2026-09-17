@@ -23,40 +23,45 @@ function EditAccount() {
 
   const [values, setValues] = useState<AccountFormValues | null>(null);
   const [disabled, setDisabled] = useState(false);
+  const [hasEntries, setHasEntries] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<ConfirmKind | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .GET("/api/accounts/{id}", { params: { path: { id: accountId } } })
-      .then(({ data }) => {
-        if (cancelled) return;
-        // A visitor below owner-tier permission has no business on this
-        // page at all — /accounts/{id} already hides the Edit link for
-        // them, this is defense in depth for a direct navigation.
-        if (data?.permission !== "owner") {
-          navigate({
-            to: "/accounts/$accountId",
-            params: { accountId },
-            replace: true,
-          });
-          return;
-        }
-        setDisabled(data.disabled);
-        setValues({
-          title: data.title,
-          description: data.description ?? "",
-          icon: data.icon ?? "",
-          color: data.color ?? "",
-          type: data.type,
-          currency: data.currency,
-          financial_institute: data.financial_institute ?? "",
-          opening_date: data.opening_date,
-          closing_date: data.closing_date ?? "",
+    Promise.all([
+      api.GET("/api/accounts/{id}", { params: { path: { id: accountId } } }),
+      api.GET("/api/entries", {
+        params: { query: { account_id: [accountId], limit: 1 } },
+      }),
+    ]).then(([{ data }, { data: entries }]) => {
+      if (cancelled) return;
+      // A visitor below owner-tier permission has no business on this
+      // page at all — /accounts/{id} already hides the Edit link for
+      // them, this is defense in depth for a direct navigation.
+      if (data?.permission !== "owner") {
+        navigate({
+          to: "/accounts/$accountId",
+          params: { accountId },
+          replace: true,
         });
+        return;
+      }
+      setDisabled(data.disabled);
+      setHasEntries((entries?.items.length ?? 0) > 0);
+      setValues({
+        title: data.title,
+        description: data.description ?? "",
+        icon: data.icon ?? "",
+        color: data.color ?? "",
+        type: data.type,
+        currency: data.currency,
+        financial_institute: data.financial_institute ?? "",
+        opening_date: data.opening_date,
+        closing_date: data.closing_date ?? "",
       });
+    });
     return () => {
       cancelled = true;
     };
@@ -102,6 +107,7 @@ function EditAccount() {
         submitLabel={t("accounts.form.save")}
         submitting={submitting}
         serverError={error}
+        currencyLocked={hasEntries}
         onSubmit={async (body) => {
           setSubmitting(true);
           setError(null);

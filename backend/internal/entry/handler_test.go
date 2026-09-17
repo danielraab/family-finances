@@ -624,6 +624,84 @@ func TestHandlerEntryCounterpartiesListsDistinctInUseValues(t *testing.T) {
 	}
 }
 
+func TestHandlerSelfTransferCreateGetUpdateDelete(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("a", "u1", "EUR")
+	accounts.add("b", "u1", "EUR")
+	user := auth.User{ID: "u1"}
+
+	body := `{"account_id":"a","to_account_id":"b","kind":"self_transfer","amount":-1000,"booking_timestamp":"2024-01-01T00:00:00Z","title":"To savings"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "POST", "/api/entries", rec)
+	var created entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.ToAccountID == nil || *created.ToAccountID != "b" {
+		t.Fatalf("created.ToAccountID = %v, want b", created.ToAccountID)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/"+created.ID, nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d", rec.Code)
+	}
+	conforms(t, "GET", "/api/entries/"+created.ID, rec)
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/entries/"+created.ID, strings.NewReader(`{"title":"To savings account"}`)), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "PATCH", "/api/entries/"+created.ID, rec)
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("DELETE", "/api/entries/"+created.ID, nil), user))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d", rec.Code)
+	}
+	conforms(t, "DELETE", "/api/entries/"+created.ID, rec)
+}
+
+func TestHandlerSelfTransferUpdateForbiddenAfterLosingAccessToOtherSide(t *testing.T) {
+	h, accounts, _ := newHandlerFixture()
+	accounts.add("a", "u1", "EUR")
+	accounts.add("b", "u2", "EUR")
+	accounts.share("b", "u1", "append")
+	user := auth.User{ID: "u1"}
+
+	body := `{"account_id":"a","to_account_id":"b","kind":"self_transfer","amount":-1000,"booking_timestamp":"2024-01-01T00:00:00Z","title":"To savings"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", rec.Code, rec.Body)
+	}
+	var created entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	delete(accounts.shares["b"], "u1")
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("PATCH", "/api/entries/"+created.ID, strings.NewReader(`{"title":"Renamed"}`)), user))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("update status = %d, body = %s, want 403", rec.Code, rec.Body)
+	}
+	conforms(t, "PATCH", "/api/entries/"+created.ID, rec)
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("DELETE", "/api/entries/"+created.ID, nil), user))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "DELETE", "/api/entries/"+created.ID, rec)
+}
+
 func TestHandlerEntryCounterpartiesEmptyForUserWithNone(t *testing.T) {
 	h, _, _ := newHandlerFixture()
 	user := auth.User{ID: "u1"}

@@ -29,6 +29,7 @@ export function CurrencySelect({
   className,
   placeholder,
   required,
+  disabled,
 }: {
   id?: string;
   value: string;
@@ -36,6 +37,7 @@ export function CurrencySelect({
   className?: string;
   placeholder?: string;
   required?: boolean;
+  disabled?: boolean;
 }) {
   const [currencies] = useState(listCurrencies);
 
@@ -46,6 +48,7 @@ export function CurrencySelect({
       onChange={(event) => onChange(event.target.value)}
       className={className}
       required={required}
+      disabled={disabled}
     >
       {placeholder !== undefined && (
         <option value="" disabled>

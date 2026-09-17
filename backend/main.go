@@ -111,6 +111,11 @@ func main() {
 	// accountSvc.SetUserLookup(authSvc) below.
 	entrySvc.SetRecurringTransactionLookup(recurringSvc)
 	recurringSvc.SetEntryLookup(entrySvc)
+	// accountSvc needs entrySvc as its EntryLookup for the currency-
+	// immutability rule (add-self-transfer) — entrySvc doesn't exist yet
+	// when accountSvc is built above, so this is wired here too, the same
+	// post-construction pattern as every other cross-wiring on this page.
+	accountSvc.SetEntryLookup(entrySvc)
 
 	srv := httpapi.New(cfg, httpapi.Deps{
 		Static:                      staticFS,

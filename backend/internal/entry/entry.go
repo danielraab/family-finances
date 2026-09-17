@@ -27,10 +27,13 @@ const (
 	// KindBalanceAdjustment is an absolute amount the account's balance is
 	// set to at that point in time.
 	KindBalanceAdjustment Kind = "balance_adjustment"
+	// KindSelfTransfer is a relative amount moved from AccountID to
+	// ToAccountID — one entry, two accounts. See Entry's doc comment.
+	KindSelfTransfer Kind = "self_transfer"
 )
 
 func (k Kind) valid() bool {
-	return k == KindTransaction || k == KindBalanceAdjustment
+	return k == KindTransaction || k == KindBalanceAdjustment || k == KindSelfTransfer
 }
 
 // AmountScale is the fixed number of decimal places every stored amount is
@@ -108,28 +111,42 @@ func (m CategoryMode) valid() bool {
 // see design.md.
 //
 // Counterparty and Location are free-text, transaction-only fields (see
-// validateNew) — rejected on a balance_adjustment. Location is never
-// parsed or validated here beyond that: it may hold a typed address or a
-// JSON-encoded {"lat":…,"lng":…} coordinate string, and deciding which is
-// a frontend concern (see design.md of add-entry-counterparty-location).
+// validateNew) — rejected on a balance_adjustment or self_transfer.
+// Location is never parsed or validated here beyond that: it may hold a
+// typed address or a JSON-encoded {"lat":…,"lng":…} coordinate string, and
+// deciding which is a frontend concern (see design.md of
+// add-entry-counterparty-location).
+//
+// ToAccountID is set only for a self_transfer — the receiving account,
+// required exactly then (see validateNew) and immutable after creation,
+// like AccountID/Kind for that kind (see design.md of add-self-transfer).
+// Amount stays signed from AccountID's perspective; the receiving side's
+// effective delta is -Amount (see Store.Balance and the entry_legs view in
+// storage/postgres). ToAccountName/ToAccountCurrency are resolved
+// server-side unconditionally, the same reasoning AccountCurrency/
+// CreatedByName already follow — a caller who can only see AccountID still
+// needs to know where the money went and in what currency.
 type Entry struct {
-	ID               string    `json:"id"`
-	AccountID        string    `json:"account_id"`
-	AccountCurrency  string    `json:"account_currency,omitempty"`
-	Kind             Kind      `json:"kind"`
-	Amount           int64     `json:"amount"`
-	Balance          *int64    `json:"balance,omitempty"`
-	BookingTimestamp time.Time `json:"booking_timestamp"`
-	Title            string    `json:"title"`
-	Description      string    `json:"description,omitempty"`
-	CategoryID       *string   `json:"category_id,omitempty"`
-	Counterparty     string    `json:"counterparty,omitempty"`
-	Location         string    `json:"location,omitempty"`
-	TagIDs           []string  `json:"tag_ids"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	CreatedBy        string    `json:"created_by"`
-	CreatedByName    string    `json:"created_by_name,omitempty"`
+	ID                string    `json:"id"`
+	AccountID         string    `json:"account_id"`
+	AccountCurrency   string    `json:"account_currency,omitempty"`
+	ToAccountID       *string   `json:"to_account_id,omitempty"`
+	ToAccountName     string    `json:"to_account_name,omitempty"`
+	ToAccountCurrency string    `json:"to_account_currency,omitempty"`
+	Kind              Kind      `json:"kind"`
+	Amount            int64     `json:"amount"`
+	Balance           *int64    `json:"balance,omitempty"`
+	BookingTimestamp  time.Time `json:"booking_timestamp"`
+	Title             string    `json:"title"`
+	Description       string    `json:"description,omitempty"`
+	CategoryID        *string   `json:"category_id,omitempty"`
+	Counterparty      string    `json:"counterparty,omitempty"`
+	Location          string    `json:"location,omitempty"`
+	TagIDs            []string  `json:"tag_ids"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	CreatedBy         string    `json:"created_by"`
+	CreatedByName     string    `json:"created_by_name,omitempty"`
 	// RecurringTransactionID is the recurring transaction this entry was
 	// created from or has been linked to, or nil. See design.md of
 	// add-recurring-transactions: settable at creation or via update
@@ -202,11 +219,13 @@ func (o *OptionalID) UnmarshalJSON(b []byte) error {
 }
 
 // New is the input to creating an entry. Exactly one of Amount (for
-// KindTransaction) or Balance (for KindBalanceAdjustment) SHALL be set — see
-// validateNew. For a balance adjustment, Amount is never client-supplied:
-// the store computes and stores it as part of Create (see design.md).
+// KindTransaction/KindSelfTransfer) or Balance (for KindBalanceAdjustment)
+// SHALL be set — see validateNew. For a balance adjustment, Amount is never
+// client-supplied: the store computes and stores it as part of Create (see
+// design.md). ToAccountID is required exactly for KindSelfTransfer.
 type New struct {
 	AccountID        string
+	ToAccountID      *string
 	Kind             Kind
 	Amount           *int64
 	Balance          *int64
@@ -225,11 +244,14 @@ type New struct {
 // Update is a partial change to an entry. Kind is deliberately absent — it
 // is immutable after creation (see design.md); the handler's request body
 // has no field for it either, so DisallowUnknownFields rejects an attempt
-// to set it. A nil field here leaves it untouched; TagIDs replaces the full
-// set when non-nil (including an empty, non-nil slice, which clears every
-// tag). A non-nil AccountID moves the entry to a different account, subject
-// to the same ownership/disabled-account checks Create applies. Amount is
-// only settable on a transaction, Balance only on a balance adjustment (see
+// to set it. ToAccountID is likewise absent — a self_transfer's two accounts
+// are fixed at creation, never individually reassigned. A nil field here
+// leaves it untouched; TagIDs replaces the full set when non-nil (including
+// an empty, non-nil slice, which clears every tag). A non-nil AccountID
+// moves the entry to a different account, subject to the same ownership/
+// disabled-account checks Create applies — rejected outright for a
+// self_transfer (see design.md of add-self-transfer). Amount is settable on
+// a transaction or self_transfer, Balance only on a balance adjustment (see
 // design.md) — Service.Update rejects the other one being non-nil for the
 // entry's (immutable) kind.
 type Update struct {
@@ -252,10 +274,16 @@ type Update struct {
 
 // Cursor is the keyset position of the last row of a previous page: the
 // sorted column's value plus id, for a stable tie-break — see design.md.
+// Native distinguishes a self_transfer's two same-id rows in a listing
+// (true for the row matched via AccountID, false for the one matched via
+// ToAccountID — see design.md of add-self-transfer); it is always true for
+// every other kind, which only ever produces one row. Opaque to the
+// client, like every other Cursor field.
 type Cursor struct {
 	BookingTimestamp time.Time
 	Amount           int64
 	ID               string
+	Native           bool
 }
 
 // Filter narrows and orders a List call. CategoryID is the caller-supplied
@@ -410,11 +438,22 @@ func validateNew(in New) error {
 	if in.Kind != KindTransaction && (in.Counterparty != "" || in.Location != "") {
 		return ErrInvalidValue
 	}
-	if in.Kind == KindTransaction {
+	if in.Kind == KindSelfTransfer {
+		if in.ToAccountID == nil || strings.TrimSpace(*in.ToAccountID) == "" {
+			return ErrInvalidValue
+		}
+		if *in.ToAccountID == in.AccountID {
+			return ErrInvalidValue
+		}
+	} else if in.ToAccountID != nil {
+		return ErrInvalidValue
+	}
+	switch in.Kind {
+	case KindTransaction, KindSelfTransfer:
 		if in.Amount == nil || in.Balance != nil {
 			return ErrInvalidValue
 		}
-	} else {
+	case KindBalanceAdjustment:
 		if in.Balance == nil || in.Amount != nil {
 			return ErrInvalidValue
 		}

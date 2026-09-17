@@ -46,20 +46,28 @@ func NewService(store Store, accounts AccountLookup, categories CategoryLookup, 
 	return s
 }
 
-// checkAccount confirms callerID holds at least append permission on
-// accountID (real ownership or a share, per account-sharing) and that it
-// is not disabled — the rule Create applies to the account an entry is
+// checkAccountCurrency confirms callerID holds at least append permission
+// on accountID (real ownership or a share, per account-sharing) and that
+// it is not disabled — the rule Create applies to the account an entry is
 // created against, and Update applies identically to a new account_id an
-// entry is being moved to.
-func (s *Service) checkAccount(ctx context.Context, callerID, accountID string) error {
-	_, disabled, permission, err := s.accounts.Access(ctx, accountID, callerID)
+// entry is being moved to — returning its currency for a self_transfer's
+// same-currency check between its two accounts.
+func (s *Service) checkAccountCurrency(ctx context.Context, callerID, accountID string) (string, error) {
+	currency, disabled, permission, err := s.accounts.Access(ctx, accountID, callerID)
 	if err != nil || !Permission(permission).AtLeast(PermissionAppend) {
-		return ErrInvalidValue
+		return "", ErrInvalidValue
 	}
 	if disabled {
-		return ErrAccountDisabled
+		return "", ErrAccountDisabled
 	}
-	return nil
+	return currency, nil
+}
+
+// checkAccount is checkAccountCurrency without its currency, for the many
+// callers that don't need it.
+func (s *Service) checkAccount(ctx context.Context, callerID, accountID string) error {
+	_, err := s.checkAccountCurrency(ctx, callerID, accountID)
+	return err
 }
 
 // checkRecurringTransaction confirms recurringTransactionID names a
@@ -80,49 +88,78 @@ func (s *Service) checkRecurringTransaction(ctx context.Context, recurringTransa
 	return nil
 }
 
-// authorizeEntryWrite fetches id and resolves callerID's write access to
-// it: ErrNotFound when callerID has no permission at all on its parent
-// account (matching the "behaves as not found" convention every other
-// no-access case in this codebase uses); ErrForbidden when callerID has
-// some permission but not enough for *this* entry — below append, or
-// exactly append on an entry a different user created. See design.md's
-// "editing or deleting an entry is gated by permission tier and, for
-// append, by who created it" decision.
-func (s *Service) authorizeEntryWrite(ctx context.Context, callerID, id string) (Entry, error) {
-	current, err := s.store.Get(ctx, id)
+// fetchWithVisibility fetches id and resolves callerID's permission on
+// each of its parent account(s): just AccountID for a transaction/
+// balance_adjustment (toPerm is always "" then), or both AccountID and
+// ToAccountID for a self_transfer (see "An entry belongs to exactly one
+// account..." — a self_transfer is visible via either side). ErrNotFound
+// when callerID has no permission at all on any parent account (matching
+// the "behaves as not found" convention every other no-access case in this
+// codebase uses) — it does not itself decide whether that's enough to
+// write, since the write-tier rule differs by kind and by operation (see
+// Update/Delete, and design.md's "editing a self-transfer requires
+// append+ on both, deleting requires it on either" decision).
+func (s *Service) fetchWithVisibility(ctx context.Context, callerID, id string) (current Entry, accountPerm, toAccountPerm Permission, err error) {
+	current, err = s.store.Get(ctx, id)
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, "", "", err
 	}
 	_, _, permStr, err := s.accounts.Access(ctx, current.AccountID, callerID)
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, "", "", err
 	}
-	permission := Permission(permStr)
-	if !permission.AtLeast(PermissionView) {
-		return Entry{}, ErrNotFound
+	accountPerm = Permission(permStr)
+	if current.Kind == KindSelfTransfer {
+		_, _, toPermStr, err := s.accounts.Access(ctx, *current.ToAccountID, callerID)
+		if err != nil {
+			return Entry{}, "", "", err
+		}
+		toAccountPerm = Permission(toPermStr)
 	}
-	if !permission.AtLeast(PermissionAppend) {
-		return Entry{}, ErrForbidden
+	if !accountPerm.AtLeast(PermissionView) && !toAccountPerm.AtLeast(PermissionView) {
+		return Entry{}, "", "", ErrNotFound
 	}
-	if permission == PermissionAppend && current.CreatedBy != callerID {
-		return Entry{}, ErrForbidden
+	return current, accountPerm, toAccountPerm, nil
+}
+
+// canWrite reports whether permission is enough to edit/delete an entry
+// created by createdBy, for callerID: entry_admin+ unconditionally, or
+// exactly append on an entry that caller created themselves — the tier
+// rule "Editing or deleting an entry is gated by permission tier..."
+// applies to a plain transaction/balance_adjustment, and, per-side, to a
+// self_transfer's delete (see design.md).
+func canWrite(permission Permission, createdBy, callerID string) bool {
+	if permission.AtLeast(PermissionEntryAdmin) {
+		return true
 	}
-	return current, nil
+	return permission == PermissionAppend && createdBy == callerID
 }
 
 // Create validates in, confirms callerID holds at least append permission
-// on the target account and that it is not disabled, confirms any
-// category/tags belong to callerID (the entry's creator — see design.md on
-// why category/tag validation stays creator-scoped rather than
-// account-owner-scoped now that they can differ), and creates the entry
-// with CreatedBy set to callerID.
+// on the target account (both accounts, for a self_transfer — see
+// design.md) and that it/they are not disabled, confirms any category/tags
+// belong to callerID (the entry's creator — see design.md on why category/
+// tag validation stays creator-scoped rather than account-owner-scoped now
+// that they can differ), and creates the entry with CreatedBy set to
+// callerID. A self_transfer additionally requires both accounts to share
+// the same currency.
 func (s *Service) Create(ctx context.Context, callerID string, in New) (Entry, error) {
 	if err := validateNew(in); err != nil {
 		return Entry{}, err
 	}
 
-	if err := s.checkAccount(ctx, callerID, in.AccountID); err != nil {
+	fromCurrency, err := s.checkAccountCurrency(ctx, callerID, in.AccountID)
+	if err != nil {
 		return Entry{}, err
+	}
+	if in.Kind == KindSelfTransfer {
+		toCurrency, err := s.checkAccountCurrency(ctx, callerID, *in.ToAccountID)
+		if err != nil {
+			return Entry{}, err
+		}
+		if toCurrency != fromCurrency {
+			return Entry{}, ErrInvalidValue
+		}
 	}
 
 	if in.CategoryID != nil {
@@ -155,31 +192,45 @@ func (s *Service) Create(ctx context.Context, callerID string, in New) (Entry, e
 }
 
 // Get returns id as seen by callerID: ErrNotFound when they hold no
-// permission on its parent account at all.
+// permission on any of its parent account(s) at all — either side, for a
+// self_transfer.
 func (s *Service) Get(ctx context.Context, callerID, id string) (Entry, error) {
-	e, err := s.store.Get(ctx, id)
-	if err != nil {
-		return Entry{}, err
-	}
-	_, _, permStr, err := s.accounts.Access(ctx, e.AccountID, callerID)
-	if err != nil {
-		return Entry{}, err
-	}
-	if !Permission(permStr).AtLeast(PermissionView) {
-		return Entry{}, ErrNotFound
-	}
-	return e, nil
+	e, _, _, err := s.fetchWithVisibility(ctx, callerID, id)
+	return e, err
 }
 
 // Update validates and applies a partial change to id, authorized for
-// callerID per authorizeEntryWrite. AccountID and Kind cannot be changed —
-// there is no field for Kind on Update at all (see its doc comment); a
-// non-nil AccountID moves the entry, subject to the same append+/disabled
-// checks Create applies to its target.
+// callerID per fetchWithVisibility plus a kind-specific write-tier check:
+// entry_admin+ unconditionally, or exactly append on an entry callerID
+// created themselves, on AccountID — or, for a self_transfer, append+ on
+// *both* AccountID and ToAccountID, with no created_by exemption (see
+// design.md's "editing a self-transfer requires append+ on both accounts"
+// decision — stricter than the general rule since any edit to a shared
+// amount necessarily moves balance on both accounts at once). AccountID
+// and Kind cannot be changed — there is no field for Kind on Update at all
+// (see its doc comment), and a self_transfer additionally rejects any
+// AccountID change outright (its two accounts are fixed at creation); for
+// every other kind, a non-nil AccountID moves the entry, subject to the
+// same append+/disabled checks Create applies to its target.
 func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (Entry, error) {
-	current, err := s.authorizeEntryWrite(ctx, callerID, id)
+	current, accountPerm, toAccountPerm, err := s.fetchWithVisibility(ctx, callerID, id)
 	if err != nil {
 		return Entry{}, err
+	}
+	if current.Kind == KindSelfTransfer {
+		if upd.AccountID != nil {
+			return Entry{}, ErrInvalidValue
+		}
+		if !accountPerm.AtLeast(PermissionAppend) || !toAccountPerm.AtLeast(PermissionAppend) {
+			return Entry{}, ErrForbidden
+		}
+	} else {
+		if !accountPerm.AtLeast(PermissionAppend) {
+			return Entry{}, ErrForbidden
+		}
+		if accountPerm == PermissionAppend && current.CreatedBy != callerID {
+			return Entry{}, ErrForbidden
+		}
 	}
 
 	if upd.AccountID != nil {
@@ -193,10 +244,10 @@ func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (
 	if upd.BookingTimestamp != nil && upd.BookingTimestamp.IsZero() {
 		return Entry{}, ErrInvalidValue
 	}
-	// Amount is only settable on a transaction, Balance only on a balance
-	// adjustment — kind is immutable, so this checks against the entry's
-	// existing kind rather than anything in the request body.
-	if current.Kind == KindTransaction && upd.Balance != nil {
+	// Amount is only settable on a transaction/self_transfer, Balance only
+	// on a balance adjustment — kind is immutable, so this checks against
+	// the entry's existing kind rather than anything in the request body.
+	if (current.Kind == KindTransaction || current.Kind == KindSelfTransfer) && upd.Balance != nil {
 		return Entry{}, ErrInvalidValue
 	}
 	if current.Kind == KindBalanceAdjustment && upd.Amount != nil {
@@ -280,9 +331,21 @@ func diffStrings(next, current []string) []string {
 }
 
 // Delete soft-deletes id, authorized for callerID per authorizeEntryWrite.
+// Delete soft-deletes id, authorized for callerID via fetchWithVisibility
+// plus canWrite (entry_admin+, or exactly append and created it) evaluated
+// against AccountID — or, for a self_transfer, against *either*
+// AccountID or ToAccountID, whichever the caller currently holds
+// sufficient permission on. Unlike Update, this is deliberately not an
+// "both accounts" requirement: removing the row doesn't require agreeing
+// on a shared value going forward, only sufficient standing on the side
+// the caller still has (see design.md).
 func (s *Service) Delete(ctx context.Context, callerID, id string) error {
-	if _, err := s.authorizeEntryWrite(ctx, callerID, id); err != nil {
+	current, accountPerm, toAccountPerm, err := s.fetchWithVisibility(ctx, callerID, id)
+	if err != nil {
 		return err
+	}
+	if !canWrite(accountPerm, current.CreatedBy, callerID) && !canWrite(toAccountPerm, current.CreatedBy, callerID) {
+		return ErrForbidden
 	}
 	return s.store.SoftDelete(ctx, id)
 }
@@ -687,6 +750,17 @@ func (s *Service) BalanceSeries(ctx context.Context, callerID string, f BalanceF
 // account.Service.ListInUseTypes.
 func (s *Service) ListInUseCounterparties(ctx context.Context, callerID string) ([]string, error) {
 	return s.store.ListInUseCounterparties(ctx, callerID)
+}
+
+// HasEntries satisfies internal/account's EntryLookup interface: whether
+// accountID has any non-deleted entry at all, on either side (its own
+// account_id or, for a self_transfer, to_account_id) — backs that
+// package's currency-immutability rule. Deliberately unscoped by caller —
+// account.Service.Update has already authorized the caller as owner-tier
+// on accountID before calling this; existence, not visibility, is the only
+// question here.
+func (s *Service) HasEntries(ctx context.Context, accountID string) (bool, error) {
+	return s.store.HasEntriesForAccount(ctx, accountID)
 }
 
 // LatestLinkedBookingTime satisfies recurringtransaction.EntryLookup — see

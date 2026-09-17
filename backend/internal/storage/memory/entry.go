@@ -12,11 +12,45 @@ import (
 )
 
 // entryRow wraps an entry.Entry with its insertion sequence number, used as
-// the tie-break for entries sharing an identical booking_timestamp (mirrors
-// entries.id bigserial in the real backend).
+// a tie-break for entries sharing an identical booking_timestamp (mirrors
+// entries.id bigserial in the real backend). native distinguishes a
+// self_transfer's two synthesized "view" rows (see legsLocked) — true for
+// the row oriented as stored (AccountID unchanged), false for the flipped
+// one (AccountID/ToAccountID swapped, Amount negated) — used as a final
+// tie-break in sortLess/isPastCursor so the two never compare equal; every
+// other kind only ever produces one (native) row. A raw entryRow taken
+// directly from s.rows (rather than legsLocked's output) always has
+// native's zero value (false) and must never be compared on it — the
+// pre-leg-expansion map is keyed by real entry id, not by (id, leg).
 type entryRow struct {
-	e   entry.Entry
-	seq int64
+	e      entry.Entry
+	seq    int64
+	native bool
+}
+
+// legsLocked returns every non-deleted entry as one entryRow (native) plus,
+// for a self_transfer, a second one (not native) for ToAccountID with
+// AccountID/ToAccountID swapped and Amount negated — mirroring the
+// entry_legs view in storage/postgres exactly, so List/Sum/FlowSummary see
+// the same "once per account touched" shape in both stores. Callers hold
+// s.mu.
+func (s *EntryStore) legsLocked() []entryRow {
+	legs := make([]entryRow, 0, len(s.rows))
+	for _, row := range s.rows {
+		if row.e.DeletedAt != nil {
+			continue
+		}
+		legs = append(legs, entryRow{e: row.e, seq: row.seq, native: true})
+		if row.e.Kind == entry.KindSelfTransfer {
+			flipped := row.e
+			sender := row.e.AccountID
+			flipped.AccountID = *row.e.ToAccountID
+			flipped.ToAccountID = &sender
+			flipped.Amount = -row.e.Amount
+			legs = append(legs, entryRow{e: flipped, seq: row.seq, native: false})
+		}
+	}
+	return legs
 }
 
 // EntryStore is the in-memory implementation of entry.Store — the default
@@ -43,16 +77,17 @@ func (s *EntryStore) Create(_ context.Context, createdBy string, in entry.New) (
 	// A balance adjustment's amount is never client-supplied — it starts as
 	// a 0 placeholder, immediately overwritten below by recomputeFrom
 	// (which finds this very row, since nothing else can share its
-	// just-assigned id) using its Balance reading. A transaction stores
-	// in.Amount as-is, with Balance left nil.
+	// just-assigned id) using its Balance reading. A transaction or
+	// self_transfer stores in.Amount as-is, with Balance left nil.
 	var amount int64
-	if in.Kind == entry.KindTransaction && in.Amount != nil {
+	if in.Kind != entry.KindBalanceAdjustment && in.Amount != nil {
 		amount = *in.Amount
 	}
 	e := entry.Entry{
 		ID:                     strconv.FormatInt(s.seq, 10),
 		CreatedBy:              createdBy,
 		AccountID:              in.AccountID,
+		ToAccountID:            in.ToAccountID,
 		Kind:                   in.Kind,
 		Amount:                 amount,
 		Balance:                in.Balance,
@@ -69,6 +104,9 @@ func (s *EntryStore) Create(_ context.Context, createdBy string, in entry.New) (
 	}
 	s.rows[e.ID] = entryRow{e: e, seq: s.seq}
 	s.recomputeFromLocked(e.AccountID, e.BookingTimestamp, s.seq, 0)
+	if e.Kind == entry.KindSelfTransfer {
+		s.recomputeFromLocked(*e.ToAccountID, e.BookingTimestamp, s.seq, 0)
+	}
 	return s.rows[e.ID].e, nil
 }
 
@@ -149,6 +187,19 @@ func (s *EntryStore) Update(_ context.Context, id string, upd entry.Update) (ent
 	} else {
 		s.recomputeFromLocked(oldAccountID, oldTS, seq, 0)
 	}
+	// A self_transfer's to_account_id never changes via Update — Service
+	// rejects an AccountID change on this kind, and there is no
+	// ToAccountID field on Update at all — so its own recompute only ever
+	// needs to react to a booking_timestamp change, on the same fixed
+	// account.
+	if e.Kind == entry.KindSelfTransfer {
+		if !e.BookingTimestamp.Equal(oldTS) {
+			s.recomputeFromLocked(*e.ToAccountID, oldTS, seq, seq)
+			s.recomputeFromLocked(*e.ToAccountID, e.BookingTimestamp, seq, 0)
+		} else {
+			s.recomputeFromLocked(*e.ToAccountID, oldTS, seq, 0)
+		}
+	}
 
 	return s.rows[id].e, nil
 }
@@ -167,6 +218,9 @@ func (s *EntryStore) SoftDelete(_ context.Context, id string) error {
 	// filter already excludes this row — no explicit exclusion needed the
 	// way a moved (but still live) entry needs in Update.
 	s.recomputeFromLocked(row.e.AccountID, row.e.BookingTimestamp, row.seq, 0)
+	if row.e.Kind == entry.KindSelfTransfer {
+		s.recomputeFromLocked(*row.e.ToAccountID, row.e.BookingTimestamp, row.seq, 0)
+	}
 	return nil
 }
 
@@ -229,14 +283,29 @@ func (s *EntryStore) findAdjustmentLocked(accountID string, ts time.Time, seq in
 // adjustment (id, seq, ts) on accountID: its Balance reading minus the
 // balance strictly before its own position. Callers hold s.mu.
 func (s *EntryStore) setAmountLocked(accountID, id string, ts time.Time, seq int64, reading int64) {
+	// Mirrors Balance's own AccountID/ToAccountID handling — a self_transfer
+	// whose ToAccountID is accountID contributes -Amount to the balance
+	// strictly before this adjustment's position, exactly as it does to
+	// Balance() itself; omitting it here left a receiving account's
+	// adjustments permanently under-recomputed (a real bug the postgres
+	// store's self-transfer tests caught, mirrored here for parity).
 	var before int64
 	for _, row := range s.rows {
 		e := row.e
-		if e.AccountID != accountID || e.DeletedAt != nil {
+		if e.DeletedAt != nil {
+			continue
+		}
+		var contribution int64
+		switch {
+		case e.AccountID == accountID:
+			contribution = e.Amount
+		case e.Kind == entry.KindSelfTransfer && *e.ToAccountID == accountID:
+			contribution = -e.Amount
+		default:
 			continue
 		}
 		if comparePos(e.BookingTimestamp, row.seq, ts, seq) < 0 {
-			before += e.Amount
+			before += contribution
 		}
 	}
 	row := s.rows[id]
@@ -265,19 +334,22 @@ func (s *EntryStore) recomputeFromLocked(accountID string, ts time.Time, seq int
 	s.setAmountLocked(accountID, a2ID, a2TS, a2Seq, a2Reading)
 }
 
-// matchingRows returns every non-deleted entry matching f's
-// account/category/tag/kind/date-range/query filters, in no particular
-// order. Scoping to the caller happens through f.AccountIDs — already
-// narrowed by Service to the caller's visible (owned or shared) accounts
-// before it reaches here, per design.md's "entry read/write authorization
-// moves from the Store layer into the Service layer" decision — never by
-// an owner/creator equality check, so a viewer sees every entry on a
-// visible account regardless of who created it. When f.AllAccounts is set,
-// the account membership check is skipped entirely: the caller's
-// permission on the filtered category (f.CategoryIDs, resolved by
-// entry.Service) is what authorizes those rows instead. List and Sum both
-// build on this so their filtering logic can never diverge. Callers hold
-// s.mu.
+// matchingRows returns every non-deleted entry leg (see legsLocked)
+// matching f's account/category/tag/kind/date-range/query filters, in no
+// particular order. Scoping to the caller happens through f.AccountIDs —
+// already narrowed by Service to the caller's visible (owned or shared)
+// accounts before it reaches here, per design.md's "entry read/write
+// authorization moves from the Store layer into the Service layer"
+// decision — never by an owner/creator equality check, so a viewer sees
+// every entry on a visible account regardless of who created it. When
+// f.AllAccounts is set, the account membership check is skipped entirely:
+// the caller's permission on the filtered category (f.CategoryIDs,
+// resolved by entry.Service) is what authorizes those rows instead.
+// Filtering leg.e.AccountID (each leg already oriented per legsLocked) is
+// what makes a self_transfer match once per account it touches — twice
+// when both are in f.AccountIDs at once, mirroring the entry_legs view in
+// storage/postgres. List and Sum both build on this so their filtering
+// logic can never diverge. Callers hold s.mu.
 func (s *EntryStore) matchingRows(f entry.Filter) []entryRow {
 	if !f.AllAccounts && len(f.AccountIDs) == 0 {
 		return nil
@@ -289,11 +361,8 @@ func (s *EntryStore) matchingRows(f entry.Filter) []entryRow {
 	}
 
 	var rows []entryRow
-	for _, row := range s.rows {
+	for _, row := range s.legsLocked() {
 		e := row.e
-		if e.DeletedAt != nil {
-			continue
-		}
 		if !f.AllAccounts && !accountSet[e.AccountID] {
 			continue
 		}
@@ -359,7 +428,7 @@ func (s *EntryStore) List(_ context.Context, f entry.Filter) ([]entry.Entry, *en
 	var next *entry.Cursor
 	if len(rows) > f.Limit {
 		last := rows[f.Limit-1]
-		next = &entry.Cursor{BookingTimestamp: last.e.BookingTimestamp, Amount: last.e.Amount, ID: last.e.ID}
+		next = &entry.Cursor{BookingTimestamp: last.e.BookingTimestamp, Amount: last.e.Amount, ID: last.e.ID, Native: last.native}
 		rows = rows[:f.Limit]
 	}
 
@@ -371,22 +440,31 @@ func (s *EntryStore) List(_ context.Context, f entry.Filter) ([]entry.Entry, *en
 }
 
 // sortLess reports whether a sorts before b in ascending order of field,
-// breaking ties by insertion sequence (ascending).
+// breaking ties by insertion sequence (ascending), then finally by native
+// (false before true) — the last tie-break only ever matters between a
+// self_transfer's two legs, which always share the same seq (see
+// entryRow's doc comment); every other pair of rows has a distinct seq
+// long before native is ever consulted.
 func sortLess(a, b entryRow, field entry.SortField) bool {
 	if field == entry.SortAmount {
 		if a.e.Amount != b.e.Amount {
 			return a.e.Amount < b.e.Amount
 		}
-		return a.seq < b.seq
-	}
-	if !a.e.BookingTimestamp.Equal(b.e.BookingTimestamp) {
+	} else if !a.e.BookingTimestamp.Equal(b.e.BookingTimestamp) {
 		return a.e.BookingTimestamp.Before(b.e.BookingTimestamp)
 	}
-	return a.seq < b.seq
+	if a.seq != b.seq {
+		return a.seq < b.seq
+	}
+	return !a.native && b.native
 }
 
 // isPastCursor reports whether row comes strictly after cursor in the
-// listing's order (asc or desc) — i.e. it belongs on the next page.
+// listing's order (asc or desc) — i.e. it belongs on the next page. native
+// is the final tie-break, mirroring sortLess/the postgres store's keyset
+// tuple — without it, a self_transfer's two legs (identical sortCol and
+// seq) would compare equal and a page boundary landing between them could
+// silently drop whichever one didn't make the previous page.
 func isPastCursor(row entryRow, cursor entry.Cursor, field entry.SortField, asc bool) bool {
 	var cmp int
 	if field == entry.SortAmount {
@@ -414,6 +492,14 @@ func isPastCursor(row entryRow, cursor entry.Cursor, field entry.SortField, asc 
 			cmp = 1
 		}
 	}
+	if cmp == 0 {
+		switch {
+		case !row.native && cursor.Native:
+			cmp = -1
+		case row.native && !cursor.Native:
+			cmp = 1
+		}
+	}
 	if asc {
 		return cmp > 0
 	}
@@ -421,12 +507,16 @@ func isPastCursor(row entryRow, cursor entry.Cursor, field entry.SortField, asc 
 }
 
 // Balance implements design.md's live computation: the sum of every
-// non-deleted entry's amount up to asOf. A balance adjustment's amount is
-// kept, by the recompute helpers above (run inside Create/Update/
-// SoftDelete), equal to its own Balance reading minus the balance strictly
-// before it — so this plain sum reproduces exactly the same result as
+// non-deleted entry's amount up to asOf, from accountID's own point of
+// view — a plain row it's the AccountID of contributes Amount as stored; a
+// self_transfer it's instead the ToAccountID of contributes -Amount (the
+// receiving side's effective delta — see entry.Entry's ToAccountID doc
+// comment). A balance adjustment's amount is kept, by the recompute
+// helpers above (run inside Create/Update/SoftDelete, on both accounts for
+// a self_transfer), equal to its own Balance reading minus the balance
+// strictly before it — so this reproduces exactly the same result as
 // always resetting to the latest adjustment and summing only the
-// transactions after it, with no kind-branching needed here.
+// transactions after it, with no further kind-branching needed here.
 func (s *EntryStore) Balance(_ context.Context, accountID string, asOf time.Time) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -434,32 +524,43 @@ func (s *EntryStore) Balance(_ context.Context, accountID string, asOf time.Time
 	var sum int64
 	for _, row := range s.rows {
 		e := row.e
-		if e.AccountID != accountID || e.DeletedAt != nil {
+		if e.DeletedAt != nil {
 			continue
 		}
 		if e.BookingTimestamp.After(asOf) {
 			continue
 		}
-		sum += e.Amount
+		switch {
+		case e.AccountID == accountID:
+			sum += e.Amount
+		case e.Kind == entry.KindSelfTransfer && *e.ToAccountID == accountID:
+			sum -= e.Amount
+		}
 	}
 	return sum, nil
 }
 
-// Sum implements entry.Store's Sum: f's matching entries, restricted to
-// kind: transaction regardless of f.Kind, summed per account id.
+// Sum implements entry.Store's Sum: f's matching entry legs, restricted to
+// kind: transaction or self_transfer regardless of f.Kind, summed per
+// (leg) account id — a self_transfer contributes twice, once per account,
+// when both are within f.AccountIDs, mirroring List.
 func (s *EntryStore) Sum(_ context.Context, f entry.Filter) (map[string]int64, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	txKind := entry.KindTransaction
-	f.Kind = &txKind
+	f.Kind = nil
 	rows := s.matchingRows(f)
 
 	perAccount := make(map[string]int64, len(rows))
+	count := 0
 	for _, row := range rows {
+		if row.e.Kind != entry.KindTransaction && row.e.Kind != entry.KindSelfTransfer {
+			continue
+		}
 		perAccount[row.e.AccountID] += row.e.Amount
+		count++
 	}
-	return perAccount, len(rows), nil
+	return perAccount, count, nil
 }
 
 // FlowSummary implements entry.Store's FlowSummary: one row per (account,
@@ -592,6 +693,29 @@ func (s *EntryStore) CountByRecurringTransaction(_ context.Context, recurringTra
 		count++
 	}
 	return count, nil
+}
+
+// HasEntriesForAccount implements entry.Store's HasEntriesForAccount: a
+// cheap existence check across both sides accountID could appear on
+// (AccountID, or a self_transfer's ToAccountID) — backs internal/
+// account's currency-immutability rule.
+func (s *EntryStore) HasEntriesForAccount(_ context.Context, accountID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, row := range s.rows {
+		e := row.e
+		if e.DeletedAt != nil {
+			continue
+		}
+		if e.AccountID == accountID {
+			return true, nil
+		}
+		if e.Kind == entry.KindSelfTransfer && *e.ToAccountID == accountID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func toSet(ids []string) map[string]bool {

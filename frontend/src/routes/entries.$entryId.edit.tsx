@@ -70,6 +70,7 @@ function EditEntry() {
 
   const [entry, setEntry] = useState<Entry | null | undefined>(undefined);
   const [account, setAccount] = useState<Account | null>(null);
+  const [toAccount, setToAccount] = useState<Account | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -125,7 +126,7 @@ function EditEntry() {
       const e = entryRes.data ?? null;
       setEntry(e);
       if (e) {
-        if (e.kind === "transaction") {
+        if (e.kind === "transaction" || e.kind === "self_transfer") {
           setTransactionNegative(e.amount < 0);
           setTransactionAmount(amountToInput(Math.abs(e.amount)));
         } else {
@@ -149,6 +150,19 @@ function EditEntry() {
           .then(({ data }) => {
             if (!cancelled) setAccount(data ?? null);
           });
+        // A self-transfer's edit permission requires append+ on *both*
+        // accounts (see account-entries), so the receiving account's own
+        // permission needs fetching too — not knowable from the entry
+        // response alone, which only carries its name/currency.
+        if (e.kind === "self_transfer" && e.to_account_id) {
+          api
+            .GET("/api/accounts/{id}", {
+              params: { path: { id: e.to_account_id } },
+            })
+            .then(({ data }) => {
+              if (!cancelled) setToAccount(data ?? null);
+            });
+        }
         setDirty(false);
       }
     });
@@ -188,13 +202,17 @@ function EditEntry() {
     const { data, response } = await api.PATCH("/api/entries/{id}", {
       params: { path: { id: entryId } },
       body: {
-        account_id: selectedAccountId,
+        // A self-transfer's account_id is immutable — there's no unlock
+        // interaction for it at all (see below), so it's never sent.
+        ...(entry.kind !== "self_transfer"
+          ? { account_id: selectedAccountId }
+          : {}),
         booking_timestamp: new Date(bookingTimestamp).toISOString(),
         title: title.trim(),
         category_id: categoryId || null,
         tag_ids: tagIds,
         recurring_transaction_id: recurringTransactionId || null,
-        ...(entry.kind === "transaction"
+        ...(entry.kind === "transaction" || entry.kind === "self_transfer"
           ? { amount: parsedAmount }
           : { balance: parsedAmount }),
         ...compact({
@@ -231,7 +249,7 @@ function EditEntry() {
       return;
     }
     let parsedAmount: number | null;
-    if (entry.kind === "transaction") {
+    if (entry.kind === "transaction" || entry.kind === "self_transfer") {
       const magnitude = inputToAmount(transactionAmount);
       if (magnitude === null || magnitude === 0) {
         setInvalidField("amount");
@@ -335,14 +353,39 @@ function EditEntry() {
     setAccountUnlocked(false);
   }
 
-  // entry_admin/owner may edit any entry on the account; append may edit
-  // only what they themselves created; view (or append on someone else's
-  // entry) is read-only — see account-entries' design.md.
-  const canEdit =
-    account !== null &&
-    (account.permission === "entry_admin" ||
-      account.permission === "owner" ||
-      (account.permission === "append" && entry.created_by === user?.id));
+  // entry_admin/owner may edit or delete any entry on the account; append
+  // may edit or delete only what they themselves created; view (or append
+  // on someone else's entry) is read-only — see account-entries' design.md.
+  // createdBy is captured here (rather than reading entry.created_by inside
+  // the closure below) so TypeScript's narrowing of `entry` past the null
+  // checks above survives into it.
+  const createdBy = entry.created_by;
+  function fullTierAllows(acc: Account | null): boolean {
+    return (
+      acc !== null &&
+      (acc.permission === "entry_admin" ||
+        acc.permission === "owner" ||
+        (acc.permission === "append" && createdBy === user?.id))
+    );
+  }
+  // A self-transfer's edit rule is stricter (append+ on *both* accounts,
+  // no created_by exemption); its delete rule is looser (either account's
+  // ordinary tier is enough) — see account-entries' design.md.
+  function atLeastAppend(acc: Account | null): boolean {
+    return (
+      acc !== null &&
+      (acc.permission === "append" ||
+        acc.permission === "entry_admin" ||
+        acc.permission === "owner")
+    );
+  }
+  const isSelfTransfer = entry.kind === "self_transfer";
+  const canEdit = isSelfTransfer
+    ? atLeastAppend(account) && atLeastAppend(toAccount)
+    : fullTierAllows(account);
+  const canDelete = isSelfTransfer
+    ? fullTierAllows(account) || fullTierAllows(toAccount)
+    : fullTierAllows(account);
 
   return (
     <section className="mx-auto flex w-full max-w-xl flex-col gap-8 px-6 py-12 sm:px-10">
@@ -361,7 +404,16 @@ function EditEntry() {
         <fieldset disabled={!canEdit} className="contents">
           <div className="flex flex-col gap-1.5 text-sm font-medium">
             {t("entries.form.account")}
-            {accountUnlocked ? (
+            {isSelfTransfer ? (
+              // A self-transfer's account_id is fixed at creation — no
+              // unlock interaction at all, unlike a transaction/balance
+              // adjustment's account (see account-entries' design.md).
+              <input
+                value={account?.title ?? entry.account_id}
+                disabled
+                className={`${inputClass} opacity-60`}
+              />
+            ) : accountUnlocked ? (
               <div className="flex items-center gap-2">
                 <select
                   value={selectedAccountId}
@@ -420,20 +472,33 @@ function EditEntry() {
             )}
           </div>
 
+          {isSelfTransfer && (
+            <div className="flex flex-col gap-1.5 text-sm font-medium">
+              {t("entries.form.toAccount")}
+              <input
+                value={entry.to_account_name ?? entry.to_account_id ?? ""}
+                disabled
+                className={`${inputClass} opacity-60`}
+              />
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5 text-sm font-medium">
             {t("entries.form.kind")}
             <input
               value={
                 entry.kind === "transaction"
                   ? t("entries.kind.transaction")
-                  : t("entries.kind.balanceAdjustment")
+                  : entry.kind === "self_transfer"
+                    ? t("entries.kind.selfTransfer")
+                    : t("entries.kind.balanceAdjustment")
               }
               disabled
               className={`${inputClass} opacity-60`}
             />
           </div>
 
-          {entry.kind === "transaction" ? (
+          {entry.kind === "transaction" || entry.kind === "self_transfer" ? (
             <div className="flex flex-col gap-1.5 text-sm font-medium">
               {t("entries.form.amount", { currency: account?.currency ?? "" })}
               <SignedAmountInput
@@ -534,9 +599,9 @@ function EditEntry() {
               className={inputClass}
             >
               <option value="">
-                {entry.kind === "balance_adjustment"
-                  ? t("entries.form.categoryNone")
-                  : t("entries.form.categoryPlaceholder")}
+                {entry.kind === "transaction"
+                  ? t("entries.form.categoryPlaceholder")
+                  : t("entries.form.categoryNone")}
               </option>
               {categoryOptions.map((c) => (
                 <option
@@ -666,22 +731,30 @@ function EditEntry() {
           )}
         </fieldset>
 
-        {canEdit && (
+        {(canEdit || canDelete) && (
           <div className="flex items-center justify-between">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              {t("entries.form.save")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(true)}
-              className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
-            >
-              {t("entries.edit.delete")}
-            </button>
+            {canEdit && (
+              <button
+                type="submit"
+                disabled={submitting}
+                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {t("entries.form.save")}
+              </button>
+            )}
+            {canDelete && (
+              // For a self-transfer, this stays available even when canEdit
+              // is false (access to the other account was revoked) — delete
+              // needs only one accessible side, unlike edit — see
+              // account-entries' design.md.
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
+              >
+                {t("entries.edit.delete")}
+              </button>
+            )}
           </div>
         )}
       </form>

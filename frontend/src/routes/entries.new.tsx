@@ -75,6 +75,7 @@ function NewEntry() {
   const [tags, setTags] = useState<Tag[]>([]);
 
   const [accountId, setAccountId] = useState(presetAccountId ?? "");
+  const [toAccountId, setToAccountId] = useState("");
   const [kind, setKind] = useState<EntryKind>("transaction");
   const [amount, setAmount] = useState("");
   const [transactionAmount, setTransactionAmount] = useState("");
@@ -169,6 +170,17 @@ function NewEntry() {
   // offered when picking freely; a preset account_id (the ?account_id=
   // flow, field locked either way) is left as-is rather than filtered.
   const selectableAccounts = accounts.filter((a) => a.permission !== "view");
+  // A self-transfer's receiving account needs the same append+ permission
+  // as the sending one, must share its currency (cross-currency transfers
+  // aren't supported at all — see account-entries), a non-disabled
+  // account, and can't be the same account as the sending side.
+  const toAccountOptions = accounts.filter(
+    (a) =>
+      a.permission !== "view" &&
+      !a.disabled &&
+      a.id !== accountId &&
+      (account === undefined || a.currency === account.currency),
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -180,8 +192,12 @@ function NewEntry() {
       setInvalidField("title");
       return;
     }
+    if (kind === "self_transfer" && !toAccountId) {
+      setInvalidField("to_account_id");
+      return;
+    }
     let parsedAmount: number | null;
-    if (kind === "transaction") {
+    if (kind === "transaction" || kind === "self_transfer") {
       const magnitude = inputToAmount(transactionAmount);
       if (magnitude === null || magnitude === 0) {
         setInvalidField("amount");
@@ -211,13 +227,14 @@ function NewEntry() {
         booking_timestamp: new Date(bookingTimestamp).toISOString(),
         title: title.trim(),
         tag_ids: tagIds,
-        ...(kind === "transaction"
+        ...(kind === "transaction" || kind === "self_transfer"
           ? { amount: parsedAmount }
           : { balance: parsedAmount }),
         ...compact({
           description: description.trim() || undefined,
           category_id: categoryId || undefined,
           recurring_transaction_id: recurringTransactionId,
+          to_account_id: kind === "self_transfer" ? toAccountId : undefined,
           ...(kind === "transaction"
             ? {
                 counterparty: counterparty.trim() || undefined,
@@ -246,7 +263,14 @@ function NewEntry() {
           {t("entries.form.account")}
           <select
             value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
+            onChange={(e) => {
+              setAccountId(e.target.value);
+              // A new "from" account may invalidate the previously chosen
+              // "to" one (different currency, or now the same account) —
+              // always reset it rather than trying to preserve a choice
+              // that might no longer be valid.
+              setToAccountId("");
+            }}
             className={inputClass}
             disabled={lockedAccountId !== undefined}
             required
@@ -286,10 +310,44 @@ function NewEntry() {
               />
               {t("entries.kind.balanceAdjustment")}
             </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                checked={kind === "self_transfer"}
+                onChange={() => setKind("self_transfer")}
+              />
+              {t("entries.kind.selfTransfer")}
+            </label>
           </div>
         </fieldset>
 
-        {kind === "transaction" ? (
+        {kind === "self_transfer" && (
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.toAccount")}
+            <select
+              value={toAccountId}
+              onChange={(e) => setToAccountId(e.target.value)}
+              className={inputClass}
+              required
+            >
+              <option value="" disabled>
+                {t("entries.form.toAccountPlaceholder")}
+              </option>
+              {toAccountOptions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.title} ({a.currency})
+                </option>
+              ))}
+            </select>
+            {invalidField === "to_account_id" && (
+              <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                {t("entries.form.toAccountRequired")}
+              </span>
+            )}
+          </label>
+        )}
+
+        {kind === "transaction" || kind === "self_transfer" ? (
           <div className="flex flex-col gap-1.5 text-sm font-medium">
             {t("entries.form.amount", { currency: account?.currency ?? "" })}
             <SignedAmountInput
@@ -370,9 +428,9 @@ function NewEntry() {
             className={inputClass}
           >
             <option value="">
-              {kind === "balance_adjustment"
-                ? t("entries.form.categoryNone")
-                : t("entries.form.categoryPlaceholder")}
+              {kind === "transaction"
+                ? t("entries.form.categoryPlaceholder")
+                : t("entries.form.categoryNone")}
             </option>
             {categoryOptions.map((c) => (
               <option key={c.id} value={c.id}>
