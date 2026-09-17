@@ -99,6 +99,7 @@ function ImportEntries() {
   const [finalRows, setFinalRows] = useState<ClassifiedRow[] | null>(null);
   const [runPhase, setRunPhase] = useState<RunPhase | null>(null);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const rowMapping = toRowMapping(mapping);
 
   useEffect(() => {
     Promise.all([
@@ -211,12 +212,10 @@ function ImportEntries() {
         />
       )}
 
-      {!runPhase && step === "dryrun" && parsed && (
+      {!runPhase && step === "dryrun" && parsed && rowMapping && (
         <ImportDryRunStep
           sourceRows={parsed.rows}
-          // Non-null: the mapping step only enables "Continue" once
-          // toRowMapping(mapping) is non-null.
-          rowMapping={toRowMapping(mapping)!}
+          rowMapping={rowMapping}
           fields={parsed.fields}
           currency={account?.currency ?? ""}
           onContinue={(rows) => {

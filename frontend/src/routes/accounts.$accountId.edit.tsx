@@ -36,7 +36,7 @@ function EditAccount() {
         // A visitor below owner-tier permission has no business on this
         // page at all — /accounts/{id} already hides the Edit link for
         // them, this is defense in depth for a direct navigation.
-        if (!data || data.permission !== "owner") {
+        if (data?.permission !== "owner") {
           navigate({
             to: "/accounts/$accountId",
             params: { accountId },

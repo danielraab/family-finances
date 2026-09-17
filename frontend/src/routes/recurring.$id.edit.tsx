@@ -46,9 +46,7 @@ function EditRecurringTransaction() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [linkedItems, setLinkedItems] = useState<Entry[]>([]);
-  const [linkedNextCursor, setLinkedNextCursor] = useState<string | null>(
-    null,
-  );
+  const [linkedNextCursor, setLinkedNextCursor] = useState<string | null>(null);
   const [linkedLoading, setLinkedLoading] = useState(false);
   const [linkedLoadingMore, setLinkedLoadingMore] = useState(false);
 
@@ -218,9 +216,7 @@ function EditRecurringTransaction() {
                     className="flex items-center justify-between gap-2 rounded px-1 py-1.5 text-sm transition-colors hover:bg-black/[.04] dark:hover:bg-white/[.06]"
                   >
                     <div className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">
-                        {item.title}
-                      </span>
+                      <span className="truncate font-medium">{item.title}</span>
                       <span className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
                         {new Date(item.booking_timestamp).toLocaleDateString(
                           i18n.language,
