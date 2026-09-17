@@ -645,7 +645,12 @@
       "deleteBlockedHint_one": "Löschen nicht möglich — {{count}} Buchung ist mit dieser wiederkehrenden Buchung verknüpft. Entferne zuerst die Verknüpfung auf der Bearbeitungsseite der Buchung.",
       "deleteBlockedHint_other": "Löschen nicht möglich — {{count}} Buchungen sind mit dieser wiederkehrenden Buchung verknüpft. Entferne zuerst die Verknüpfungen auf den jeweiligen Bearbeitungsseiten.",
       "confirmDeleteTitle": "Diese wiederkehrende Buchung löschen?",
-      "confirmDeleteBody": "Dies kann hier nicht rückgängig gemacht werden."
+      "confirmDeleteBody": "Dies kann hier nicht rückgängig gemacht werden.",
+      "linkedTransactions": {
+        "heading": "Verknüpfte Buchungen",
+        "empty": "Dieser wiederkehrenden Buchung sind noch keine Buchungen zugeordnet.",
+        "loadMore": "Mehr laden"
+      }
     }
   },
   "recurringPreview": {

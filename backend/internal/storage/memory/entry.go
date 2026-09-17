@@ -303,6 +303,10 @@ func (s *EntryStore) matchingRows(f entry.Filter) []entryRow {
 		if f.TagID != nil && !containsString(e.TagIDs, *f.TagID) {
 			continue
 		}
+		if f.RecurringTransactionID != nil &&
+			(e.RecurringTransactionID == nil || *e.RecurringTransactionID != *f.RecurringTransactionID) {
+			continue
+		}
 		if f.Kind != nil && e.Kind != *f.Kind {
 			continue
 		}

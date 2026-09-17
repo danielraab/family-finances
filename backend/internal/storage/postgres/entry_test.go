@@ -9,6 +9,7 @@ import (
 	"at.draab/familyfinances/internal/account"
 	"at.draab/familyfinances/internal/category"
 	"at.draab/familyfinances/internal/entry"
+	rt "at.draab/familyfinances/internal/recurringtransaction"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -335,6 +336,48 @@ func TestPGEntryListFiltersByCategorySubtree(t *testing.T) {
 	}
 	if len(items) != 2 {
 		t.Fatalf("items = %v, want 2 (parent-cat + child-cat)", items)
+	}
+}
+
+func TestPGEntryListFiltersByRecurringTransactionID(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+	recurring := NewRecurringTransactionStore(f.pool)
+
+	starts, _ := account.ParseDate("2024-01-01")
+	created, err := recurring.Create(ctx, f.owner, rt.New{
+		AccountID: f.accID, Title: "Netflix", CategoryID: &f.catID,
+		Amount: -1500, IntervalUnit: rt.UnitMonth, IntervalCount: 1,
+		StartsOn: rt.NewDate(starts.Time),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	linked, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(-1500),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "linked", CategoryID: &f.catID,
+		RecurringTransactionID: &created.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.entries.Create(ctx, f.owner, entry.New{
+		AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(-5),
+		BookingTimestamp: at("2024-01-02T00:00:00Z"), Title: "unlinked", CategoryID: &f.catID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, _, err := f.entries.List(ctx, entry.Filter{
+		AccountIDs: []string{f.accID}, RecurringTransactionID: &created.ID,
+		Sort: entry.SortBookingTimestamp, Dir: entry.DirAsc, Limit: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != linked.ID {
+		t.Fatalf("items = %+v, want just the linked entry", items)
 	}
 }
 

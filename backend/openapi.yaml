@@ -1572,6 +1572,12 @@ paths:
           required: false
           schema:
             $ref: "#/components/schemas/EntryKind"
+        - name: recurring_transaction_id
+          in: query
+          required: false
+          description: Matches only entries linked to this recurring transaction.
+          schema:
+            type: string
         - name: from
           in: query
           required: false

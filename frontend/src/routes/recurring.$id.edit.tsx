@@ -4,15 +4,26 @@ import {
   DialogPanel,
   DialogTitle,
 } from "@headlessui/react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import type { components } from "../api/schema";
+import { CategoryLabel } from "../components/CategoryLabel";
 import {
   RecurringTransactionForm,
   type RecurringTransactionFormValues,
 } from "../components/RecurringTransactionForm";
-import { amountToInput } from "../lib/amount";
+import { amountColorClass, amountToInput, formatAmount } from "../lib/amount";
+import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
+
+type Category = components["schemas"]["Category"];
+type Entry = components["schemas"]["Entry"];
+
+// Mirrors entries.index.tsx's own ledger page size — this is a secondary
+// section, not the primary ledger, but there's no reason for its first
+// page to be a different size.
+const PAGE_SIZE = 30;
 
 export const Route = createFileRoute("/recurring/$id/edit")({
   component: EditRecurringTransaction,
@@ -20,8 +31,9 @@ export const Route = createFileRoute("/recurring/$id/edit")({
 
 function EditRecurringTransaction() {
   const { id } = Route.useParams();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const displayedDecimalPlaces = useDisplayedDecimalPlaces();
 
   const [values, setValues] = useState<RecurringTransactionFormValues | null>(
     null,
@@ -31,6 +43,14 @@ function EditRecurringTransaction() {
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [linkedItems, setLinkedItems] = useState<Entry[]>([]);
+  const [linkedNextCursor, setLinkedNextCursor] = useState<string | null>(
+    null,
+  );
+  const [linkedLoading, setLinkedLoading] = useState(false);
+  const [linkedLoadingMore, setLinkedLoadingMore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +88,50 @@ function EditRecurringTransaction() {
       cancelled = true;
     };
   }, [id]);
+
+  // Fetched only once linked_entry_count resolves to something greater
+  // than 0 — the template's own response already carries that count, so
+  // this skips an empty-result round trip for the common case of a
+  // freshly created template with nothing linked yet.
+  useEffect(() => {
+    if (linkedEntryCount <= 0) return;
+    let cancelled = false;
+    setLinkedLoading(true);
+    Promise.all([
+      api.GET("/api/entries", {
+        params: {
+          query: { recurring_transaction_id: id, limit: PAGE_SIZE },
+        },
+      }),
+      api.GET("/api/categories"),
+    ]).then(([entriesRes, categoriesRes]) => {
+      if (cancelled) return;
+      setLinkedItems(entriesRes.data?.items ?? []);
+      setLinkedNextCursor(entriesRes.data?.next_cursor ?? null);
+      setCategories(categoriesRes.data ?? []);
+      setLinkedLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedEntryCount, id]);
+
+  async function loadMoreLinked() {
+    if (linkedLoadingMore || !linkedNextCursor) return;
+    setLinkedLoadingMore(true);
+    const { data } = await api.GET("/api/entries", {
+      params: {
+        query: {
+          recurring_transaction_id: id,
+          limit: PAGE_SIZE,
+          after: linkedNextCursor,
+        },
+      },
+    });
+    setLinkedItems((prev) => [...prev, ...(data?.items ?? [])]);
+    setLinkedNextCursor(data?.next_cursor ?? null);
+    setLinkedLoadingMore(false);
+  }
 
   async function handleDelete() {
     setConfirmingDelete(false);
@@ -128,6 +192,76 @@ function EditRecurringTransaction() {
           navigate({ to: "/recurring" });
         }}
       />
+
+      <section className="flex flex-col gap-3 border-t border-black/10 pt-6 dark:border-white/10">
+        <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+          {t("recurring.edit.linkedTransactions.heading")}
+        </h2>
+        {linkedEntryCount === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {t("recurring.edit.linkedTransactions.empty")}
+          </p>
+        ) : linkedLoading ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">…</p>
+        ) : (
+          <>
+            <ul className="flex flex-col divide-y divide-black/5 dark:divide-white/5">
+              {linkedItems.map((item) => {
+                const category = categories.find(
+                  (c) => c.id === item.category_id,
+                );
+                return (
+                  <Link
+                    key={item.id}
+                    to="/entries/$entryId/edit"
+                    params={{ entryId: item.id }}
+                    className="flex items-center justify-between gap-2 rounded px-1 py-1.5 text-sm transition-colors hover:bg-black/[.04] dark:hover:bg-white/[.06]"
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate font-medium">
+                        {item.title}
+                      </span>
+                      <span className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        {new Date(item.booking_timestamp).toLocaleDateString(
+                          i18n.language,
+                        )}
+                        {category && (
+                          <>
+                            {" · "}
+                            <CategoryLabel category={category} iconSize={14} />
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    <span
+                      className={`shrink-0 font-mono text-sm tabular-nums ${amountColorClass(item.amount)}`}
+                    >
+                      {formatAmount(
+                        item.amount,
+                        item.account_currency ?? "",
+                        displayedDecimalPlaces,
+                        i18n.language,
+                      )}
+                    </span>
+                  </Link>
+                );
+              })}
+            </ul>
+            {linkedNextCursor && (
+              <div>
+                <button
+                  type="button"
+                  onClick={loadMoreLinked}
+                  disabled={linkedLoadingMore}
+                  className="rounded-md border border-black/10 px-3 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-black/[.04] disabled:opacity-60 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/[.08]"
+                >
+                  {t("recurring.edit.linkedTransactions.loadMore")}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
 
       <section className="flex flex-col gap-3 border-t border-black/10 pt-6 dark:border-white/10">
         <h2 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">

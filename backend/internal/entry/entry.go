@@ -274,19 +274,20 @@ type Filter struct {
 	// authorizes seeing its entries, regardless of account access. Every
 	// other filter (CategoryIDs, TagID, Kind, date range, Query) still
 	// applies as usual — this only lifts the account restriction.
-	AllAccounts  bool
-	CategoryID   *string
-	CategoryMode CategoryMode
-	CategoryIDs  []string
-	TagID        *string
-	Kind         *Kind
-	From         *time.Time
-	To           *time.Time
-	Query        string
-	Sort         SortField
-	Dir          SortDir
-	After        *Cursor
-	Limit        int
+	AllAccounts            bool
+	CategoryID             *string
+	CategoryMode           CategoryMode
+	CategoryIDs            []string
+	TagID                  *string
+	Kind                   *Kind
+	RecurringTransactionID *string
+	From                   *time.Time
+	To                     *time.Time
+	Query                  string
+	Sort                   SortField
+	Dir                    SortDir
+	After                  *Cursor
+	Limit                  int
 }
 
 // CurrencySum is one currency's total within a Summary.

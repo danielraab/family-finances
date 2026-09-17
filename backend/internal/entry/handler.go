@@ -209,6 +209,9 @@ func parseCommonFilter(q url.Values) (Filter, error) {
 	if v := q.Get("tag_id"); v != "" {
 		f.TagID = &v
 	}
+	if v := q.Get("recurring_transaction_id"); v != "" {
+		f.RecurringTransactionID = &v
+	}
 	if v := q.Get("from"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {

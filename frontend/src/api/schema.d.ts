@@ -2973,6 +2973,8 @@ export interface operations {
                 limit?: number;
                 /** @description Case-insensitive substring match against title, description, or counterparty. */
                 q?: string;
+                /** @description Matches only entries linked to this recurring transaction. */
+                recurring_transaction_id?: string;
                 sort?: "booking_timestamp" | "amount";
                 tag_id?: string;
                 /** @description Inclusive booking_timestamp upper bound, RFC3339. */

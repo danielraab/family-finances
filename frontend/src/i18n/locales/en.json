@@ -645,7 +645,12 @@
       "deleteBlockedHint_one": "Can't delete — {{count}} entry is linked to this recurring transaction. Unlink it first from the entry's edit page.",
       "deleteBlockedHint_other": "Can't delete — {{count}} entries are linked to this recurring transaction. Unlink them first from each entry's edit page.",
       "confirmDeleteTitle": "Delete this recurring transaction?",
-      "confirmDeleteBody": "This cannot be undone here."
+      "confirmDeleteBody": "This cannot be undone here.",
+      "linkedTransactions": {
+        "heading": "Linked transactions",
+        "empty": "No entries are linked to this recurring transaction yet.",
+        "loadMore": "Load more"
+      }
     }
   },
   "recurringPreview": {

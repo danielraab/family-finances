@@ -319,6 +319,9 @@ func buildWhere(f entry.Filter) (where []string, args []any) {
 	if f.TagID != nil {
 		where = append(where, "EXISTS (SELECT 1 FROM entry_tags et WHERE et.entry_id = entries.id AND et.tag_id = "+arg(*f.TagID)+"::uuid)")
 	}
+	if f.RecurringTransactionID != nil {
+		where = append(where, "entries.recurring_transaction_id = "+arg(*f.RecurringTransactionID)+"::uuid")
+	}
 	if f.Kind != nil {
 		where = append(where, "entries.kind = "+arg(string(*f.Kind)))
 	}

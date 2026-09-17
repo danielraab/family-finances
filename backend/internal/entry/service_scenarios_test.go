@@ -856,6 +856,95 @@ func TestListFiltersByCategoryExactExcludesDescendants(t *testing.T) {
 	}
 }
 
+func TestListFiltersByRecurringTransactionID(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	recurring := newStubRecurringTransactions()
+	recurring.add("rt1", "acc1")
+	svc.SetRecurringTransactionLookup(recurring)
+
+	linked, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Netflix", CategoryID: ptr("cat1"),
+		RecurringTransactionID: ptr("rt1"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 1, "2024-01-02T00:00:00Z", ptr("cat1"))
+
+	items, _, err := svc.List(context.Background(), "u1", entry.Filter{RecurringTransactionID: ptr("rt1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != linked.ID {
+		t.Fatalf("items = %+v, want just the entry linked to rt1", items)
+	}
+}
+
+func TestListFiltersByRecurringTransactionIDCombinedWithDateRange(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	recurring := newStubRecurringTransactions()
+	recurring.add("rt1", "acc1")
+	svc.SetRecurringTransactionLookup(recurring)
+
+	mustCreateLinked := func(bookingTimestamp string) entry.Entry {
+		e, err := svc.Create(context.Background(), "u1", entry.New{
+			AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+			BookingTimestamp: at(bookingTimestamp), Title: "Netflix", CategoryID: ptr("cat1"),
+			RecurringTransactionID: ptr("rt1"),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	mustCreateLinked("2024-01-01T00:00:00Z")
+	inRange := mustCreateLinked("2024-02-01T00:00:00Z")
+
+	items, _, err := svc.List(context.Background(), "u1", entry.Filter{
+		RecurringTransactionID: ptr("rt1"),
+		From:                   ptr(at("2024-01-15T00:00:00Z")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != inRange.ID {
+		t.Fatalf("items = %+v, want just the in-range linked entry", items)
+	}
+}
+
+func TestListFiltersByRecurringTransactionIDStillScopedToVisibleAccounts(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+	recurring := newStubRecurringTransactions()
+	recurring.add("rt1", "acc1")
+	svc.SetRecurringTransactionLookup(recurring)
+
+	if _, err := svc.Create(context.Background(), "u1", entry.New{
+		AccountID: "acc1", Kind: entry.KindTransaction, Amount: ptr(int64(100)),
+		BookingTimestamp: at("2024-01-01T00:00:00Z"), Title: "Netflix", CategoryID: ptr("cat1"),
+		RecurringTransactionID: ptr("rt1"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// u2 has no access to acc1 at all, so the caller-scoping resolveFilter
+	// performs (never bypassed by RecurringTransactionID) leaves nothing to
+	// match, even though rt1 itself is a real, valid id.
+	items, _, err := svc.List(context.Background(), "u2", entry.Filter{RecurringTransactionID: ptr("rt1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("items = %+v, want none — u2 cannot see acc1", items)
+	}
+}
+
 func TestListInvalidCategoryModeRejected(t *testing.T) {
 	svc, accounts, categories, _ := newFixture()
 	accounts.add("acc1", "u1", "EUR")
