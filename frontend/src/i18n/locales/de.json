@@ -434,7 +434,9 @@
       "confirmDeleteBody": "Dies kann hier nicht rückgängig gemacht werden.",
       "confirmAccountChangeTitle": "Diese Buchung verschieben?",
       "confirmAccountChangeBody": "Diese Buchung wird nach „{{account}}“ verschoben.",
-      "confirmAccountChangeConfirm": "Buchung verschieben"
+      "confirmAccountChangeConfirm": "Buchung verschieben",
+      "createRecurring": "Wiederkehrende Buchung erstellen",
+      "saveAndCreateRecurring": "Speichern und wiederkehrende Buchung erstellen"
     },
     "location": {
       "previewTitle": "Ort",

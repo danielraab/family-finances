@@ -4,7 +4,7 @@ import {
   DialogPanel,
   DialogTitle,
 } from "@headlessui/react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -24,6 +24,11 @@ type Tag = components["schemas"]["Tag"];
 type Entry = components["schemas"]["Entry"];
 type RecurringTransaction = components["schemas"]["RecurringTransaction"];
 
+/** Where a successful save lands: the normal "/entries" redirect, or
+ * onward to "/recurring/new" when the save was triggered by the "create
+ * recurring transaction" action on a dirty form. */
+type SaveDestination = "entries" | "recurring-new";
+
 export const Route = createFileRoute("/entries/$entryId/edit")({
   component: EditEntry,
 });
@@ -36,6 +41,26 @@ function toLocalInput(iso: string): string {
 
 const inputClass =
   "rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
+
+function PlusGlyph() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
 
 function EditEntry() {
   const { entryId } = Route.useParams();
@@ -63,10 +88,18 @@ function EditEntry() {
   const [accountUnlocked, setAccountUnlocked] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [pendingAmount, setPendingAmount] = useState<number | null>(null);
+  const [pendingDestination, setPendingDestination] =
+    useState<SaveDestination>("entries");
   const [recurringTransactionId, setRecurringTransactionId] = useState("");
   const [recurringOptions, setRecurringOptions] = useState<
     RecurringTransaction[]
   >([]);
+  // Flipped true by any field change since the entry loaded or was last
+  // saved — a touched/untouched flag, not a value-diff against the loaded
+  // entry (so toggling a field back to its original value still counts as
+  // dirty). Drives the "create recurring transaction" action's label and
+  // whether it saves before navigating.
+  const [dirty, setDirty] = useState(false);
 
   const [invalidField, setInvalidField] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -116,6 +149,7 @@ function EditEntry() {
           .then(({ data }) => {
             if (!cancelled) setAccount(data ?? null);
           });
+        setDirty(false);
       }
     });
     return () => {
@@ -141,7 +175,10 @@ function EditEntry() {
     };
   }, [selectedAccountId]);
 
-  async function performSubmit(parsedAmount: number) {
+  async function performSubmit(
+    parsedAmount: number,
+    destination: SaveDestination,
+  ) {
     if (!entry) return;
     setConfirmingAccountChange(false);
     setSubmitting(true);
@@ -176,14 +213,18 @@ function EditEntry() {
       setError(t("entries.form.saveError"));
       return;
     }
-    navigate({
-      to: "/entries",
-      search: { account_id: selectedAccountId },
-    });
+    setDirty(false);
+    if (destination === "recurring-new") {
+      navigate({ to: "/recurring/new", search: { from_entry_id: entryId } });
+    } else {
+      navigate({
+        to: "/entries",
+        search: { account_id: selectedAccountId },
+      });
+    }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function validateAndSubmit(destination: SaveDestination) {
     if (!entry) return;
     if (title.trim() === "") {
       setInvalidField("title");
@@ -212,10 +253,20 @@ function EditEntry() {
 
     if (selectedAccountId !== entry.account_id) {
       setPendingAmount(parsedAmount);
+      setPendingDestination(destination);
       setConfirmingAccountChange(true);
       return;
     }
-    await performSubmit(parsedAmount);
+    await performSubmit(parsedAmount, destination);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await validateAndSubmit("entries");
+  }
+
+  async function handleCreateRecurringClick() {
+    await validateAndSubmit("recurring-new");
   }
 
   async function handleDelete() {
@@ -314,7 +365,10 @@ function EditEntry() {
               <div className="flex items-center gap-2">
                 <select
                   value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  onChange={(e) => {
+                    setDirty(true);
+                    setSelectedAccountId(e.target.value);
+                  }}
                   className={`${inputClass} flex-1`}
                 >
                   {accountOptions.map((a) => (
@@ -384,9 +438,15 @@ function EditEntry() {
               {t("entries.form.amount", { currency: account?.currency ?? "" })}
               <SignedAmountInput
                 magnitude={transactionAmount}
-                onMagnitudeChange={setTransactionAmount}
+                onMagnitudeChange={(v) => {
+                  setDirty(true);
+                  setTransactionAmount(v);
+                }}
                 negative={transactionNegative}
-                onNegativeChange={setTransactionNegative}
+                onNegativeChange={(v) => {
+                  setDirty(true);
+                  setTransactionNegative(v);
+                }}
                 currency={account?.currency ?? ""}
                 invalid={invalidField === "amount"}
               />
@@ -403,7 +463,10 @@ function EditEntry() {
               {t("entries.form.amount", { currency: account?.currency ?? "" })}
               <input
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  setDirty(true);
+                  setAmount(e.target.value);
+                }}
                 inputMode="decimal"
                 className={inputClass}
                 required
@@ -421,7 +484,10 @@ function EditEntry() {
             <input
               type="datetime-local"
               value={bookingTimestamp}
-              onChange={(e) => setBookingTimestamp(e.target.value)}
+              onChange={(e) => {
+                setDirty(true);
+                setBookingTimestamp(e.target.value);
+              }}
               className={inputClass}
               required
             />
@@ -431,7 +497,10 @@ function EditEntry() {
             {t("entries.form.title")}
             <input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setDirty(true);
+                setTitle(e.target.value);
+              }}
               className={inputClass}
               required
             />
@@ -446,7 +515,10 @@ function EditEntry() {
             {t("entries.form.description")}
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDirty(true);
+                setDescription(e.target.value);
+              }}
               className={`${inputClass} min-h-16`}
             />
           </label>
@@ -455,7 +527,10 @@ function EditEntry() {
             {t("entries.form.category")}
             <select
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              onChange={(e) => {
+                setDirty(true);
+                setCategoryId(e.target.value);
+              }}
               className={inputClass}
             >
               <option value="">
@@ -492,7 +567,10 @@ function EditEntry() {
                 <input
                   list="counterparty-suggestions"
                   value={counterparty}
-                  onChange={(e) => setCounterparty(e.target.value)}
+                  onChange={(e) => {
+                    setDirty(true);
+                    setCounterparty(e.target.value);
+                  }}
                   placeholder={t("entries.form.counterpartyPlaceholder")}
                   className={inputClass}
                 />
@@ -507,7 +585,10 @@ function EditEntry() {
                 {t("entries.form.location")}
                 <LocationField
                   value={location}
-                  onChange={setLocation}
+                  onChange={(v) => {
+                    setDirty(true);
+                    setLocation(v);
+                  }}
                   inputClassName={inputClass}
                 />
               </div>
@@ -523,30 +604,62 @@ function EditEntry() {
                 entry that already carries it. */}
             <TagInput
               value={tagNames}
-              onChange={setTagNames}
+              onChange={(v) => {
+                setDirty(true);
+                setTagNames(v);
+              }}
               existingTags={tags.filter(
                 (tg) => !tg.disabled && tg.permission !== "view",
               )}
             />
           </div>
 
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
+          <div className="flex flex-col gap-1.5 text-sm font-medium">
             {t("entries.form.linkedRecurringTransaction")}
-            <select
-              value={recurringTransactionId}
-              onChange={(e) => setRecurringTransactionId(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">
-                {t("entries.form.linkedRecurringTransactionNone")}
-              </option>
-              {recurringOptions.map((rt) => (
-                <option key={rt.id} value={rt.id}>
-                  {rt.title}
+            <div className="flex items-center gap-2">
+              <select
+                value={recurringTransactionId}
+                onChange={(e) => {
+                  setDirty(true);
+                  setRecurringTransactionId(e.target.value);
+                }}
+                className={`${inputClass} flex-1`}
+              >
+                <option value="">
+                  {t("entries.form.linkedRecurringTransactionNone")}
                 </option>
-              ))}
-            </select>
-          </label>
+                {recurringOptions.map((rt) => (
+                  <option key={rt.id} value={rt.id}>
+                    {rt.title}
+                  </option>
+                ))}
+              </select>
+              {canEdit &&
+                entry.kind === "transaction" &&
+                (dirty ? (
+                  <button
+                    type="button"
+                    onClick={handleCreateRecurringClick}
+                    disabled={submitting}
+                    aria-label={t("entries.edit.saveAndCreateRecurring")}
+                    title={t("entries.edit.saveAndCreateRecurring")}
+                    className="rounded-md border border-black/15 p-2 text-zinc-600 transition-colors hover:bg-black/[.04] disabled:opacity-60 dark:border-white/15 dark:text-zinc-400 dark:hover:bg-white/[.06]"
+                  >
+                    <PlusGlyph />
+                  </button>
+                ) : (
+                  <Link
+                    to="/recurring/new"
+                    search={{ from_entry_id: entryId }}
+                    aria-label={t("entries.edit.createRecurring")}
+                    title={t("entries.edit.createRecurring")}
+                    className="rounded-md border border-black/15 p-2 text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/15 dark:text-zinc-400 dark:hover:bg-white/[.06]"
+                  >
+                    <PlusGlyph />
+                  </Link>
+                ))}
+            </div>
+          </div>
 
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -642,7 +755,8 @@ function EditEntry() {
               <button
                 type="button"
                 onClick={() => {
-                  if (pendingAmount !== null) void performSubmit(pendingAmount);
+                  if (pendingAmount !== null)
+                    void performSubmit(pendingAmount, pendingDestination);
                 }}
                 className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
               >

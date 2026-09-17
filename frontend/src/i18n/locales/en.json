@@ -434,7 +434,9 @@
       "confirmDeleteBody": "This cannot be undone here.",
       "confirmAccountChangeTitle": "Move this entry?",
       "confirmAccountChangeBody": "This entry will move to \"{{account}}\".",
-      "confirmAccountChangeConfirm": "Move entry"
+      "confirmAccountChangeConfirm": "Move entry",
+      "createRecurring": "Create recurring transaction",
+      "saveAndCreateRecurring": "Save and create recurring transaction"
     },
     "location": {
       "previewTitle": "Location",
