@@ -528,7 +528,10 @@ function ReportsPage() {
                         recurringTransactionId={entry.recurring_transaction_id}
                         onOpen={openRecurring}
                       />
-                      <SelfTransferBadge entryId={entry.id} kind={entry.kind} />
+                      <SelfTransferBadge
+                        kind={entry.kind}
+                        onOpen={() => openEntry(entry)}
+                      />
                     </td>
                     <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
                       {(() => {

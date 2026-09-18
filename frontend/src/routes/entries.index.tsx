@@ -682,7 +682,10 @@ function EntriesListPage() {
                     recurringTransactionId={entry.recurring_transaction_id}
                     onOpen={openRecurring}
                   />
-                  <SelfTransferBadge entryId={entry.id} kind={entry.kind} />
+                  <SelfTransferBadge
+                    kind={entry.kind}
+                    onOpen={() => openEntry(entry)}
+                  />
                   {entry.counterparty && (
                     <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                       {entry.counterparty}
