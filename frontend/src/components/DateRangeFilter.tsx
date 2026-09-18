@@ -26,6 +26,12 @@ type DateRangeFilterProps = {
   onChange: (patch: DateRangeValue) => void;
   fromLabel: string;
   toLabel: string;
+  /** Stretch the trigger to its container's width instead of sizing it to
+   * the summary text — for a caller laying its filters out in a grid,
+   * where a content-width trigger is the odd one out beside the
+   * full-width `select`s. Off by default, so the flex-wrap filter rows
+   * that predate the grid keep their content-width trigger. */
+  fullWidth?: boolean | undefined;
 };
 
 /**
@@ -45,6 +51,7 @@ export function DateRangeFilter({
   onChange,
   fromLabel,
   toLabel,
+  fullWidth = false,
 }: DateRangeFilterProps) {
   const { t } = useTranslation();
   const today = new Date();
@@ -105,7 +112,7 @@ export function DateRangeFilter({
       {t("dateRangeFilter.label")}
       <Popover className="relative">
         <PopoverButton
-          className={`${inputClass} flex min-w-40 items-center gap-2 text-left data-[open]:border-black/40 dark:data-[open]:border-white/40`}
+          className={`${inputClass} flex min-w-40 items-center gap-2 text-left data-[open]:border-black/40 dark:data-[open]:border-white/40 ${fullWidth ? "w-full" : ""}`}
         >
           <span className="flex-1 truncate text-zinc-900 dark:text-zinc-100">
             {summary}

@@ -379,7 +379,12 @@
       "allKinds": "Alle Arten",
       "from": "Von",
       "to": "Bis",
-      "search": "Suche"
+      "search": "Suche",
+      "clearSearch": "Suche leeren",
+      "heading": "Filter",
+      "activeCount_one": "{{count}} Filter aktiv",
+      "activeCount_other": "{{count}} Filter aktiv",
+      "clearAll": "Alle Filter löschen"
     },
     "kind": {
       "transaction": "Transaktion",

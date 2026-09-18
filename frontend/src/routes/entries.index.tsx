@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -90,6 +91,28 @@ function hasFilterParams(search: EntriesSearch): boolean {
   );
 }
 
+/**
+ * How many filters the visitor has actually applied, for the filter
+ * panel's badge and for deciding whether "Clear all filters" is offered.
+ * One per control: the date range counts once however many of `range`,
+ * `from`, and `to` carry it, and the implicit "Last 2 weeks" default
+ * isn't in the URL so it never counts. Sort isn't a filter and is
+ * excluded here and from clearing.
+ */
+function activeFilterCount(search: EntriesSearch): number {
+  return [
+    search.account_id !== undefined,
+    search.category_id !== undefined,
+    search.tag_id !== undefined,
+    search.kind !== undefined,
+    search.range !== undefined ||
+      search.from !== undefined ||
+      search.to !== undefined,
+    search.q !== undefined,
+    search.show_recurring === true,
+  ].filter(Boolean).length;
+}
+
 /** True only for the transient "resolve ?last=true" tick — last present
  * and nothing else, the one case this page redirects on rather than
  * rendering/persisting as-is. */
@@ -144,7 +167,7 @@ function toRangeEnd(date: string): string {
 }
 
 const inputClass =
-  "rounded-md border border-black/15 bg-transparent px-2.5 py-1.5 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
+  "w-full rounded-md border border-black/15 bg-transparent px-2.5 py-1.5 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
 
 function EntriesListPage() {
   const search = Route.useSearch();
@@ -189,6 +212,11 @@ function EntriesListPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const qDebounceRef = useRef<number | undefined>(undefined);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // Whether the filter panel is expanded below `sm`. Deliberately not
+  // persisted: the header's active-filter badge is what tells a visitor
+  // the ledger is filtered, so a closed panel hides nothing.
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -363,6 +391,25 @@ function EntriesListPage() {
     navigate({ search: (prev) => ({ ...prev, ...patch }) });
   }
 
+  // Drops every filter in one navigation, keeping the sort field and
+  // direction: sorting reorders the same result set rather than choosing
+  // it, so clearing it here would be a surprise.
+  function clearAllFilters() {
+    setQDraft("");
+    window.clearTimeout(qDebounceRef.current);
+    navigate({ search: { sort: search.sort, dir: search.dir } });
+  }
+
+  // Empties the search field now rather than after the 300ms debounce —
+  // and cancels the pending timeout, which would otherwise fire and
+  // re-apply the text that was just cleared.
+  function clearSearch() {
+    window.clearTimeout(qDebounceRef.current);
+    setQDraft("");
+    patchSearch({ q: undefined });
+    searchInputRef.current?.focus();
+  }
+
   function toggleSort(column: Sort) {
     if (
       search.sort === column ||
@@ -375,6 +422,7 @@ function EntriesListPage() {
   }
 
   const categoryOptions = flattenCategoryTree(categories);
+  const activeFilters = activeFilterCount(search);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const tagById = new Map(tags.map((tg) => [tg.id, tg]));
   const { openEntry, openRecurring, summaryModals } = useSummaryModals({
@@ -401,128 +449,195 @@ function EntriesListPage() {
           <Link
             to="/entries/new"
             search={search.account_id ? { account_id: search.account_id } : {}}
-            className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+            aria-label={t("entries.create")}
+            title={t("entries.create")}
+            className="flex items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
-            {t("entries.create")}
+            <Plus size={16} aria-hidden="true" />
+            <span className="hidden sm:inline">{t("entries.create")}</span>
           </Link>
         </div>
       </header>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("entries.filters.account")}
-          <select
-            className={inputClass}
-            value={search.account_id ?? ""}
-            onChange={(e) =>
-              patchSearch({ account_id: e.target.value || undefined })
-            }
+      <div className="flex flex-col gap-3 rounded-lg border border-black/10 p-3 dark:border-white/10">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+            aria-controls="entry-filter-controls"
+            className="flex items-center gap-2 text-sm font-medium sm:hidden"
           >
-            <option value="">{t("entries.filters.allAccounts")}</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.title}
+            {t("entries.filters.heading")}
+            {activeFilters > 0 && (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="rounded-full bg-zinc-900 px-1.5 py-0.5 text-xs leading-none text-white dark:bg-white dark:text-zinc-900"
+                >
+                  {activeFilters}
+                </span>
+                <span className="sr-only">
+                  {t("entries.filters.activeCount", { count: activeFilters })}
+                </span>
+              </>
+            )}
+            <ChevronDown
+              size={14}
+              aria-hidden="true"
+              className={`text-zinc-400 transition-transform dark:text-zinc-500 ${filtersOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          <span className="hidden text-sm font-medium sm:inline">
+            {t("entries.filters.heading")}
+          </span>
+          {activeFilters > 0 && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="rounded-md border border-black/15 px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/15 dark:text-zinc-300 dark:hover:bg-white/[.06]"
+            >
+              {t("entries.filters.clearAll")}
+            </button>
+          )}
+        </div>
+
+        <div
+          id="entry-filter-controls"
+          className={`${filtersOpen ? "grid" : "hidden"} grid-cols-1 items-end gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-3`}
+        >
+          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            {t("entries.filters.account")}
+            <select
+              className={inputClass}
+              value={search.account_id ?? ""}
+              onChange={(e) =>
+                patchSearch({ account_id: e.target.value || undefined })
+              }
+            >
+              <option value="">{t("entries.filters.allAccounts")}</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.title}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            {t("entries.filters.category")}
+            <select
+              className={inputClass}
+              value={search.category_id ?? ""}
+              onChange={(e) =>
+                patchSearch({ category_id: e.target.value || undefined })
+              }
+            >
+              <option value="">{t("entries.filters.allCategories")}</option>
+              {categoryOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                  {c.shared &&
+                    ` — ${t("categories.shared.badgeTitle", { owner: c.ownerName ?? "" })}`}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            {t("entries.filters.tag")}
+            <select
+              className={inputClass}
+              value={search.tag_id ?? ""}
+              onChange={(e) =>
+                patchSearch({ tag_id: e.target.value || undefined })
+              }
+            >
+              <option value="">{t("entries.filters.allTags")}</option>
+              {tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                  {tag.shared &&
+                    ` — ${t("tags.shared.badgeTitle", { owner: tag.owner_name ?? "" })}`}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            {t("entries.filters.kind")}
+            <select
+              className={inputClass}
+              value={search.kind ?? ""}
+              onChange={(e) =>
+                patchSearch({
+                  kind: (e.target.value || undefined) as EntryKind | undefined,
+                })
+              }
+            >
+              <option value="">{t("entries.filters.allKinds")}</option>
+              <option value="transaction">
+                {t("entries.kind.transaction")}
               </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("entries.filters.category")}
-          <select
-            className={inputClass}
-            value={search.category_id ?? ""}
-            onChange={(e) =>
-              patchSearch({ category_id: e.target.value || undefined })
-            }
-          >
-            <option value="">{t("entries.filters.allCategories")}</option>
-            {categoryOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-                {c.shared &&
-                  ` — ${t("categories.shared.badgeTitle", { owner: c.ownerName ?? "" })}`}
+              <option value="balance_adjustment">
+                {t("entries.kind.balanceAdjustment")}
               </option>
-            ))}
-          </select>
-        </label>
+            </select>
+          </label>
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("entries.filters.tag")}
-          <select
-            className={inputClass}
-            value={search.tag_id ?? ""}
-            onChange={(e) =>
-              patchSearch({ tag_id: e.target.value || undefined })
-            }
-          >
-            <option value="">{t("entries.filters.allTags")}</option>
-            {tags.map((tag) => (
-              <option key={tag.id} value={tag.id}>
-                {tag.name}
-                {tag.shared &&
-                  ` — ${t("tags.shared.badgeTitle", { owner: tag.owner_name ?? "" })}`}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("entries.filters.kind")}
-          <select
-            className={inputClass}
-            value={search.kind ?? ""}
-            onChange={(e) =>
-              patchSearch({
-                kind: (e.target.value || undefined) as EntryKind | undefined,
-              })
-            }
-          >
-            <option value="">{t("entries.filters.allKinds")}</option>
-            <option value="transaction">{t("entries.kind.transaction")}</option>
-            <option value="balance_adjustment">
-              {t("entries.kind.balanceAdjustment")}
-            </option>
-          </select>
-        </label>
-
-        <DateRangeFilter
-          value={{ range: search.range, from: search.from, to: search.to }}
-          weekStart={weekStart}
-          defaultPreset={DEFAULT_RANGE_PRESET}
-          onChange={(patch) => patchSearch(patch)}
-          fromLabel={t("entries.filters.from")}
-          toLabel={t("entries.filters.to")}
-        />
-
-        <label className="flex items-center gap-2 pb-1.5 text-sm">
-          <input
-            type="checkbox"
-            checked={search.show_recurring ?? false}
-            onChange={(e) =>
-              patchSearch({ show_recurring: e.target.checked || undefined })
-            }
+          <DateRangeFilter
+            value={{ range: search.range, from: search.from, to: search.to }}
+            weekStart={weekStart}
+            defaultPreset={DEFAULT_RANGE_PRESET}
+            onChange={(patch) => patchSearch(patch)}
+            fromLabel={t("entries.filters.from")}
+            toLabel={t("entries.filters.to")}
+            fullWidth
           />
-          {t("recurringPreview.toggleLabel")}
-        </label>
 
-        <label className="flex flex-1 flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("entries.filters.search")}
-          <input
-            type="search"
-            className={inputClass}
-            value={qDraft}
-            onChange={(e) => {
-              const value = e.target.value;
-              setQDraft(value);
-              window.clearTimeout(qDebounceRef.current);
-              qDebounceRef.current = window.setTimeout(
-                () => patchSearch({ q: value || undefined }),
-                300,
-              );
-            }}
-          />
-        </label>
+          <label className="flex items-center gap-2 pb-1.5 text-sm">
+            <input
+              type="checkbox"
+              checked={search.show_recurring ?? false}
+              onChange={(e) =>
+                patchSearch({ show_recurring: e.target.checked || undefined })
+              }
+            />
+            {t("recurringPreview.toggleLabel")}
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 sm:col-span-2 lg:col-span-3 dark:text-zinc-400">
+            {t("entries.filters.search")}
+            <div className="relative">
+              <input
+                ref={searchInputRef}
+                type="search"
+                className={`${inputClass} pr-8 [&::-webkit-search-cancel-button]:hidden`}
+                value={qDraft}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setQDraft(value);
+                  window.clearTimeout(qDebounceRef.current);
+                  qDebounceRef.current = window.setTimeout(
+                    () => patchSearch({ q: value || undefined }),
+                    300,
+                  );
+                }}
+              />
+              {qDraft !== "" && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  aria-label={t("entries.filters.clearSearch")}
+                  title={t("entries.filters.clearSearch")}
+                  className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-zinc-400 transition-colors hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-200"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          </label>
+        </div>
       </div>
 
       {showUpcoming && (
