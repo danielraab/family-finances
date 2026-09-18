@@ -47,6 +47,7 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("GET /api/entries/{id}", h.get)
 	h.mux.HandleFunc("PATCH /api/entries/{id}", h.update)
 	h.mux.HandleFunc("DELETE /api/entries/{id}", h.delete)
+	h.mux.HandleFunc("POST /api/entries/{id}/self-transfer", h.convertToSelfTransfer)
 	h.mux.HandleFunc("GET /api/accounts/{id}/balance", h.balance)
 
 	return h
@@ -189,6 +190,35 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type entryConvertToSelfTransferBody struct {
+	ToAccountID         *string `json:"to_account_id"`
+	OriginalAccountRole *string `json:"original_account_role"`
+}
+
+func (h *Handler) convertToSelfTransfer(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+	var body entryConvertToSelfTransferBody
+	if err := decodeJSON(r, &body); err != nil {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+	if body.ToAccountID == nil || body.OriginalAccountRole == nil {
+		h.renderError(w, r, ErrInvalidValue)
+		return
+	}
+
+	e, err := h.svc.ConvertToSelfTransfer(r.Context(), user.ID, r.PathValue("id"), *body.ToAccountID, OriginalAccountRole(*body.OriginalAccountRole))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, e)
 }
 
 // parseCommonFilter parses the account_id, category_id/category_mode,

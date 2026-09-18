@@ -702,6 +702,77 @@ func TestHandlerSelfTransferUpdateForbiddenAfterLosingAccessToOtherSide(t *testi
 	conforms(t, "DELETE", "/api/entries/"+created.ID, rec)
 }
 
+func TestHandlerConvertToSelfTransfer(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("a", "u1", "EUR")
+	accounts.add("b", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	body := `{"account_id":"a","kind":"transaction","amount":-1000,"booking_timestamp":"2024-01-01T00:00:00Z","title":"Groceries","category_id":"cat1"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", rec.Code, rec.Body)
+	}
+	var original entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &original); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = httptest.NewRecorder()
+	convertBody := `{"to_account_id":"b","original_account_role":"sender"}`
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries/"+original.ID+"/self-transfer", strings.NewReader(convertBody)), user))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("convert status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "POST", "/api/entries/"+original.ID+"/self-transfer", rec)
+	var converted entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &converted); err != nil {
+		t.Fatal(err)
+	}
+	if converted.Kind != entry.KindSelfTransfer || converted.ID == original.ID {
+		t.Fatalf("converted = %+v", converted)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries/"+original.ID, nil), user))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("get original status = %d, want 404", rec.Code)
+	}
+}
+
+func TestHandlerConvertToSelfTransferRequiresAuth(t *testing.T) {
+	h, _, _ := newHandlerFixture()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/entries/1/self-transfer", strings.NewReader(`{}`)))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestHandlerConvertToSelfTransferRejectsMissingFields(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("a", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	body := `{"account_id":"a","kind":"transaction","amount":-1000,"booking_timestamp":"2024-01-01T00:00:00Z","title":"Groceries","category_id":"cat1"}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	var original entry.Entry
+	if err := json.Unmarshal(rec.Body.Bytes(), &original); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/entries/"+original.ID+"/self-transfer", strings.NewReader(`{}`)), user))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "POST", "/api/entries/"+original.ID+"/self-transfer", rec)
+}
+
 func TestHandlerEntryCounterpartiesEmptyForUserWithNone(t *testing.T) {
 	h, _, _ := newHandlerFixture()
 	user := auth.User{ID: "u1"}

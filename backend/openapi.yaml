@@ -2019,6 +2019,60 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/entries/{id}/self-transfer:
+    post:
+      operationId: postEntrySelfTransfer
+      summary: Convert a transaction into a self-transfer
+      description: >-
+        Converts an existing kind: transaction entry into a new kind:
+        self_transfer entry, atomically: the original entry is soft-deleted
+        and a new entry is created in its place, in one database
+        transaction, with the balance-adjustment chain recomputed for every
+        account touched. The response's id differs from the path's id — the
+        original entry's id is not reused, and GET/PATCH/DELETE on it
+        afterward behave as if it were deleted, because it was.
+
+        title, description, booking_timestamp, tag_ids, and category_id
+        carry over unchanged. counterparty and location are dropped — a
+        self_transfer rejects both, the same as it does on ordinary
+        creation. recurring_transaction_id carries over only when
+        original_account_role is "sender"; when it is "receiver", the link
+        is dropped rather than re-pointed at an account it was never
+        actually validated against.
+
+        Authorization: 404 when the caller has no permission at all on the
+        entry's account. Otherwise, the same rule POST /api/entries with
+        kind: self_transfer already applies to its account_id/to_account_id
+        pair is applied here to (the entry's own account, to_account_id):
+        append+ permission and non-disabled state required on both (400 for
+        insufficient permission, 422 for a disabled account), and both must
+        share the same currency (400 otherwise). Converting an entry whose
+        kind is not transaction is rejected (400).
+      tags: [entries]
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryConvertToSelfTransfer"
+      responses:
+        "201":
+          description: The newly created self_transfer entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
   /api/recurring-transactions:
     get:
       operationId: getRecurringTransactions
@@ -3579,6 +3633,33 @@ components:
             Must name a recurring transaction on the same account_id as this
             entry (its current one, or the account_id also set in this same
             request). Explicit null clears the link.
+
+    EntryConvertToSelfTransfer:
+      type: object
+      required: [to_account_id, original_account_role]
+      description: >-
+        Request body for POST /api/entries/{id}/self-transfer — see that
+        operation's description for the full carry-over and authorization
+        rules.
+      properties:
+        to_account_id:
+          type: string
+          description: >-
+            The counterparty account. Must differ from the entry's own
+            account_id, share its currency, and be one the caller holds
+            append+ permission on and that is not disabled.
+        original_account_role:
+          type: string
+          enum: [sender, receiver]
+          description: >-
+            Which role the entry's own account plays in the resulting
+            self-transfer. "sender": the entry's own account keeps
+            account_id, amount unchanged, to_account_id gets to_account_id
+            above; recurring_transaction_id carries over. "receiver": the
+            entry's own account becomes to_account_id, to_account_id above
+            becomes account_id, amount is negated so the entry's own
+            account's real economic effect is unchanged; any
+            recurring_transaction_id is dropped rather than carried over.
 
     EntryPage:
       type: object

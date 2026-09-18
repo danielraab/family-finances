@@ -720,6 +720,28 @@ export interface paths {
         patch: operations["patchEntry"];
         trace?: never;
     };
+    "/api/entries/{id}/self-transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert a transaction into a self-transfer
+         * @description Converts an existing kind: transaction entry into a new kind: self_transfer entry, atomically: the original entry is soft-deleted and a new entry is created in its place, in one database transaction, with the balance-adjustment chain recomputed for every account touched. The response's id differs from the path's id — the original entry's id is not reused, and GET/PATCH/DELETE on it afterward behave as if it were deleted, because it was.
+         *     title, description, booking_timestamp, tag_ids, and category_id carry over unchanged. counterparty and location are dropped — a self_transfer rejects both, the same as it does on ordinary creation. recurring_transaction_id carries over only when original_account_role is "sender"; when it is "receiver", the link is dropped rather than re-pointed at an account it was never actually validated against.
+         *     Authorization: 404 when the caller has no permission at all on the entry's account. Otherwise, the same rule POST /api/entries with kind: self_transfer already applies to its account_id/to_account_id pair is applied here to (the entry's own account, to_account_id): append+ permission and non-disabled state required on both (400 for insufficient permission, 422 for a disabled account), and both must share the same currency (400 otherwise). Converting an entry whose kind is not transaction is rejected (400).
+         */
+        post: operations["postEntrySelfTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/entries/balance-series": {
         parameters: {
             query?: never;
@@ -1364,6 +1386,16 @@ export interface components {
             to_account_name?: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description Request body for POST /api/entries/{id}/self-transfer — see that operation's description for the full carry-over and authorization rules. */
+        EntryConvertToSelfTransfer: {
+            /**
+             * @description Which role the entry's own account plays in the resulting self-transfer. "sender": the entry's own account keeps account_id, amount unchanged, to_account_id gets to_account_id above; recurring_transaction_id carries over. "receiver": the entry's own account becomes to_account_id, to_account_id above becomes account_id, amount is negated so the entry's own account's real economic effect is unchanged; any recurring_transaction_id is dropped rather than carried over.
+             * @enum {string}
+             */
+            original_account_role: "sender" | "receiver";
+            /** @description The counterparty account. Must differ from the entry's own account_id, share its currency, and be one the caller holds append+ permission on and that is not disabled. */
+            to_account_id: string;
         };
         /** @description amount is required when kind is transaction or self_transfer and rejected when kind is balance_adjustment; balance is required when kind is balance_adjustment and rejected otherwise — exactly one of the two, per kind (400). counterparty and location are accepted only when kind is transaction, rejected (400) otherwise. to_account_id is required when kind is self_transfer and rejected otherwise (400); it must differ from account_id and name an account the caller holds append+ permission on, sharing account_id's currency (400 otherwise) — the same rules account_id itself must already satisfy — and that is not disabled (422). */
         EntryCreate: {
@@ -3112,6 +3144,36 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    postEntrySelfTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntryConvertToSelfTransfer"];
+            };
+        };
+        responses: {
+            /** @description The newly created self_transfer entry. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
         };

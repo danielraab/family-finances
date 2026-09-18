@@ -35,6 +35,7 @@ import { Route as AccountsAccountIdEditRouteImport } from './routes/accounts.$ac
 import { Route as AccountsAccountIdSharingRouteImport } from './routes/accounts.$accountId.sharing'
 import { Route as CategoriesCategoryIdSharingRouteImport } from './routes/categories_.$categoryId.sharing'
 import { Route as EntriesEntryIdEditRouteImport } from './routes/entries.$entryId.edit'
+import { Route as EntriesEntryIdSelfTransferRouteImport } from './routes/entries.$entryId.self-transfer'
 import { Route as RecurringIdEditRouteImport } from './routes/recurring.$id.edit'
 import { Route as TagsTagIdSharingRouteImport } from './routes/tags_.$tagId.sharing'
 
@@ -170,6 +171,12 @@ const EntriesEntryIdEditRoute = EntriesEntryIdEditRouteImport.update({
   path: '/$entryId/edit',
   getParentRoute: () => EntriesRoute,
 } as any)
+const EntriesEntryIdSelfTransferRoute =
+  EntriesEntryIdSelfTransferRouteImport.update({
+    id: '/$entryId/self-transfer',
+    path: '/$entryId/self-transfer',
+    getParentRoute: () => EntriesRoute,
+  } as any)
 const RecurringIdEditRoute = RecurringIdEditRouteImport.update({
   id: '/$id/edit',
   path: '/$id/edit',
@@ -207,6 +214,7 @@ export interface FileRoutesByFullPath {
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/categories/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/entries/$entryId/self-transfer': typeof EntriesEntryIdSelfTransferRoute
   '/recurring/$id/edit': typeof RecurringIdEditRoute
   '/tags/$tagId/sharing': typeof TagsTagIdSharingRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
@@ -232,6 +240,7 @@ export interface FileRoutesByTo {
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/categories/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/entries/$entryId/self-transfer': typeof EntriesEntryIdSelfTransferRoute
   '/recurring/$id/edit': typeof RecurringIdEditRoute
   '/tags/$tagId/sharing': typeof TagsTagIdSharingRoute
   '/accounts/$accountId': typeof AccountsAccountIdIndexRoute
@@ -263,6 +272,7 @@ export interface FileRoutesById {
   '/accounts/$accountId/sharing': typeof AccountsAccountIdSharingRoute
   '/categories_/$categoryId/sharing': typeof CategoriesCategoryIdSharingRoute
   '/entries/$entryId/edit': typeof EntriesEntryIdEditRoute
+  '/entries/$entryId/self-transfer': typeof EntriesEntryIdSelfTransferRoute
   '/recurring/$id/edit': typeof RecurringIdEditRoute
   '/tags_/$tagId/sharing': typeof TagsTagIdSharingRoute
   '/accounts/$accountId/': typeof AccountsAccountIdIndexRoute
@@ -295,6 +305,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/sharing'
     | '/categories/$categoryId/sharing'
     | '/entries/$entryId/edit'
+    | '/entries/$entryId/self-transfer'
     | '/recurring/$id/edit'
     | '/tags/$tagId/sharing'
     | '/accounts/$accountId/'
@@ -320,6 +331,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/sharing'
     | '/categories/$categoryId/sharing'
     | '/entries/$entryId/edit'
+    | '/entries/$entryId/self-transfer'
     | '/recurring/$id/edit'
     | '/tags/$tagId/sharing'
     | '/accounts/$accountId'
@@ -350,6 +362,7 @@ export interface FileRouteTypes {
     | '/accounts/$accountId/sharing'
     | '/categories_/$categoryId/sharing'
     | '/entries/$entryId/edit'
+    | '/entries/$entryId/self-transfer'
     | '/recurring/$id/edit'
     | '/tags_/$tagId/sharing'
     | '/accounts/$accountId/'
@@ -554,6 +567,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntriesEntryIdEditRouteImport
       parentRoute: typeof EntriesRoute
     }
+    '/entries/$entryId/self-transfer': {
+      id: '/entries/$entryId/self-transfer'
+      path: '/$entryId/self-transfer'
+      fullPath: '/entries/$entryId/self-transfer'
+      preLoaderRoute: typeof EntriesEntryIdSelfTransferRouteImport
+      parentRoute: typeof EntriesRoute
+    }
     '/recurring/$id/edit': {
       id: '/recurring/$id/edit'
       path: '/$id/edit'
@@ -607,6 +627,7 @@ interface EntriesRouteChildren {
   EntriesNewRoute: typeof EntriesNewRoute
   EntriesIndexRoute: typeof EntriesIndexRoute
   EntriesEntryIdEditRoute: typeof EntriesEntryIdEditRoute
+  EntriesEntryIdSelfTransferRoute: typeof EntriesEntryIdSelfTransferRoute
 }
 
 const EntriesRouteChildren: EntriesRouteChildren = {
@@ -614,6 +635,7 @@ const EntriesRouteChildren: EntriesRouteChildren = {
   EntriesNewRoute: EntriesNewRoute,
   EntriesIndexRoute: EntriesIndexRoute,
   EntriesEntryIdEditRoute: EntriesEntryIdEditRoute,
+  EntriesEntryIdSelfTransferRoute: EntriesEntryIdSelfTransferRoute,
 }
 
 const EntriesRouteWithChildren =

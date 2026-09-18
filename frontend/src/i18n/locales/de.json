@@ -443,7 +443,24 @@
       "confirmAccountChangeBody": "Diese Buchung wird nach „{{account}}“ verschoben.",
       "confirmAccountChangeConfirm": "Buchung verschieben",
       "createRecurring": "Wiederkehrende Buchung erstellen",
-      "saveAndCreateRecurring": "Speichern und wiederkehrende Buchung erstellen"
+      "saveAndCreateRecurring": "Speichern und wiederkehrende Buchung erstellen",
+      "transferToSelfTransfer": "Zu interner Überweisung umwandeln"
+    },
+    "convertSelfTransfer": {
+      "title": "Zu interner Überweisung umwandeln",
+      "description": "Wandle „{{title}}“ auf {{account}} in eine Überweisung zwischen zwei deiner Konten um. Die ursprüngliche Buchung wird ersetzt.",
+      "toAccount": "Gegenkonto",
+      "toAccountPlaceholder": "Konto auswählen…",
+      "toAccountRequired": "Ein Gegenkonto ist erforderlich.",
+      "role": "Welches Konto ist der Absender?",
+      "roleSender": "{{account}} ist der Absender",
+      "roleReceiver": "{{account}} ist der Empfänger",
+      "roleRequired": "Wähle, ob dieses Konto der Absender oder der Empfänger ist.",
+      "submit": "In interne Überweisung umwandeln",
+      "cancel": "Abbrechen",
+      "saveError": "Umwandlung fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut.",
+      "notAvailable": "Diese Buchung kann nicht in eine interne Überweisung umgewandelt werden.",
+      "backToEntry": "Zurück zur Buchung"
     },
     "location": {
       "previewTitle": "Ort",

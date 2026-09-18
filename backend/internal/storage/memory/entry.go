@@ -224,6 +224,73 @@ func (s *EntryStore) SoftDelete(_ context.Context, id string) error {
 	return nil
 }
 
+// ConvertToSelfTransfer implements entry.Store's ConvertToSelfTransfer:
+// soft-deletes id and inserts its self_transfer replacement, then
+// recomputes every account touched — mirrors
+// postgres.EntryStore.ConvertToSelfTransfer's Go-loop equivalent, including
+// its "id's own account may be recomputed twice, harmlessly" note.
+func (s *EntryStore) ConvertToSelfTransfer(_ context.Context, id, toAccountID string, role entry.OriginalAccountRole, createdBy string) (entry.Entry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row, ok := s.rows[id]
+	if !ok || row.e.DeletedAt != nil || row.e.Kind != entry.KindTransaction {
+		return entry.Entry{}, entry.ErrNotFound
+	}
+
+	oldAccountID := row.e.AccountID
+	oldTS := row.e.BookingTimestamp
+	oldSeq := row.seq
+	oldAmount := row.e.Amount
+
+	now := time.Now().UTC()
+	row.e.DeletedAt = &now
+	s.rows[id] = row
+
+	newAccountID, newToAccountID := oldAccountID, toAccountID
+	newAmount := oldAmount
+	newRecurringID := row.e.RecurringTransactionID
+	if role == entry.RoleReceiver {
+		newAccountID, newToAccountID = toAccountID, oldAccountID
+		newAmount = -oldAmount
+		newRecurringID = nil
+	}
+
+	var categoryID *string
+	if row.e.CategoryID != nil {
+		v := *row.e.CategoryID
+		categoryID = &v
+	}
+	tagIDs := make([]string, len(row.e.TagIDs))
+	copy(tagIDs, row.e.TagIDs)
+	toAcct := newToAccountID
+
+	s.seq++
+	newSeq := s.seq
+	newEntry := entry.Entry{
+		ID:                     strconv.FormatInt(newSeq, 10),
+		CreatedBy:              createdBy,
+		AccountID:              newAccountID,
+		ToAccountID:            &toAcct,
+		Kind:                   entry.KindSelfTransfer,
+		Amount:                 newAmount,
+		BookingTimestamp:       oldTS,
+		Title:                  row.e.Title,
+		Description:            row.e.Description,
+		CategoryID:             categoryID,
+		TagIDs:                 tagIDs,
+		CreatedAt:              now,
+		UpdatedAt:              now,
+		RecurringTransactionID: newRecurringID,
+	}
+	s.rows[newEntry.ID] = entryRow{e: newEntry, seq: newSeq}
+
+	s.recomputeFromLocked(oldAccountID, oldTS, oldSeq, 0)
+	s.recomputeFromLocked(newAccountID, oldTS, newSeq, 0)
+	s.recomputeFromLocked(newToAccountID, oldTS, newSeq, 0)
+
+	return s.rows[newEntry.ID].e, nil
+}
+
 // comparePos orders two (booking_timestamp, seq) positions: -1 if the first
 // sorts before the second, 1 if after, 0 if equal. seq is the insertion
 // sequence tie-break, mirroring entries.id in the real backend.

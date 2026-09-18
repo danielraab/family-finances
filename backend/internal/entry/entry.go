@@ -82,6 +82,30 @@ func (m CategoryMode) valid() bool {
 	return m == "" || m == ModeSubtree || m == ModeExact
 }
 
+// OriginalAccountRole is the caller's choice, on
+// POST /api/entries/{id}/self-transfer, of which role the entry being
+// converted's own account plays in the resulting self-transfer — see
+// Service.ConvertToSelfTransfer. It is never inferred from the entry's
+// existing amount sign, since a self_transfer's amount is valid either sign
+// on account_id (see design.md of add-self-transfer-conversion).
+type OriginalAccountRole string
+
+const (
+	// RoleSender: the entry's own account keeps the sender role
+	// (account_id, amount unchanged); the caller-chosen counterparty
+	// account becomes to_account_id.
+	RoleSender OriginalAccountRole = "sender"
+	// RoleReceiver: the entry's own account becomes the receiver
+	// (to_account_id); the caller-chosen counterparty account becomes
+	// account_id, and the amount is negated so the entry's own account's
+	// real economic effect is unchanged either way.
+	RoleReceiver OriginalAccountRole = "receiver"
+)
+
+func (r OriginalAccountRole) valid() bool {
+	return r == RoleSender || r == RoleReceiver
+}
+
 // Entry is a transaction or balance adjustment recorded against exactly one
 // account. CreatedBy is the user who logged it — not necessarily the
 // account's real owner, once account-sharing lets any permitted user

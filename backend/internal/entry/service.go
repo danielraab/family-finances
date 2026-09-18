@@ -350,6 +350,51 @@ func (s *Service) Delete(ctx context.Context, callerID, id string) error {
 	return s.store.SoftDelete(ctx, id)
 }
 
+// ConvertToSelfTransfer converts an existing KindTransaction entry (id) into
+// a new KindSelfTransfer entry, atomically — soft-deleting the original and
+// creating its replacement in one storage-layer transaction (see design.md
+// of add-self-transfer-conversion). Authorization: ErrNotFound when
+// callerID has no permission at all on the entry's account (the same
+// "behaves as not found" rule Get/Update already apply via
+// fetchWithVisibility); past that, exactly the rule Create already applies
+// to a self_transfer's two accounts — append+ and non-disabled on both the
+// entry's own account and toAccountID, both sharing the same currency — is
+// applied here, deliberately not the stricter, already-established "both
+// accounts already append+" rule Update applies to an existing
+// self_transfer, since there is no existing self_transfer yet at the point
+// this check runs. Converting a non-transaction entry, or naming
+// toAccountID as the entry's own account, is rejected (ErrInvalidValue).
+func (s *Service) ConvertToSelfTransfer(ctx context.Context, callerID, id, toAccountID string, role OriginalAccountRole) (Entry, error) {
+	if !role.valid() {
+		return Entry{}, ErrInvalidValue
+	}
+
+	current, _, _, err := s.fetchWithVisibility(ctx, callerID, id)
+	if err != nil {
+		return Entry{}, err
+	}
+	if current.Kind != KindTransaction {
+		return Entry{}, ErrInvalidValue
+	}
+	if toAccountID == current.AccountID {
+		return Entry{}, ErrInvalidValue
+	}
+
+	fromCurrency, err := s.checkAccountCurrency(ctx, callerID, current.AccountID)
+	if err != nil {
+		return Entry{}, err
+	}
+	toCurrency, err := s.checkAccountCurrency(ctx, callerID, toAccountID)
+	if err != nil {
+		return Entry{}, err
+	}
+	if fromCurrency != toCurrency {
+		return Entry{}, ErrInvalidValue
+	}
+
+	return s.store.ConvertToSelfTransfer(ctx, id, toAccountID, role, callerID)
+}
+
 // resolveFilter applies the account-visibility and category/tag resolution
 // shared by List and Sum: narrows f.AccountIDs to callerID's own visible
 // accounts (owned or shared, per account-sharing — intersected with any

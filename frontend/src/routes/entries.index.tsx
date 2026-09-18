@@ -52,10 +52,59 @@ type EntriesSearch = {
   sort?: Sort | undefined;
   dir?: Dir | undefined;
   show_recurring?: boolean | undefined;
+  // Not a real filter — a one-shot navigation instruction (see
+  // "returning to the entries list" below). Never combined with another
+  // filter param by anything in this app; if it somehow is, it's ignored
+  // and the explicit filter(s) apply as usual.
+  last?: boolean | undefined;
 };
 
 const PAGE_SIZE = 30;
 const DEFAULT_RANGE_PRESET = "last_2_weeks" as const;
+
+// The most recently applied filter/search/sort state, persisted per-browser
+// so a visitor returning via /entries?last=true (after saving an edit or
+// completing a self-transfer conversion) lands back where they were,
+// instead of the account_id-only redirect this used to be. See
+// web-client-entries' "Returning to the entry ledger restores the
+// last-applied filters" requirement.
+const LAST_FILTERS_KEY = "ff:entries-last-filters";
+
+/** Every EntriesSearch field except `last` itself. */
+type PersistedFilters = Omit<EntriesSearch, "last">;
+
+function hasFilterParams(search: EntriesSearch): boolean {
+  return (
+    search.account_id !== undefined ||
+    search.category_id !== undefined ||
+    search.tag_id !== undefined ||
+    search.kind !== undefined ||
+    search.range !== undefined ||
+    search.from !== undefined ||
+    search.to !== undefined ||
+    search.q !== undefined ||
+    search.sort !== undefined ||
+    search.dir !== undefined ||
+    search.show_recurring !== undefined
+  );
+}
+
+/** True only for the transient "resolve ?last=true" tick — last present
+ * and nothing else, the one case this page redirects on rather than
+ * rendering/persisting as-is. */
+function isPendingLastResolution(search: EntriesSearch): boolean {
+  return Boolean(search.last) && !hasFilterParams(search);
+}
+
+function loadPersistedFilters(): PersistedFilters {
+  try {
+    const raw = localStorage.getItem(LAST_FILTERS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as PersistedFilters;
+  } catch {
+    return {};
+  }
+}
 
 function asString(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" ? v : undefined;
@@ -81,6 +130,7 @@ export const Route = createFileRoute("/entries/")({
       typeof search["show_recurring"] === "boolean"
         ? search["show_recurring"]
         : undefined,
+    last: search["last"] === true ? true : undefined,
   }),
   component: EntriesListPage,
 });
@@ -150,6 +200,31 @@ function EntriesListPage() {
       setTags(tg.data ?? []);
     });
   }, []);
+
+  // Resolves a bare ?last=true (no other filter param) to the persisted
+  // filter state — or a bare /entries if nothing has been persisted yet —
+  // replacing the URL so the ?last=true hop doesn't linger in browser
+  // history. last alongside any other filter param is left alone; the
+  // explicit filters apply as usual (see isPendingLastResolution).
+  useEffect(() => {
+    if (!isPendingLastResolution(search)) return;
+    navigate({ search: loadPersistedFilters(), replace: true });
+  }, [search, navigate]);
+
+  // Persists the current filter/search/sort state on every real change, so
+  // a later /entries?last=true can restore it. Skipped on the transient
+  // "resolving ?last=true" tick above, so that redirect's own (empty, or
+  // stale) search never overwrites what was actually persisted.
+  useEffect(() => {
+    if (isPendingLastResolution(search)) return;
+    const { last: _last, ...persisted } = search;
+    try {
+      localStorage.setItem(LAST_FILTERS_KEY, JSON.stringify(persisted));
+    } catch {
+      // Unavailable (private browsing, blocked storage, …) — filters
+      // simply won't be restored next time; nothing else depends on this.
+    }
+  }, [search]);
 
   const searchKey = JSON.stringify({ ...search, weekStart });
 

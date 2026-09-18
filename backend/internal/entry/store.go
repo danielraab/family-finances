@@ -126,6 +126,26 @@ type Store interface {
 	// SoftDelete sets deleted_at. One-way — no undelete.
 	SoftDelete(ctx context.Context, id string) error
 
+	// ConvertToSelfTransfer soft-deletes id — expected to currently name a
+	// non-deleted KindTransaction entry — and creates a new
+	// KindSelfTransfer entry in its place, atomically: Title/Description/
+	// BookingTimestamp/CategoryID/TagIDs carry over unchanged; Counterparty/
+	// Location are dropped (a self_transfer rejects both); RecurringTransactionID
+	// carries over only when role is RoleSender (a recurring transaction
+	// link is only ever valid against the entry's own AccountID — see
+	// design.md of add-self-transfer-conversion). When role is RoleSender,
+	// id's own account keeps the sender role (AccountID, Amount unchanged)
+	// and toAccountID becomes the receiver (ToAccountID); when role is
+	// RoleReceiver, id's own account becomes the receiver (ToAccountID) and
+	// toAccountID becomes the sender (AccountID), Amount negated so id's
+	// own account's real economic effect is unchanged either way (see
+	// Entry's ToAccountID doc comment). createdBy is the new entry's
+	// creator — the caller performing the conversion, not necessarily id's
+	// original creator. Both accounts' balance-adjustment chains are
+	// recomputed. Returns ErrNotFound if id does not currently name a
+	// non-deleted KindTransaction entry.
+	ConvertToSelfTransfer(ctx context.Context, id, toAccountID string, role OriginalAccountRole, createdBy string) (Entry, error)
+
 	// List returns a page of entries matching filter (already resolved by
 	// Service — AccountIDs and CategoryIDs are the effective sets to
 	// filter by, already narrowed to the caller's visible accounts), plus

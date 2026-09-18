@@ -119,9 +119,14 @@ jobs:
           node-version: 26
       - name: Compute translation coverage
         id: coverage
+        # Exits 1 on a shortfall on purpose (so a local run fails visibly)
+        # — both follow-up steps below need `always()` in their own `if:`,
+        # or GitHub Actions implicitly ANDs their condition with success()
+        # and skips them outright whenever this step's exit code is
+        # non-zero, silently defeating the whole point of this job.
         run: node frontend/scripts/i18n-coverage.mjs
       - name: Comment on PR
-        if: steps.coverage.outputs.has_shortfall == 'true'
+        if: always() && steps.coverage.outputs.has_shortfall == 'true'
         uses: actions/github-script@v9
         with:
           script: |
@@ -153,7 +158,7 @@ jobs:
               });
             }
       - name: Remove stale PR comment
-        if: steps.coverage.outputs.has_shortfall == 'false'
+        if: always() && steps.coverage.outputs.has_shortfall == 'false'
         uses: actions/github-script@v9
         with:
           script: |
