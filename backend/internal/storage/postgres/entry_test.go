@@ -822,25 +822,35 @@ func TestPGEntryMigration0018BackfillPreservesBalances(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadMigrations: %v", err)
 	}
-	var pre, at0018, post []migration
+	var pre, at0018, post, postNeedingBalanceReading []migration
 	for _, m := range all {
-		if m.version < "0018" {
+		switch {
+		case m.version < "0018":
 			pre = append(pre, m)
-		} else if m.version == "0018" {
+		case m.version == "0018":
 			at0018 = append(at0018, m)
-		} else {
+		case m.version < "0030":
 			post = append(post, m)
+		default:
+			// 0030 (add-self-transfer) and any later migration reference
+			// balance_reading (entry_legs), so — unlike every migration
+			// between 0019 and 0029, which only add accounts/categories
+			// columns and never touch `entries` — they can't run until
+			// after 0018 itself has added that column.
+			postNeedingBalanceReading = append(postNeedingBalanceReading, m)
 		}
 	}
 	if len(at0018) != 1 {
 		t.Fatalf("found %d migrations at version 0018, want 1", len(at0018))
 	}
-	// Apply everything except 0018: the pre-0018 schema, plus every later
-	// migration (all of which only add accounts/categories columns and never
-	// touch `entries`), so the account/category store fixtures below run
-	// against the schema the current store code expects. `entries` still has
-	// its pre-0018 shape — no balance_reading column — which is what this
-	// test needs before it hand-inserts legacy-shape adjustment rows.
+	// Apply everything except 0018 and anything depending on its
+	// balance_reading column: the pre-0018 schema, plus every migration
+	// between 0019 and 0029 (all of which only add accounts/categories
+	// columns and never touch `entries`), so the account/category store
+	// fixtures below run against the schema the current store code expects.
+	// `entries` still has its pre-0018 shape — no balance_reading column —
+	// which is what this test needs before it hand-inserts legacy-shape
+	// adjustment rows.
 	if err := runMigrations(ctx, pool, pre); err != nil {
 		t.Fatalf("apply pre-0018 migrations: %v", err)
 	}
@@ -910,6 +920,9 @@ func TestPGEntryMigration0018BackfillPreservesBalances(t *testing.T) {
 
 	if err := runMigrations(ctx, pool, at0018); err != nil {
 		t.Fatalf("apply 0018: %v", err)
+	}
+	if err := runMigrations(ctx, pool, postNeedingBalanceReading); err != nil {
+		t.Fatalf("apply post-0030 migrations: %v", err)
 	}
 
 	entryStore := NewEntryStore(pool)

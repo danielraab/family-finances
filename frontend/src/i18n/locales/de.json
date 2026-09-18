@@ -237,6 +237,7 @@
       "currency": "Währung",
       "currencyPlaceholder": "Währung auswählen…",
       "currencyInvalid": "Die Währung muss aus drei Großbuchstaben bestehen (z. B. EUR).",
+      "currencyLocked": "Die Währung kann nicht mehr geändert werden, sobald das Konto Buchungen enthält.",
       "financialInstitute": "Finanzinstitut",
       "openingDate": "Eröffnungsdatum",
       "closingDate": "Schließungsdatum",
@@ -382,12 +383,16 @@
     },
     "kind": {
       "transaction": "Transaktion",
-      "balanceAdjustment": "Kontostandanpassung"
+      "balanceAdjustment": "Kontostandanpassung",
+      "selfTransfer": "Interne Überweisung"
     },
     "form": {
       "account": "Konto",
       "accountPlaceholder": "Konto auswählen…",
       "accountRequired": "Konto ist erforderlich.",
+      "toAccount": "Zielkonto",
+      "toAccountPlaceholder": "Empfangendes Konto auswählen…",
+      "toAccountRequired": "Ein empfangendes Konto ist erforderlich.",
       "kind": "Art",
       "amount": "Betrag ({{currency}})",
       "amountInvalid": "Gib einen gültigen Betrag ein.",
@@ -425,6 +430,7 @@
       "linkedRecurringTransactionNone": "Nicht verknüpft"
     },
     "recurringBadge": "Mit einer wiederkehrenden Buchung verknüpft",
+    "selfTransferBadge": "Interne Überweisung — Gegenseite anzeigen",
     "new": {
       "title": "Neue Buchung"
     },

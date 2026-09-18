@@ -3,7 +3,8 @@
 // quality), plus any keys it has that en.json doesn't ("extra"/orphaned).
 // en.json is the source of truth (see frontend/AGENTS.md). Run via
 // `node scripts/i18n-coverage.mjs`. CI runs this as a non-blocking report
-// (job summary + PR comment) — it never gates merging or other checks.
+// (job summary always, PR comment only when coverage is short — see the
+// `has_shortfall` output below) — it never gates merging or other checks.
 
 import { appendFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -108,6 +109,14 @@ const outFile = join(process.env.RUNNER_TEMP ?? tmpdir(), "i18n-coverage-report.
 writeFileSync(outFile, report);
 
 const shortfall = results.filter((r) => r.coverage < 100);
+
+// Lets the CI job's PR-comment step decide whether to post at all: full
+// coverage should stay silent rather than commenting "everything's fine".
+const outputPath = process.env.GITHUB_OUTPUT;
+if (outputPath) {
+  appendFileSync(outputPath, `has_shortfall=${shortfall.length > 0}\n`);
+}
+
 if (shortfall.length > 0) {
   console.error(
     `\nBelow 100% coverage: ${shortfall.map((r) => `${r.code} (${r.coverage.toFixed(1)}%)`).join(", ")}`,

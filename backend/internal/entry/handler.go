@@ -56,6 +56,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h.mux.Serv
 
 type entryCreateBody struct {
 	AccountID              *string    `json:"account_id"`
+	ToAccountID            *string    `json:"to_account_id"`
 	Kind                   *string    `json:"kind"`
 	Amount                 *int64     `json:"amount"`
 	Balance                *int64     `json:"balance"`
@@ -99,7 +100,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	in := New{CategoryID: body.CategoryID, TagIDs: body.TagIDs, Amount: body.Amount, Balance: body.Balance}
+	in := New{CategoryID: body.CategoryID, TagIDs: body.TagIDs, Amount: body.Amount, Balance: body.Balance, ToAccountID: body.ToAccountID}
 	if body.AccountID != nil {
 		in.AccountID = *body.AccountID
 	}

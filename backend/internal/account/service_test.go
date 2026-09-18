@@ -262,6 +262,79 @@ func TestListInUseTypesExcludesSoftDeletedAccounts(t *testing.T) {
 	}
 }
 
+// stubEntryLookup satisfies account.EntryLookup for testing the
+// currency-immutability rule without depending on internal/entry.
+type stubEntryLookup struct{ has bool }
+
+func (s stubEntryLookup) HasEntries(context.Context, string) (bool, error) { return s.has, nil }
+
+func TestUpdateRejectsCurrencyChangeWhenEntriesExist(t *testing.T) {
+	svc, _ := newService(t)
+	svc.SetEntryLookup(stubEntryLookup{has: true})
+	acc := newAccount(t, svc, "u1", "X", "Checking")
+
+	_, err := svc.Update(context.Background(), "u1", acc.ID, account.Update{Currency: ptr("USD")})
+	if !errors.Is(err, account.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateRejectsResubmittingTheSameCurrencyWhenEntriesExist(t *testing.T) {
+	svc, _ := newService(t)
+	svc.SetEntryLookup(stubEntryLookup{has: true})
+	acc := newAccount(t, svc, "u1", "X", "Checking")
+
+	// The rule is "has any entry," not "would this change anything" — even
+	// resubmitting the account's own current currency is rejected.
+	_, err := svc.Update(context.Background(), "u1", acc.ID, account.Update{Currency: ptr("EUR")})
+	if !errors.Is(err, account.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateAllowsCurrencyChangeWithNoEntries(t *testing.T) {
+	svc, _ := newService(t)
+	svc.SetEntryLookup(stubEntryLookup{has: false})
+	acc := newAccount(t, svc, "u1", "X", "Checking")
+
+	got, err := svc.Update(context.Background(), "u1", acc.ID, account.Update{Currency: ptr("USD")})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got.Currency != "USD" {
+		t.Fatalf("Currency = %q, want USD", got.Currency)
+	}
+}
+
+func TestUpdateAllowsCurrencyChangeWhenEntryLookupIsNotWired(t *testing.T) {
+	svc, _ := newService(t)
+	acc := newAccount(t, svc, "u1", "X", "Checking")
+
+	// No SetEntryLookup call at all — fails open, matching the behavior
+	// before this rule existed.
+	got, err := svc.Update(context.Background(), "u1", acc.ID, account.Update{Currency: ptr("USD")})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got.Currency != "USD" {
+		t.Fatalf("Currency = %q, want USD", got.Currency)
+	}
+}
+
+func TestUpdateOtherFieldsRemainEditableWhenCurrencyIsLocked(t *testing.T) {
+	svc, _ := newService(t)
+	svc.SetEntryLookup(stubEntryLookup{has: true})
+	acc := newAccount(t, svc, "u1", "X", "Checking")
+
+	got, err := svc.Update(context.Background(), "u1", acc.ID, account.Update{Title: ptr("Renamed")})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got.Title != "Renamed" {
+		t.Fatalf("Title = %q, want Renamed", got.Title)
+	}
+}
+
 func TestDateJSONRoundTrip(t *testing.T) {
 	d, err := account.ParseDate("2024-03-05")
 	if err != nil {

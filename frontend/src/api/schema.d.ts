@@ -66,7 +66,7 @@ export interface paths {
         head?: never;
         /**
          * Update an account
-         * @description 422 when `type` is present but empty or only whitespace. A shared `owner`-tier caller may change `type` like any other field.
+         * @description 422 when `type` is present but empty or only whitespace. A shared `owner`-tier caller may change `type` like any other field. `currency` becomes immutable once the account has any entry at all (of any kind) — 400 on a `currency` change against such an account, regardless of whether the new value differs from the current one.
          */
         patch: operations["patchAccount"];
         trace?: never;
@@ -678,12 +678,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the caller's entries, filtered/searched/sorted, cursor-paginated */
+        /**
+         * List the caller's entries, filtered/searched/sorted, cursor-paginated
+         * @description A self_transfer entry is listed once per account it touches that is within the caller's requested/resolved account scope: once (amount as stored) when only account_id is in scope, once (amount sign flipped, account_id/to_account_id swapped) when only to_account_id is in scope, and twice — one occurrence per account — when both are in scope at once (e.g. an unfiltered listing across every account the caller can see, or an explicit account_id filter naming both). Every other filter applies identically to both occurrences, since they represent the same underlying entry.
+         */
         get: operations["getEntries"];
         put?: never;
         /**
          * Create an entry
-         * @description 422 when account_id does not name an account the caller owns, or names a disabled account.
+         * @description 422 when account_id does not name an account the caller owns, or names a disabled account. For kind=self_transfer, the same checks additionally apply to to_account_id, which must also share account_id's currency and differ from it (400 otherwise).
          */
         post: operations["postEntries"];
         delete?: never;
@@ -705,14 +708,14 @@ export interface paths {
         post?: never;
         /**
          * Soft-delete an entry
-         * @description One-way — there is no undelete endpoint.
+         * @description One-way — there is no undelete endpoint. For a self_transfer, entry_admin/owner (or append, if the caller created it) on either of its two accounts is sufficient — unlike editing, deleting does not require permission on both.
          */
         delete: operations["deleteEntry"];
         options?: never;
         head?: never;
         /**
          * Update an entry
-         * @description kind is immutable — there is no field for it on this request body. account_id may be changed to move the entry to a different account the caller owns; a disabled target account is rejected (422), the same as entry creation.
+         * @description kind is immutable — there is no field for it on this request body. account_id may be changed to move the entry to a different account the caller owns; a disabled target account is rejected (422), the same as entry creation. For a self_transfer, account_id may not be changed at all (422), and any edit requires the caller to currently hold append+ permission on both of its accounts — 403 when either has since become inaccessible (a revoked share, or the account disabled/deleted), even for a change unrelated to the amount or either account.
          */
         patch: operations["patchEntry"];
         trace?: never;
@@ -766,7 +769,7 @@ export interface paths {
         };
         /**
          * Bucket the caller's matching entries into per-month or per-day income/outcome totals
-         * @description Buckets the caller's own, non-deleted accounts' non-deleted entries by booking_timestamp — one bucket per calendar month of year when unit=month, or one bucket per calendar day of year/month when unit=day — using the caller's resolved timezone setting (see user-settings) to decide bucket boundaries, default UTC. Within each bucket, entries whose amount is positive are summed into income and the absolute value of entries whose amount is negative into outcome, grouped per currency (the currency of the entry's account) the same way GET /api/entries/summary groups its sum. Unlike GET /api/entries/summary, a balance_adjustment's amount (always a signed delta — see account-entries) is included, not excluded. Every period in the requested range is present, even one with no matching entries at all (empty income/outcome). Accepts the same category_id/category_mode and tag_id filters as GET /api/entries/summary, applied before bucketing.
+         * @description Buckets the caller's own, non-deleted accounts' non-deleted entries by booking_timestamp — one bucket per calendar month of year when unit=month, or one bucket per calendar day of year/month when unit=day — using the caller's resolved timezone setting (see user-settings) to decide bucket boundaries, default UTC. Within each bucket, entries whose amount is positive are summed into income and the absolute value of entries whose amount is negative into outcome, grouped per currency (the currency of the entry's account) the same way GET /api/entries/summary groups its sum. Unlike GET /api/entries/summary, a balance_adjustment's amount (always a signed delta — see account-entries) is included, not excluded. This applies uniformly to transaction, balance_adjustment, and self_transfer entries; a self_transfer contributes to each of its two accounts' own bucket independently, the same as GET /api/entries and GET /api/entries/summary. Every period in the requested range is present, even one with no matching entries at all (empty income/outcome). Accepts the same category_id/ category_mode and tag_id filters as GET /api/entries/summary, applied before bucketing.
          */
         get: operations["getEntriesFlowSummary"];
         put?: never;
@@ -786,7 +789,7 @@ export interface paths {
         };
         /**
          * Sum the caller's matching entries per currency, without paging
-         * @description Accepts the same account_id, category_id/category_mode, tag_id, from/to, and q filters as GET /api/entries (no sort, dir, after, or limit — this is an aggregate, not a page). Always additionally restricted to kind=transaction, regardless of the caller's other filters — a balance_adjustment is an absolute reading, not a categorized delta. Computed directly rather than by paging through results, so it is accurate however many entries match.
+         * @description Accepts the same account_id, category_id/category_mode, tag_id, from/to, and q filters as GET /api/entries (no sort, dir, after, or limit — this is an aggregate, not a page). Always additionally restricted to kind=transaction or kind=self_transfer, regardless of the caller's other filters — a balance_adjustment is an absolute reading, not a categorized delta. A self_transfer contributes to the sum once per account, exactly like GET /api/entries lists it — twice when both its accounts are within scope, netting to zero for that currency. Computed directly rather than by paging through results, so it is accurate however many entries match.
          */
         get: operations["getEntriesSummary"];
         put?: never;
@@ -1080,7 +1083,7 @@ export interface components {
             color?: string;
             /** Format: date-time */
             created_at: string;
-            /** @description ISO-4217 shape (three uppercase letters), not a canonical list. */
+            /** @description ISO-4217 shape (three uppercase letters), not a canonical list. Immutable once the account has any entry recorded against it (of any kind) — PATCH rejects a currency change on such an account (400), regardless of whether the new value would differ from the current one. */
             currency: string;
             description?: string;
             /** @description Reversible; blocks creating new entries against the account. Independent of closing_date (informational only) and of soft delete. */
@@ -1158,6 +1161,7 @@ export interface components {
             closing_date?: string | null;
             /** @description Optional opaque client colour token. An empty string clears it; omitting the field leaves it unchanged. */
             color?: string;
+            /** @description Rejected (400) once the account has any entry at all — see Account's currency description. */
             currency?: string;
             description?: string;
             financial_institute?: string;
@@ -1323,7 +1327,7 @@ export interface components {
             account_id: string;
             /**
              * Format: int64
-             * @description Integer minor units at a fixed 4 decimal places (e.g. 105000 represents 10.5000 in the account's currency). Not configurable — see account-entries. Always a signed delta applied to the account's running balance: for a transaction, exactly what was submitted; for a balance_adjustment, computed automatically as the change from the balance immediately before it — never client-supplied for that kind.
+             * @description Integer minor units at a fixed 4 decimal places (e.g. 105000 represents 10.5000 in the account's currency). Not configurable — see account-entries. Always a signed delta applied to the account's running balance: for a transaction or self_transfer, exactly what was submitted (a self_transfer's amount is signed from account_id's perspective — the receiving account, to_account_id, effectively sees -amount); for a balance_adjustment, computed automatically as the change from the balance immediately before it — never client-supplied for that kind. When a self_transfer is listed once per account it touches (see GET /api/entries), the amount returned for the to_account_id-side occurrence is that negated value, and its account_id/to_account_id are swapped accordingly.
              */
             amount: number;
             /**
@@ -1333,9 +1337,9 @@ export interface components {
             balance?: number | null;
             /** Format: date-time */
             booking_timestamp: string;
-            /** @description Required for a transaction, optional for a balance_adjustment. */
+            /** @description Required for a transaction, optional for a balance_adjustment or self_transfer. */
             category_id?: string;
-            /** @description The other party in the transaction (who was paid, or who paid) — accepted only when kind is transaction, rejected (400) on a balance_adjustment. Suggested values for client autocomplete come from GET /api/entries/counterparties. */
+            /** @description The other party in the transaction (who was paid, or who paid) — accepted only when kind is transaction, rejected (400) on a balance_adjustment or self_transfer. Suggested values for client autocomplete come from GET /api/entries/counterparties. */
             counterparty?: string;
             /** Format: date-time */
             created_at: string;
@@ -1346,21 +1350,27 @@ export interface components {
             description?: string;
             id: string;
             kind: components["schemas"]["EntryKind"];
-            /** @description A free-text location — accepted only when kind is transaction, rejected (400) on a balance_adjustment. Never parsed or validated by the backend: it may hold a typed address, or a JSON string `{"lat":<number>,"lng":<number>}` produced by device GPS or a map pin, at the client's discretion. */
+            /** @description A free-text location — accepted only when kind is transaction, rejected (400) on a balance_adjustment or self_transfer. Never parsed or validated by the backend: it may hold a typed address, or a JSON string `{"lat":<number>,"lng":<number>}` produced by device GPS or a map pin, at the client's discretion. */
             location?: string;
             /** @description The recurring transaction this entry was created from or has been linked to, or null. Always on the same account_id as this entry. */
             recurring_transaction_id?: string | null;
             tag_ids: string[];
             title: string;
+            /** @description to_account_id's currency, resolved the same unconditional way as to_account_name — always equal to account_currency, since a self_transfer requires both accounts to share a currency. */
+            to_account_currency?: string;
+            /** @description The receiving account of a self_transfer — present only when kind is self_transfer, null otherwise. Fixed at creation, never individually reassigned afterward (see account-entries). */
+            to_account_id?: string | null;
+            /** @description to_account_id's title, resolved server-side regardless of the caller's own permission on that account — present only when kind is self_transfer, the same reasoning account_currency already follows for account_id. */
+            to_account_name?: string;
             /** Format: date-time */
             updated_at: string;
         };
-        /** @description amount is required when kind is transaction and rejected when kind is balance_adjustment; balance is required when kind is balance_adjustment and rejected when kind is transaction — exactly one of the two, per kind (400). counterparty and location are likewise accepted only when kind is transaction, rejected (400) otherwise. */
+        /** @description amount is required when kind is transaction or self_transfer and rejected when kind is balance_adjustment; balance is required when kind is balance_adjustment and rejected otherwise — exactly one of the two, per kind (400). counterparty and location are accepted only when kind is transaction, rejected (400) otherwise. to_account_id is required when kind is self_transfer and rejected otherwise (400); it must differ from account_id and name an account the caller holds append+ permission on, sharing account_id's currency (400 otherwise) — the same rules account_id itself must already satisfy — and that is not disabled (422). */
         EntryCreate: {
             account_id: string;
             /**
              * Format: int64
-             * @description Required for kind=transaction; must be omitted otherwise.
+             * @description Required for kind=transaction or kind=self_transfer; must be omitted otherwise.
              */
             amount?: number;
             /**
@@ -1381,9 +1391,11 @@ export interface components {
             recurring_transaction_id?: string;
             tag_ids?: string[];
             title: string;
+            /** @description Required for kind=self_transfer (the receiving account); must be omitted otherwise. */
+            to_account_id?: string;
         };
         /** @enum {string} */
-        EntryKind: "transaction" | "balance_adjustment";
+        EntryKind: "transaction" | "balance_adjustment" | "self_transfer";
         EntryPage: {
             items: components["schemas"]["Entry"][];
             next_cursor: string | null;
@@ -1393,7 +1405,7 @@ export interface components {
             count: number;
             sums: components["schemas"]["CurrencySum"][];
         };
-        /** @description No kind field — it is immutable after creation. account_id may be set to move the entry to a different account the caller owns (see account-entries); it must not be disabled, the same rule creation applies. No currency conversion or validation is performed. amount is only settable when the entry's kind is transaction, balance only when it is balance_adjustment — supplying the other one is rejected (400). counterparty and location are likewise only settable when the entry's kind is transaction (400 otherwise); an empty string clears either field. */
+        /** @description No kind field — it is immutable after creation; no to_account_id field either — a self_transfer's two accounts are fixed at creation. account_id may be set to move the entry to a different account the caller owns (see account-entries); it must not be disabled, the same rule creation applies — rejected outright (422) when the entry's kind is self_transfer. No currency conversion or validation is performed. amount is only settable when the entry's kind is transaction or self_transfer, balance only when it is balance_adjustment — supplying the other one is rejected (400). counterparty and location are likewise only settable when the entry's kind is transaction (400 otherwise); an empty string clears either field. Editing a self_transfer additionally requires the caller to currently hold append+ permission on both its accounts (403 otherwise), regardless of which fields are being changed — see account-entries. */
         EntryUpdate: {
             account_id?: string;
             /** Format: int64 */
@@ -3069,6 +3081,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3098,6 +3111,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["UnprocessableEntity"];
         };

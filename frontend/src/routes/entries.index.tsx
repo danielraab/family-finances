@@ -10,6 +10,7 @@ import { DateRangeFilter } from "../components/DateRangeFilter";
 import { BulkActionToolbar } from "../components/entries/BulkActionToolbar";
 import { LocationPreviewModal } from "../components/LocationPreviewModal";
 import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
+import { SelfTransferBadge } from "../components/SelfTransferBadge";
 import { TagLabel } from "../components/TagLabel";
 import { UpcomingBlock } from "../components/UpcomingBlock";
 import {
@@ -517,8 +518,12 @@ function EntriesListPage() {
           </thead>
           <tbody>
             {items.map((entry) => (
+              // A self-transfer entry can appear twice in this list — once
+              // per account it touches, when both are in scope (see
+              // account-entries) — sharing the same id but a different
+              // account_id, so the key needs both to stay unique.
               <tr
-                key={entry.id}
+                key={`${entry.id}-${entry.account_id}`}
                 className="border-b border-black/5 last:border-0 dark:border-white/5"
               >
                 <td className="px-3 py-2">
@@ -593,6 +598,7 @@ function EntriesListPage() {
                   <RecurringTransactionBadge
                     recurringTransactionId={entry.recurring_transaction_id}
                   />
+                  <SelfTransferBadge entryId={entry.id} kind={entry.kind} />
                   {entry.counterparty && (
                     <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                       {entry.counterparty}

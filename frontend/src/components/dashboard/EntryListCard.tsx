@@ -159,8 +159,11 @@ export function EntryListCard({
           {items.map((entry) => {
             const account = accounts.find((a) => a.id === entry.account_id);
             return (
+              // A self-transfer entry can appear twice in an unfiltered
+              // card — once per account it touches (see account-entries) —
+              // sharing the same id but a different account_id.
               <li
-                key={entry.id}
+                key={`${entry.id}-${entry.account_id}`}
                 className="flex items-center justify-between gap-2 py-1.5 text-sm"
               >
                 <div className="flex min-w-0 flex-col">

@@ -21,31 +21,52 @@ type EntryStore struct {
 // NewEntryStore returns an EntryStore over pool.
 func NewEntryStore(pool *pgxpool.Pool) *EntryStore { return &EntryStore{pool: pool} }
 
-// entryCols always assumes the query's FROM clause is literally "entries"
-// (no alias), since the tag_ids/created_by_name/account_currency
-// subqueries correlate against entries.id / entries.created_by /
-// entries.account_id. created_by_name and account_currency reach into
+// entryColsFor returns the SELECT column list every entry read query uses,
+// correlating its subqueries (tags, creator name, account/to-account
+// currency+name) against table — "entries" for a single-row canonical
+// fetch (Get, or Create/Update's post-write re-select) or "entry_legs" for
+// a listing/aggregate query. entry_legs (migration 0030) is a UNION ALL
+// view presenting every entry once per account it touches — its
+// account_id/to_account_id already reflect the per-leg viewing
+// perspective, so the exact same column shape and subquery correlations
+// work against either table unchanged; only the correlation target
+// differs. created_by_name and account/to-account currency+name reach into
 // internal/auth's users table and internal/account's accounts table by raw
 // SQL — entry.Store doesn't import either package, but its Postgres
 // implementation may still name their tables, the same precedent
 // internal/storage/postgres/tag.go's entry_count and category.go's Delete
 // already establish for reaching into another domain's table.
-// account_currency is resolved unconditionally (never gated by the
-// caller's permission on that account) — see design.md's
-// "Entry gains account_currency" decision.
-const entryCols = `id::text, created_by::text, account_id::text, kind, amount, balance_reading, booking_timestamp, title,
+// account_currency/to_account_name/to_account_currency are all resolved
+// unconditionally (never gated by the caller's permission on that
+// account) — see design.md's "Entry gains account_currency" decision,
+// extended by add-self-transfer's design.md to the receiving side.
+func entryColsFor(table string) string {
+	return `id::text, created_by::text, account_id::text, to_account_id::text, kind, amount, balance_reading, booking_timestamp, title,
 	COALESCE(description, ''), category_id::text, COALESCE(counterparty, ''), COALESCE(location, ''), created_at, updated_at,
-	COALESCE((SELECT array_agg(tag_id::text) FROM entry_tags WHERE entry_id = entries.id), '{}'),
-	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = entries.created_by), ''),
-	COALESCE((SELECT currency FROM accounts WHERE accounts.id = entries.account_id), ''),
+	COALESCE((SELECT array_agg(tag_id::text) FROM entry_tags WHERE entry_id = ` + table + `.id), '{}'),
+	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = ` + table + `.created_by), ''),
+	COALESCE((SELECT currency FROM accounts WHERE accounts.id = ` + table + `.account_id), ''),
+	COALESCE((SELECT title FROM accounts WHERE accounts.id = ` + table + `.to_account_id), ''),
+	COALESCE((SELECT currency FROM accounts WHERE accounts.id = ` + table + `.to_account_id), ''),
 	recurring_transaction_id::text`
+}
 
-func scanEntry(row pgx.Row) (entry.Entry, error) {
+// entryCols is entryColsFor("entries") — the plain-table shape used by
+// Get and by Create/Update's post-write re-select.
+var entryCols = entryColsFor("entries")
+
+// scanEntryRow scans one entryColsFor row into an entry.Entry, plus any
+// caller-supplied extra destinations appended after the fixed column list
+// (List uses this for entry_legs' trailing "native" column, needed to
+// disambiguate a self-transfer's two same-id legs in its keyset cursor —
+// see List's doc comment).
+func scanEntryRow(row pgx.Row, extra ...any) (entry.Entry, error) {
 	var e entry.Entry
 	var kind string
-	err := row.Scan(&e.ID, &e.CreatedBy, &e.AccountID, &kind, &e.Amount, &e.Balance, &e.BookingTimestamp, &e.Title,
-		&e.Description, &e.CategoryID, &e.Counterparty, &e.Location, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName, &e.AccountCurrency,
-		&e.RecurringTransactionID)
+	dest := []any{&e.ID, &e.CreatedBy, &e.AccountID, &e.ToAccountID, &kind, &e.Amount, &e.Balance, &e.BookingTimestamp, &e.Title,
+		&e.Description, &e.CategoryID, &e.Counterparty, &e.Location, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName,
+		&e.AccountCurrency, &e.ToAccountName, &e.ToAccountCurrency, &e.RecurringTransactionID}
+	err := row.Scan(append(dest, extra...)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return entry.Entry{}, entry.ErrNotFound
 	}
@@ -58,6 +79,8 @@ func scanEntry(row pgx.Row) (entry.Entry, error) {
 	}
 	return e, nil
 }
+
+func scanEntry(row pgx.Row) (entry.Entry, error) { return scanEntryRow(row) }
 
 // parseEntryID converts the domain's string id to the bigint entries.id
 // really is. A malformed id can never match a row, so it maps to
@@ -80,20 +103,20 @@ func (s *EntryStore) Create(ctx context.Context, createdBy string, in entry.New)
 	// A balance adjustment's amount is never client-supplied — it starts as
 	// a 0 placeholder, immediately overwritten below by recomputeFrom (which
 	// finds this very row, since nothing else can share its just-assigned
-	// id) using its balance_reading. A transaction stores in.Amount as-is,
-	// with balance_reading left NULL.
+	// id) using its balance_reading. A transaction or self_transfer stores
+	// in.Amount as-is, with balance_reading left NULL.
 	var amount int64
-	if in.Kind == entry.KindTransaction && in.Amount != nil {
+	if in.Kind != entry.KindBalanceAdjustment && in.Amount != nil {
 		amount = *in.Amount
 	}
 
 	var id int64
 	var bookingTS time.Time
 	err = tx.QueryRow(ctx, `
-		INSERT INTO entries (created_by, account_id, kind, amount, balance_reading, booking_timestamp, title, description, category_id, counterparty, location, recurring_transaction_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF($11, ''), $12)
+		INSERT INTO entries (created_by, account_id, to_account_id, kind, amount, balance_reading, booking_timestamp, title, description, category_id, counterparty, location, recurring_transaction_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, NULLIF($11, ''), NULLIF($12, ''), $13)
 		RETURNING id, booking_timestamp`,
-		createdBy, in.AccountID, string(in.Kind), amount, in.Balance, in.BookingTimestamp, in.Title, in.Description, in.CategoryID, in.Counterparty, in.Location, in.RecurringTransactionID,
+		createdBy, in.AccountID, in.ToAccountID, string(in.Kind), amount, in.Balance, in.BookingTimestamp, in.Title, in.Description, in.CategoryID, in.Counterparty, in.Location, in.RecurringTransactionID,
 	).Scan(&id, &bookingTS)
 	if isForeignKeyViolation(err) || isCheckViolation(err) {
 		return entry.Entry{}, entry.ErrInvalidValue
@@ -113,6 +136,15 @@ func (s *EntryStore) Create(ctx context.Context, createdBy string, in entry.New)
 
 	if err := recomputeFrom(ctx, tx, in.AccountID, bookingTS, id, 0); err != nil {
 		return entry.Entry{}, err
+	}
+	// A self_transfer also mutates its receiving account's running
+	// balance, so its own adjustment chain needs the same recompute pass
+	// — see design.md's "recompute-on-mutation runs once per side"
+	// decision.
+	if in.Kind == entry.KindSelfTransfer {
+		if err := recomputeFrom(ctx, tx, *in.ToAccountID, bookingTS, id, 0); err != nil {
+			return entry.Entry{}, err
+		}
 	}
 
 	e, err := scanEntry(tx.QueryRow(ctx, `SELECT `+entryCols+` FROM entries WHERE id = $1`, id))
@@ -152,12 +184,13 @@ func (s *EntryStore) Update(ctx context.Context, id string, upd entry.Update) (e
 	// leaving and the one it lands on (if either its account or its
 	// booking_timestamp changes) can have their nearest balance adjustment
 	// recomputed — see design.md's algorithm.
-	var oldAccountID string
+	var oldAccountID, kind string
 	var oldTS time.Time
+	var toAccountID *string
 	if err := tx.QueryRow(ctx,
-		`SELECT account_id::text, booking_timestamp FROM entries WHERE id = $1 AND deleted_at IS NULL`,
+		`SELECT account_id::text, booking_timestamp, kind, to_account_id::text FROM entries WHERE id = $1 AND deleted_at IS NULL`,
 		eid,
-	).Scan(&oldAccountID, &oldTS); err != nil {
+	).Scan(&oldAccountID, &oldTS, &kind, &toAccountID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entry.Entry{}, entry.ErrNotFound
 		}
@@ -240,6 +273,25 @@ func (s *EntryStore) Update(ctx context.Context, id string, upd entry.Update) (e
 			return entry.Entry{}, err
 		}
 	}
+	// A self_transfer's to_account_id never changes via Update (Service
+	// rejects an AccountID change on this kind outright, and there is no
+	// ToAccountID field on Update at all), so its own recompute only ever
+	// needs to react to a booking_timestamp change, on the same fixed
+	// account — never an account-move branch.
+	if entry.Kind(kind) == entry.KindSelfTransfer {
+		if !newTS.Equal(oldTS) {
+			if err := recomputeFrom(ctx, tx, *toAccountID, oldTS, eid, eid); err != nil {
+				return entry.Entry{}, err
+			}
+			if err := recomputeFrom(ctx, tx, *toAccountID, newTS, eid, 0); err != nil {
+				return entry.Entry{}, err
+			}
+		} else {
+			if err := recomputeFrom(ctx, tx, *toAccountID, oldTS, eid, 0); err != nil {
+				return entry.Entry{}, err
+			}
+		}
+	}
 
 	e, err := scanEntry(tx.QueryRow(ctx, `SELECT `+entryCols+` FROM entries WHERE id = $1`, eid))
 	if err != nil {
@@ -263,12 +315,13 @@ func (s *EntryStore) SoftDelete(ctx context.Context, id string) error {
 	}
 	defer tx.Rollback(ctx)
 
-	var accountID string
+	var accountID, kind string
 	var ts time.Time
+	var toAccountID *string
 	if err := tx.QueryRow(ctx,
-		`SELECT account_id::text, booking_timestamp FROM entries WHERE id = $1 AND deleted_at IS NULL`,
+		`SELECT account_id::text, booking_timestamp, kind, to_account_id::text FROM entries WHERE id = $1 AND deleted_at IS NULL`,
 		eid,
-	).Scan(&accountID, &ts); err != nil {
+	).Scan(&accountID, &ts, &kind, &toAccountID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return entry.ErrNotFound
 		}
@@ -285,69 +338,92 @@ func (s *EntryStore) SoftDelete(ctx context.Context, id string) error {
 	if err := recomputeFrom(ctx, tx, accountID, ts, eid, 0); err != nil {
 		return err
 	}
+	if entry.Kind(kind) == entry.KindSelfTransfer {
+		if err := recomputeFrom(ctx, tx, *toAccountID, ts, eid, 0); err != nil {
+			return err
+		}
+	}
 
 	return tx.Commit(ctx)
 }
 
-// buildWhere returns the WHERE clauses and positional args shared by List
-// and Sum, scoping to non-deleted entries matching f's
+// buildWhere returns the WHERE clauses and positional args shared by List,
+// Sum, and FlowSummary, scoping to non-deleted rows of table matching f's
 // account/category/tag/kind/date-range/query filters — every column is
-// qualified with "entries." so the same clauses work whether or not a
-// caller's query joins another table. f.AccountIDs is the caller-scoping
-// mechanism (already narrowed by entry.Service to the caller's visible,
-// owned-or-shared accounts before it reaches here — see design.md) rather
-// than an owner/creator equality clause, so a viewer sees every entry on a
-// visible account regardless of who created it — except when f.AllAccounts
-// is set, in which case the account_id clause is omitted entirely: the
-// caller's permission on the filtered category (f.CategoryIDs, resolved by
-// entry.Service) is what authorizes those rows instead. Callers append
-// their own additional clauses (and, via the same numbering, args) as
-// needed.
-func buildWhere(f entry.Filter) (where []string, args []any) {
+// qualified with table+"." so the same clauses work against either
+// "entries" (unused directly today, kept general) or "entry_legs"
+// (List/Sum/FlowSummary's actual target — see that view's doc comment in
+// migration 0030). f.AccountIDs is the caller-scoping mechanism (already
+// narrowed by entry.Service to the caller's visible, owned-or-shared
+// accounts before it reaches here — see design.md) rather than an owner/
+// creator equality clause, so a viewer sees every entry on a visible
+// account regardless of who created it — except when f.AllAccounts is set,
+// in which case the account_id clause is omitted entirely: the caller's
+// permission on the filtered category (f.CategoryIDs, resolved by
+// entry.Service) is what authorizes those rows instead. Querying against
+// entry_legs is what makes a self_transfer whose two accounts are both in
+// f.AccountIDs match twice (once per its two rows in the view) while an
+// ordinary entry, which the view carries through as exactly one row, still
+// matches at most once — see design.md's "GET /api/entries becomes... a
+// UNION ALL of two projections" decision. Callers append their own
+// additional clauses (and, via the same numbering, args) as needed.
+func buildWhere(table string, f entry.Filter) (where []string, args []any) {
 	arg := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
 	}
 
-	where = []string{"entries.deleted_at IS NULL"}
+	where = []string{table + ".deleted_at IS NULL"}
 	if !f.AllAccounts {
-		where = append(where, "entries.account_id = ANY("+arg(f.AccountIDs)+"::uuid[])")
+		where = append(where, table+".account_id = ANY("+arg(f.AccountIDs)+"::uuid[])")
 	}
 	if f.CategoryID != nil {
-		where = append(where, "entries.category_id = ANY("+arg(f.CategoryIDs)+"::uuid[])")
+		where = append(where, table+".category_id = ANY("+arg(f.CategoryIDs)+"::uuid[])")
 	}
 	if f.TagID != nil {
-		where = append(where, "EXISTS (SELECT 1 FROM entry_tags et WHERE et.entry_id = entries.id AND et.tag_id = "+arg(*f.TagID)+"::uuid)")
+		where = append(where, "EXISTS (SELECT 1 FROM entry_tags et WHERE et.entry_id = "+table+".id AND et.tag_id = "+arg(*f.TagID)+"::uuid)")
 	}
 	if f.RecurringTransactionID != nil {
-		where = append(where, "entries.recurring_transaction_id = "+arg(*f.RecurringTransactionID)+"::uuid")
+		where = append(where, table+".recurring_transaction_id = "+arg(*f.RecurringTransactionID)+"::uuid")
 	}
 	if f.Kind != nil {
-		where = append(where, "entries.kind = "+arg(string(*f.Kind)))
+		where = append(where, table+".kind = "+arg(string(*f.Kind)))
 	}
 	if f.From != nil {
-		where = append(where, "entries.booking_timestamp >= "+arg(*f.From))
+		where = append(where, table+".booking_timestamp >= "+arg(*f.From))
 	}
 	if f.To != nil {
-		where = append(where, "entries.booking_timestamp <= "+arg(*f.To))
+		where = append(where, table+".booking_timestamp <= "+arg(*f.To))
 	}
 	if f.Query != "" {
 		p := arg("%" + f.Query + "%")
-		where = append(where, "(entries.title ILIKE "+p+" OR entries.description ILIKE "+p+" OR entries.counterparty ILIKE "+p+")")
+		where = append(where, "("+table+".title ILIKE "+p+" OR "+table+".description ILIKE "+p+" OR "+table+".counterparty ILIKE "+p+")")
 	}
 	return where, args
 }
 
-// List builds a dynamic keyset query: every optional filter appends a WHERE
-// clause and a positional argument; sort/dir pick the ORDER BY column and
-// direction; the keyset comparison on (sortColumn, id) implements the
+// List builds a dynamic keyset query against entry_legs: every optional
+// filter appends a WHERE clause and a positional argument; sort/dir pick
+// the ORDER BY column and direction; the keyset comparison implements the
 // cursor. It fetches Limit+1 rows to know whether a next page exists.
+//
+// The keyset tuple is (sortColumn, id, native) — not just (sortColumn,
+// id) — because a self_transfer's two entry_legs rows share the same id
+// and, when sorted by booking_timestamp, the same sortColumn value too:
+// without native as a final tie-break, a page boundary landing between
+// those two rows would make the next request's strict ">"/"<" comparison
+// treat them as equal and silently drop whichever one didn't make the cut.
+// native (true for the row matched via account_id, false for the flipped
+// row matched via to_account_id) makes every row's keyset position unique,
+// so no row can ever be skipped this way. entry.Cursor's Native field
+// carries this across pages, opaque to the client like every other cursor
+// field.
 func (s *EntryStore) List(ctx context.Context, f entry.Filter) ([]entry.Entry, *entry.Cursor, error) {
 	if !f.AllAccounts && len(f.AccountIDs) == 0 {
 		return nil, nil, nil
 	}
 
-	where, args := buildWhere(f)
+	where, args := buildWhere("entry_legs", f)
 	arg := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
@@ -371,12 +447,12 @@ func (s *EntryStore) List(ctx context.Context, f entry.Filter) ([]entry.Entry, *
 		if f.Sort == entry.SortAmount {
 			sortVal = f.After.Amount
 		}
-		where = append(where, "("+sortCol+", id) "+op+" ("+arg(sortVal)+", "+arg(afterID)+")")
+		where = append(where, "("+sortCol+", id, native) "+op+" ("+arg(sortVal)+", "+arg(afterID)+", "+arg(f.After.Native)+")")
 	}
 
 	limitPlaceholder := arg(f.Limit + 1)
-	query := `SELECT ` + entryCols + ` FROM entries WHERE ` + strings.Join(where, " AND ") +
-		` ORDER BY ` + sortCol + ` ` + orderDir + `, id ` + orderDir +
+	query := `SELECT ` + entryColsFor("entry_legs") + `, native FROM entry_legs WHERE ` + strings.Join(where, " AND ") +
+		` ORDER BY ` + sortCol + ` ` + orderDir + `, id ` + orderDir + `, native ` + orderDir +
 		` LIMIT ` + limitPlaceholder
 
 	rows, err := s.pool.Query(ctx, query, args...)
@@ -386,12 +462,15 @@ func (s *EntryStore) List(ctx context.Context, f entry.Filter) ([]entry.Entry, *
 	defer rows.Close()
 
 	var items []entry.Entry
+	var natives []bool
 	for rows.Next() {
-		e, err := scanEntry(rows)
+		var native bool
+		e, err := scanEntryRow(rows, &native)
 		if err != nil {
 			return nil, nil, err
 		}
 		items = append(items, e)
+		natives = append(natives, native)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
@@ -400,24 +479,30 @@ func (s *EntryStore) List(ctx context.Context, f entry.Filter) ([]entry.Entry, *
 	var next *entry.Cursor
 	if len(items) > f.Limit {
 		last := items[f.Limit-1]
-		next = &entry.Cursor{BookingTimestamp: last.BookingTimestamp, Amount: last.Amount, ID: last.ID}
+		next = &entry.Cursor{BookingTimestamp: last.BookingTimestamp, Amount: last.Amount, ID: last.ID, Native: natives[f.Limit-1]}
 		items = items[:f.Limit]
 	}
 	return items, next, nil
 }
 
 // Balance implements design.md's live computation: the sum of every
-// non-deleted entry's amount up to asOf. A balance adjustment's amount is
-// kept, by the recompute helpers below (run inside Create/Update/
-// SoftDelete), equal to its own balance_reading minus the balance strictly
-// before it — so this plain sum reproduces exactly the same result as
-// always resetting to the latest adjustment and summing only the
-// transactions after it, with no kind-branching needed here.
+// non-deleted entry's amount up to asOf, from accountID's own point of
+// view — a plain entries row it's the account_id of contributes amount as
+// stored; a self_transfer it's instead the to_account_id of contributes
+// -amount (the receiving side's effective delta — see entry.Entry's
+// ToAccountID doc comment). A balance adjustment's amount is kept, by the
+// recompute helpers below (run inside Create/Update/SoftDelete, on both
+// accounts for a self_transfer), equal to its own balance_reading minus
+// the balance strictly before it — so this reproduces exactly the same
+// result as always resetting to the latest adjustment and summing only
+// the transactions after it, with no further kind-branching needed here.
 func (s *EntryStore) Balance(ctx context.Context, accountID string, asOf time.Time) (int64, error) {
 	var balance int64
 	err := s.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(amount), 0) FROM entries
-		WHERE account_id = $1 AND deleted_at IS NULL AND booking_timestamp <= $2`,
+		SELECT COALESCE(SUM(
+			CASE WHEN account_id = $1 THEN amount ELSE -amount END
+		), 0) FROM entries
+		WHERE (account_id = $1 OR to_account_id = $1) AND deleted_at IS NULL AND booking_timestamp <= $2`,
 		accountID, asOf,
 	).Scan(&balance)
 	return balance, err
@@ -459,10 +544,18 @@ func findAdjustment(ctx context.Context, tx pgx.Tx, accountID string, ts time.Ti
 // (id, ts) on accountID: its balance_reading minus the balance strictly
 // before its own position.
 func setAmount(ctx context.Context, tx pgx.Tx, accountID string, id int64, ts time.Time, reading int64) error {
+	// Mirrors Balance's own account_id/to_account_id CASE — a self_transfer
+	// whose to_account_id is accountID contributes -amount to the balance
+	// strictly before this adjustment's position, exactly as it does to
+	// Balance() itself; omitting it here left a receiving account's
+	// adjustments permanently under-recomputed (a real bug this store's
+	// self-transfer tests caught).
 	var before int64
 	if err := tx.QueryRow(ctx, `
-		SELECT COALESCE(SUM(amount), 0) FROM entries
-		WHERE account_id = $1 AND deleted_at IS NULL AND (booking_timestamp, id) < ($2, $3)`,
+		SELECT COALESCE(SUM(
+			CASE WHEN account_id = $1 THEN amount ELSE -amount END
+		), 0) FROM entries
+		WHERE (account_id = $1 OR to_account_id = $1) AND deleted_at IS NULL AND (booking_timestamp, id) < ($2, $3)`,
 		accountID, ts, id,
 	).Scan(&before); err != nil {
 		return err
@@ -504,16 +597,18 @@ func (s *EntryStore) Sum(ctx context.Context, f entry.Filter) (map[string]int64,
 	}
 
 	// Clear f.Kind before buildWhere so it never contributes its own kind
-	// clause — this forces kind = 'transaction' below regardless of what
-	// the caller's filter asked for, rather than ANDing the two together
-	// (which would wrongly return zero rows whenever f.Kind was set to
-	// anything but transaction).
+	// clause — this forces kind IN ('transaction', 'self_transfer') below
+	// regardless of what the caller's filter asked for, rather than ANDing
+	// the two together (which would wrongly return zero rows whenever
+	// f.Kind was set to anything else). Querying entry_legs (not entries)
+	// is what makes a self_transfer contribute twice — once per account —
+	// when both its accounts are within f.AccountIDs, mirroring List.
 	f.Kind = nil
-	where, args := buildWhere(f)
-	where = append(where, "entries.kind = 'transaction'")
+	where, args := buildWhere("entry_legs", f)
+	where = append(where, "entry_legs.kind IN ('transaction', 'self_transfer')")
 
-	query := `SELECT entries.account_id::text, SUM(entries.amount), COUNT(*)
-		FROM entries WHERE ` + strings.Join(where, " AND ") + ` GROUP BY entries.account_id`
+	query := `SELECT entry_legs.account_id::text, SUM(entry_legs.amount), COUNT(*)
+		FROM entry_legs WHERE ` + strings.Join(where, " AND ") + ` GROUP BY entry_legs.account_id`
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -555,7 +650,7 @@ func (s *EntryStore) FlowSummary(ctx context.Context, f entry.FlowFilter) ([]ent
 		return nil, nil
 	}
 
-	where, args := buildWhere(entry.Filter{
+	where, args := buildWhere("entry_legs", entry.Filter{
 		AccountIDs:   f.AccountIDs,
 		AllAccounts:  f.AllAccounts,
 		CategoryID:   f.CategoryID,
@@ -568,20 +663,24 @@ func (s *EntryStore) FlowSummary(ctx context.Context, f entry.FlowFilter) ([]ent
 		return "$" + strconv.Itoa(len(args))
 	}
 	tzArg := arg(f.Timezone)
-	where = append(where, "EXTRACT(year FROM timezone("+tzArg+", entries.booking_timestamp)) = "+arg(f.Year))
+	where = append(where, "EXTRACT(year FROM timezone("+tzArg+", entry_legs.booking_timestamp)) = "+arg(f.Year))
 	if f.Unit == entry.FlowUnitDay {
-		where = append(where, "EXTRACT(month FROM timezone("+tzArg+", entries.booking_timestamp)) = "+arg(f.Month))
+		where = append(where, "EXTRACT(month FROM timezone("+tzArg+", entry_legs.booking_timestamp)) = "+arg(f.Month))
 	}
 	unitArg := arg(string(f.Unit))
 
+	// Querying entry_legs (not entries), same as List/Sum, is what makes a
+	// self_transfer contribute to both accounts' own buckets — as stored
+	// for account_id, sign flipped for to_account_id — when both are
+	// within f.AccountIDs.
 	query := `
-		SELECT date_trunc(` + unitArg + `, timezone(` + tzArg + `, entries.booking_timestamp))::date AS period,
-		       entries.account_id::text,
-		       COALESCE(SUM(entries.amount) FILTER (WHERE entries.amount > 0), 0) AS income,
-		       COALESCE(-SUM(entries.amount) FILTER (WHERE entries.amount < 0), 0) AS outcome
-		FROM entries
+		SELECT date_trunc(` + unitArg + `, timezone(` + tzArg + `, entry_legs.booking_timestamp))::date AS period,
+		       entry_legs.account_id::text,
+		       COALESCE(SUM(entry_legs.amount) FILTER (WHERE entry_legs.amount > 0), 0) AS income,
+		       COALESCE(-SUM(entry_legs.amount) FILTER (WHERE entry_legs.amount < 0), 0) AS outcome
+		FROM entry_legs
 		WHERE ` + strings.Join(where, " AND ") + `
-		GROUP BY period, entries.account_id`
+		GROUP BY period, entry_legs.account_id`
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -658,6 +757,22 @@ func (s *EntryStore) CountByRecurringTransaction(ctx context.Context, recurringT
 		recurringTransactionID,
 	).Scan(&count)
 	return count, err
+}
+
+// HasEntriesForAccount implements entry.Store's HasEntriesForAccount: a
+// cheap existence check across both sides accountID could appear on
+// (account_id, or a self_transfer's to_account_id) — backs
+// internal/account's currency-immutability rule.
+func (s *EntryStore) HasEntriesForAccount(ctx context.Context, accountID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM entries
+			WHERE (account_id = $1 OR to_account_id = $1) AND deleted_at IS NULL
+		)`,
+		accountID,
+	).Scan(&exists)
+	return exists, err
 }
 
 func isCheckViolation(err error) bool {
