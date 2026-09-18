@@ -347,6 +347,97 @@ func (s *EntryStore) SoftDelete(ctx context.Context, id string) error {
 	return tx.Commit(ctx)
 }
 
+// ConvertToSelfTransfer implements entry.Store's ConvertToSelfTransfer:
+// soft-deletes id and inserts its self_transfer replacement in one
+// transaction, then recomputes every account touched — the old position
+// (the delete's effect) plus the new entry's two accounts (the create's
+// effect, mirroring Create's own self_transfer branch). When role is
+// entry.RoleSender or entry.RoleReceiver, id's own account (oldAccountID)
+// coincides with one of the new entry's two accounts, so its position gets
+// recomputed twice below (once for the delete, once for the create) — both
+// calls land on the exact same (account, booking_timestamp) position and
+// agree on the result, so this is harmless, not incorrect.
+func (s *EntryStore) ConvertToSelfTransfer(ctx context.Context, id, toAccountID string, role entry.OriginalAccountRole, createdBy string) (entry.Entry, error) {
+	eid, err := parseEntryID(id)
+	if err != nil {
+		return entry.Entry{}, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return entry.Entry{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var oldAccountID string
+	var oldTS time.Time
+	var oldAmount int64
+	var title, description string
+	var categoryID *string
+	var recurringID *string
+	if err := tx.QueryRow(ctx, `
+		SELECT account_id::text, booking_timestamp, amount, title, COALESCE(description, ''), category_id::text, recurring_transaction_id::text
+		FROM entries
+		WHERE id = $1 AND deleted_at IS NULL AND kind = 'transaction'
+		FOR UPDATE`,
+		eid,
+	).Scan(&oldAccountID, &oldTS, &oldAmount, &title, &description, &categoryID, &recurringID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return entry.Entry{}, entry.ErrNotFound
+		}
+		return entry.Entry{}, err
+	}
+
+	if _, err := tx.Exec(ctx, `UPDATE entries SET deleted_at = now() WHERE id = $1`, eid); err != nil {
+		return entry.Entry{}, err
+	}
+
+	newAccountID, newToAccountID := oldAccountID, toAccountID
+	newAmount := oldAmount
+	newRecurringID := recurringID
+	if role == entry.RoleReceiver {
+		newAccountID, newToAccountID = toAccountID, oldAccountID
+		newAmount = -oldAmount
+		newRecurringID = nil
+	}
+
+	var newID int64
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO entries (created_by, account_id, to_account_id, kind, amount, booking_timestamp, title, description, category_id, recurring_transaction_id)
+		VALUES ($1, $2, $3, 'self_transfer', $4, $5, $6, NULLIF($7, ''), $8, $9)
+		RETURNING id`,
+		createdBy, newAccountID, newToAccountID, newAmount, oldTS, title, description, categoryID, newRecurringID,
+	).Scan(&newID); err != nil {
+		if isForeignKeyViolation(err) || isCheckViolation(err) {
+			return entry.Entry{}, entry.ErrInvalidValue
+		}
+		return entry.Entry{}, err
+	}
+
+	if _, err := tx.Exec(ctx, `INSERT INTO entry_tags (entry_id, tag_id) SELECT $1, tag_id FROM entry_tags WHERE entry_id = $2`, newID, eid); err != nil {
+		return entry.Entry{}, err
+	}
+
+	if err := recomputeFrom(ctx, tx, oldAccountID, oldTS, eid, 0); err != nil {
+		return entry.Entry{}, err
+	}
+	if err := recomputeFrom(ctx, tx, newAccountID, oldTS, newID, 0); err != nil {
+		return entry.Entry{}, err
+	}
+	if err := recomputeFrom(ctx, tx, newToAccountID, oldTS, newID, 0); err != nil {
+		return entry.Entry{}, err
+	}
+
+	e, err := scanEntry(tx.QueryRow(ctx, `SELECT `+entryCols+` FROM entries WHERE id = $1`, newID))
+	if err != nil {
+		return entry.Entry{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return entry.Entry{}, err
+	}
+	return e, nil
+}
+
 // buildWhere returns the WHERE clauses and positional args shared by List,
 // Sum, and FlowSummary, scoping to non-deleted rows of table matching f's
 // account/category/tag/kind/date-range/query filters — every column is

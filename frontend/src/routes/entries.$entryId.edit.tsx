@@ -235,10 +235,7 @@ function EditEntry() {
     if (destination === "recurring-new") {
       navigate({ to: "/recurring/new", search: { from_entry_id: entryId } });
     } else {
-      navigate({
-        to: "/entries",
-        search: { account_id: selectedAccountId },
-      });
+      navigate({ to: "/entries", search: { last: true } });
     }
   }
 
@@ -733,15 +730,26 @@ function EditEntry() {
 
         {(canEdit || canDelete) && (
           <div className="flex items-center justify-between">
-            {canEdit && (
-              <button
-                type="submit"
-                disabled={submitting}
-                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {t("entries.form.save")}
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {canEdit && (
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                >
+                  {t("entries.form.save")}
+                </button>
+              )}
+              {canEdit && entry.kind === "transaction" && (
+                <Link
+                  to="/entries/$entryId/self-transfer"
+                  params={{ entryId }}
+                  className="rounded-md border border-black/15 px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/15 dark:text-zinc-400 dark:hover:bg-white/[.06]"
+                >
+                  {t("entries.edit.transferToSelfTransfer")}
+                </Link>
+              )}
+            </div>
             {canDelete && (
               // For a self-transfer, this stays available even when canEdit
               // is false (access to the other account was revoked) — delete

@@ -443,7 +443,24 @@
       "confirmAccountChangeBody": "This entry will move to \"{{account}}\".",
       "confirmAccountChangeConfirm": "Move entry",
       "createRecurring": "Create recurring transaction",
-      "saveAndCreateRecurring": "Save and create recurring transaction"
+      "saveAndCreateRecurring": "Save and create recurring transaction",
+      "transferToSelfTransfer": "Transfer to self-transfer"
+    },
+    "convertSelfTransfer": {
+      "title": "Transfer to self-transfer",
+      "description": "Convert \"{{title}}\" on {{account}} into a transfer between two of your accounts. The original entry will be replaced.",
+      "toAccount": "Counterparty account",
+      "toAccountPlaceholder": "Select an account…",
+      "toAccountRequired": "A counterparty account is required.",
+      "role": "Which account is the sender?",
+      "roleSender": "{{account}} is the sender",
+      "roleReceiver": "{{account}} is the receiver",
+      "roleRequired": "Choose whether this account is the sender or the receiver.",
+      "submit": "Convert to self-transfer",
+      "cancel": "Cancel",
+      "saveError": "Couldn't convert — please check the form and try again.",
+      "notAvailable": "This entry can't be converted to a self-transfer.",
+      "backToEntry": "Back to entry"
     },
     "location": {
       "previewTitle": "Location",
