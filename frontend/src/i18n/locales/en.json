@@ -897,5 +897,44 @@
       "life": "Life",
       "transfers": "Transfers"
     }
+  },
+  "summary": {
+    "close": "Close",
+    "edit": "Edit",
+    "back": "Back",
+    "loading": "Loading…",
+    "entry": {
+      "bookedAt": "Booked",
+      "amount": "Amount",
+      "balance": "Balance after",
+      "account": "Account",
+      "toAccount": "To account",
+      "description": "Description",
+      "category": "Category",
+      "tags": "Tags",
+      "counterparty": "Counterparty",
+      "location": "Location",
+      "createdBy": "Created by",
+      "viewRecurring": "View recurring transaction"
+    },
+    "recurring": {
+      "title": "Recurring transaction",
+      "amount": "Amount",
+      "frequency": "Frequency",
+      "perYearAmount": "Per year",
+      "account": "Account",
+      "startsOn": "Starts",
+      "endsOn": "Ends",
+      "status": "Status",
+      "nextSuggested": "Next suggested",
+      "description": "Description",
+      "category": "Category",
+      "tags": "Tags",
+      "counterparty": "Counterparty",
+      "linkedEntries": "Linked transactions",
+      "linkedEntriesCount_one": "{{count}} transaction",
+      "linkedEntriesCount_other": "{{count}} transactions",
+      "loadError": "This recurring transaction could not be loaded."
+    }
   }
 }

@@ -29,11 +29,13 @@ load-bearing.
 
 ### Nested dialogs keep the same z-index
 
-`categories.tsx` nests its delete confirm inside its edit dialog, both at
-`z-50`. That works because Headless UI portals stack in DOM order, and the
-later-opened dialog mounts after. The shell keeps `relative z-50` fixed
-for every modal rather than introducing a stacking prop — raising the
-nested one would be a change in behaviour with nothing asking for it.
+`categories.tsx`'s delete confirmation opens while its edit dialog is
+still open, both at `z-50`. (They are sibling elements in the JSX, not
+physically nested — what overlaps is their open state.) That works because
+Headless UI portals stack in mount order, and the later-opened dialog
+mounts after. The shell keeps `relative z-50` fixed for every modal rather
+than introducing a stacking prop — raising the later one would be a change
+in behaviour with nothing asking for it.
 
 ### Non-dismissable is an explicit prop
 

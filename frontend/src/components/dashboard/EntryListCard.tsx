@@ -20,6 +20,8 @@ import {
 import type { Account } from "../../lib/useAccountsWithBalances";
 import { useRecurringPreviewHorizon } from "../../lib/useRecurringPreviewHorizon";
 import { AccountLabel } from "../AccountLabel";
+import { useAuth } from "../AuthProvider";
+import { useSummaryModals } from "../summary/useSummaryModals";
 import { UpcomingBlock } from "../UpcomingBlock";
 import { CardTitleLink } from "./CardTitleLink";
 import { MissingReferenceCard } from "./MissingReferenceCard";
@@ -53,11 +55,19 @@ export function EntryListCard({
   locale: string;
 }) {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [items, setItems] = useState<Entry[] | null>(null);
   const [previewItems, setPreviewItems] = useState<
     RecurringTransactionPreviewItem[] | null
   >(null);
   const recurringPreviewHorizon = useRecurringPreviewHorizon();
+  const { openEntry, summaryModals } = useSummaryModals({
+    accounts,
+    categories,
+    tags,
+    userId: user?.id,
+    displayedDecimalPlaces,
+  });
 
   const resolves = cardReferencesResolve(config, accounts, categories, tags);
   const queryKey = JSON.stringify(config);
@@ -167,7 +177,13 @@ export function EntryListCard({
                 className="flex items-center justify-between gap-2 py-1.5 text-sm"
               >
                 <div className="flex min-w-0 flex-col">
-                  <span className="truncate font-medium">{entry.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => openEntry(entry)}
+                    className="truncate text-left font-medium underline-offset-2 hover:underline"
+                  >
+                    {entry.title}
+                  </button>
                   <span className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
                     {new Date(entry.booking_timestamp).toLocaleDateString(
                       locale,
@@ -195,6 +211,8 @@ export function EntryListCard({
           })}
         </ul>
       )}
+
+      {summaryModals}
     </div>
   );
 }

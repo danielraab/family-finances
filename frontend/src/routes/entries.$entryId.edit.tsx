@@ -1,9 +1,4 @@
-import {
-  Description,
-  Dialog,
-  DialogPanel,
-  DialogTitle,
-} from "@headlessui/react";
+import { Description } from "@headlessui/react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,11 +6,13 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
 import { LocationField } from "../components/LocationField";
+import { Modal } from "../components/Modal";
 import { SignedAmountInput } from "../components/SignedAmountInput";
 import { TagInput } from "../components/TagInput";
 import { amountToInput, inputToAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
+import { canDeleteEntry, canEditEntry } from "../lib/entryPermissions";
 import { resolveTagIds } from "../lib/resolveTags";
 
 type Account = components["schemas"]["Account"];
@@ -350,39 +347,9 @@ function EditEntry() {
     setAccountUnlocked(false);
   }
 
-  // entry_admin/owner may edit or delete any entry on the account; append
-  // may edit or delete only what they themselves created; view (or append
-  // on someone else's entry) is read-only — see account-entries' design.md.
-  // createdBy is captured here (rather than reading entry.created_by inside
-  // the closure below) so TypeScript's narrowing of `entry` past the null
-  // checks above survives into it.
-  const createdBy = entry.created_by;
-  function fullTierAllows(acc: Account | null): boolean {
-    return (
-      acc !== null &&
-      (acc.permission === "entry_admin" ||
-        acc.permission === "owner" ||
-        (acc.permission === "append" && createdBy === user?.id))
-    );
-  }
-  // A self-transfer's edit rule is stricter (append+ on *both* accounts,
-  // no created_by exemption); its delete rule is looser (either account's
-  // ordinary tier is enough) — see account-entries' design.md.
-  function atLeastAppend(acc: Account | null): boolean {
-    return (
-      acc !== null &&
-      (acc.permission === "append" ||
-        acc.permission === "entry_admin" ||
-        acc.permission === "owner")
-    );
-  }
   const isSelfTransfer = entry.kind === "self_transfer";
-  const canEdit = isSelfTransfer
-    ? atLeastAppend(account) && atLeastAppend(toAccount)
-    : fullTierAllows(account);
-  const canDelete = isSelfTransfer
-    ? fullTierAllows(account) || fullTierAllows(toAccount)
-    : fullTierAllows(account);
+  const canEdit = canEditEntry(entry, account, toAccount, user?.id);
+  const canDelete = canDeleteEntry(entry, account, toAccount, user?.id);
 
   return (
     <section className="mx-auto flex w-full max-w-xl flex-col gap-8 px-6 py-12 sm:px-10">
@@ -767,86 +734,70 @@ function EditEntry() {
         )}
       </form>
 
-      <Dialog
+      <Modal
         open={confirmingDelete}
         onClose={() => setConfirmingDelete(false)}
-        className="relative z-50"
+        title={t("entries.edit.confirmDeleteTitle")}
       >
-        <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-            <DialogTitle className="text-base font-semibold">
-              {t("entries.edit.confirmDeleteTitle")}
-            </DialogTitle>
-            <Description className="text-sm text-zinc-600 dark:text-zinc-400">
-              {t("entries.edit.confirmDeleteBody")}
-            </Description>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-              >
-                {t("accounts.edit.confirm.cancel")}
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
-              >
-                {t("entries.edit.delete")}
-              </button>
-            </div>
-          </DialogPanel>
+        <Description className="text-sm text-zinc-600 dark:text-zinc-400">
+          {t("entries.edit.confirmDeleteBody")}
+        </Description>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(false)}
+            className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+          >
+            {t("accounts.edit.confirm.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            {t("entries.edit.delete")}
+          </button>
         </div>
-      </Dialog>
+      </Modal>
 
-      <Dialog
+      <Modal
         open={confirmingAccountChange}
         onClose={() => setConfirmingAccountChange(false)}
-        className="relative z-50"
+        title={t("entries.edit.confirmAccountChangeTitle")}
       >
-        <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-            <DialogTitle className="text-base font-semibold">
-              {t("entries.edit.confirmAccountChangeTitle")}
-            </DialogTitle>
-            <Description className="text-sm text-zinc-600 dark:text-zinc-400">
-              {t("entries.edit.confirmAccountChangeBody", {
-                account: selectedAccount?.title ?? selectedAccountId,
-              })}
-            </Description>
-            {currencyMismatch && selectedAccount && account && (
-              <p className="text-sm text-amber-600 dark:text-amber-400">
-                {t("entries.form.accountCurrencyWarning", {
-                  currency: selectedAccount.currency,
-                  originalCurrency: account.currency,
-                })}
-              </p>
-            )}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingAccountChange(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-              >
-                {t("accounts.edit.confirm.cancel")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (pendingAmount !== null)
-                    void performSubmit(pendingAmount, pendingDestination);
-                }}
-                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {t("entries.edit.confirmAccountChangeConfirm")}
-              </button>
-            </div>
-          </DialogPanel>
+        <Description className="text-sm text-zinc-600 dark:text-zinc-400">
+          {t("entries.edit.confirmAccountChangeBody", {
+            account: selectedAccount?.title ?? selectedAccountId,
+          })}
+        </Description>
+        {currencyMismatch && selectedAccount && account && (
+          <p className="text-sm text-amber-600 dark:text-amber-400">
+            {t("entries.form.accountCurrencyWarning", {
+              currency: selectedAccount.currency,
+              originalCurrency: account.currency,
+            })}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmingAccountChange(false)}
+            className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+          >
+            {t("accounts.edit.confirm.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (pendingAmount !== null)
+                void performSubmit(pendingAmount, pendingDestination);
+            }}
+            className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            {t("entries.edit.confirmAccountChangeConfirm")}
+          </button>
         </div>
-      </Dialog>
+      </Modal>
     </section>
   );
 }

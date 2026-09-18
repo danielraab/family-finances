@@ -1,15 +1,11 @@
-import {
-  Description,
-  Dialog,
-  DialogPanel,
-  DialogTitle,
-} from "@headlessui/react";
+import { Description } from "@headlessui/react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
+import { Modal } from "../components/Modal";
 import { TagLabel } from "../components/TagLabel";
 
 export const Route = createFileRoute("/tags")({
@@ -305,152 +301,134 @@ function TagsPage() {
         </div>
       )}
 
-      <Dialog
+      <Modal
         open={confirmingLeave !== null}
         onClose={() => setConfirmingLeave(null)}
-        className="relative z-50"
+        title={
+          confirmingLeave
+            ? t("tags.sharedWithMe.confirmLeaveTitle", {
+                name: confirmingLeave.name,
+              })
+            : ""
+        }
       >
-        <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-            {confirmingLeave && (
-              <>
-                <DialogTitle className="text-base font-semibold">
-                  {t("tags.sharedWithMe.confirmLeaveTitle", {
-                    name: confirmingLeave.name,
-                  })}
-                </DialogTitle>
-                <Description className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {t("tags.sharedWithMe.confirmLeaveBody")}
-                </Description>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingLeave(null)}
-                    className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-                  >
-                    {t("tags.confirm.cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={performLeave}
-                    className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
-                  >
-                    {t("tags.confirm.confirmAction")}
-                  </button>
-                </div>
-              </>
-            )}
-          </DialogPanel>
-        </div>
-      </Dialog>
+        {confirmingLeave && (
+          <>
+            <Description className="text-sm text-zinc-600 dark:text-zinc-400">
+              {t("tags.sharedWithMe.confirmLeaveBody")}
+            </Description>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingLeave(null)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                {t("tags.confirm.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={performLeave}
+                className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+              >
+                {t("tags.confirm.confirmAction")}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
 
-      <Dialog
+      <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}
-        className="relative z-50"
+        title={editing ? t("tags.edit.heading") : ""}
       >
-        <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-            {editing && (
-              <form onSubmit={onSaveEdit} className="flex flex-col gap-4">
-                <DialogTitle className="text-base font-semibold">
-                  {t("tags.edit.heading")}
-                </DialogTitle>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  {t("tags.edit.nameLabel")}
-                  <input
-                    required
-                    value={editName}
-                    onChange={(event) => setEditName(event.target.value)}
-                    className={inputClass}
-                  />
-                </label>
-                {editError && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {editError}
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center gap-2 border-t border-black/10 pt-3 dark:border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => onToggleDisabled(editing)}
-                    className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-                  >
-                    {editing.disabled
-                      ? t("tags.actions.enable")
-                      : t("tags.actions.disable")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDelete(editing)}
-                    className="rounded-md px-2 py-1 text-xs font-medium text-red-600 underline underline-offset-2 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                  >
-                    {t("tags.actions.delete")}
-                  </button>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditing(null)}
-                    className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-                  >
-                    {t("tags.edit.cancel")}
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                  >
-                    {saving ? t("tags.edit.saving") : t("tags.edit.save")}
-                  </button>
-                </div>
-              </form>
+        {editing && (
+          <form onSubmit={onSaveEdit} className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5 text-sm font-medium">
+              {t("tags.edit.nameLabel")}
+              <input
+                required
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+                className={inputClass}
+              />
+            </label>
+            {editError && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {editError}
+              </p>
             )}
-          </DialogPanel>
-        </div>
-      </Dialog>
+            <div className="flex flex-wrap items-center gap-2 border-t border-black/10 pt-3 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => onToggleDisabled(editing)}
+                className="rounded-md px-2 py-1 text-xs font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                {editing.disabled
+                  ? t("tags.actions.enable")
+                  : t("tags.actions.disable")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(editing)}
+                className="rounded-md px-2 py-1 text-xs font-medium text-red-600 underline underline-offset-2 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+              >
+                {t("tags.actions.delete")}
+              </button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                {t("tags.edit.cancel")}
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {saving ? t("tags.edit.saving") : t("tags.edit.save")}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
-      <Dialog
+      <Modal
         open={confirmingDelete !== null}
         onClose={() => setConfirmingDelete(null)}
-        className="relative z-50"
+        title={
+          confirmingDelete
+            ? t("tags.confirm.deleteTitle", { name: confirmingDelete.name })
+            : ""
+        }
       >
-        <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-            {confirmingDelete && (
-              <>
-                <DialogTitle className="text-base font-semibold">
-                  {t("tags.confirm.deleteTitle", {
-                    name: confirmingDelete.name,
-                  })}
-                </DialogTitle>
-                <Description className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {t("tags.confirm.deleteBody")}
-                </Description>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDelete(null)}
-                    className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-                  >
-                    {t("tags.confirm.cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onConfirmDelete}
-                    className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                  >
-                    {t("tags.confirm.confirmAction")}
-                  </button>
-                </div>
-              </>
-            )}
-          </DialogPanel>
-        </div>
-      </Dialog>
+        {confirmingDelete && (
+          <>
+            <Description className="text-sm text-zinc-600 dark:text-zinc-400">
+              {t("tags.confirm.deleteBody")}
+            </Description>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(null)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+              >
+                {t("tags.confirm.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmDelete}
+                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {t("tags.confirm.confirmAction")}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </section>
   );
 }

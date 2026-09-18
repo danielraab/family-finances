@@ -1,7 +1,7 @@
-import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { BulkTask } from "../../lib/bulkEntryActions";
+import { Modal } from "../Modal";
 
 type FailedItem = { id: string; title: string; reason: string };
 type Result = { succeeded: number; failed: FailedItem[] };
@@ -61,67 +61,59 @@ export function BulkActionRunModal({
   const finished = result !== null;
 
   return (
-    <Dialog
+    <Modal
       open
-      onClose={finished ? onClose : () => {}}
-      className="relative z-50"
+      onClose={onClose}
+      dismissable={finished}
+      title={t("entries.bulk.run.title")}
     >
-      <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-          <DialogTitle className="text-base font-semibold">
-            {t("entries.bulk.run.title")}
-          </DialogTitle>
-
-          {!finished ? (
-            <>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                {t("entries.bulk.run.progress", { done, total })}
-              </p>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
-                <div
-                  className="h-full bg-zinc-900 transition-all dark:bg-white"
-                  style={{ width: `${percent}%` }}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="text-sm">
-                {t("entries.bulk.run.result", {
-                  succeeded: result.succeeded,
-                  failed: result.failed.length,
-                })}
-              </p>
-              {result.failed.length > 0 && (
-                <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto text-sm">
-                  {result.failed.map((f) => (
-                    <li key={f.id} className="text-red-600 dark:text-red-400">
-                      {f.title} — {t(`entries.bulk.run.reasons.${f.reason}`)}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-                >
-                  {t("entries.bulk.run.close")}
-                </button>
-                <button
-                  type="button"
-                  onClick={onReload}
-                  className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-                >
-                  {t("entries.bulk.run.reload")}
-                </button>
-              </div>
-            </>
+      {!finished ? (
+        <>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {t("entries.bulk.run.progress", { done, total })}
+          </p>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+            <div
+              className="h-full bg-zinc-900 transition-all dark:bg-white"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-sm">
+            {t("entries.bulk.run.result", {
+              succeeded: result.succeeded,
+              failed: result.failed.length,
+            })}
+          </p>
+          {result.failed.length > 0 && (
+            <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto text-sm">
+              {result.failed.map((f) => (
+                <li key={f.id} className="text-red-600 dark:text-red-400">
+                  {f.title} — {t(`entries.bulk.run.reasons.${f.reason}`)}
+                </li>
+              ))}
+            </ul>
           )}
-        </DialogPanel>
-      </div>
-    </Dialog>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+            >
+              {t("entries.bulk.run.close")}
+            </button>
+            <button
+              type="button"
+              onClick={onReload}
+              className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {t("entries.bulk.run.reload")}
+            </button>
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }
