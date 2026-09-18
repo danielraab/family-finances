@@ -100,6 +100,10 @@ jobs:
   # this one or is needed by it, so it never gates or delays anything else.
   # Scoped to pull requests, same as backend-integration below — its only
   # output is a PR comment, so there's nothing useful for it to do on push.
+  # A PR comment (and the failed-but-allowed step, surfaced by GitHub as a
+  # warning rather than a red X) only appears when some locale is short of
+  # 100%; full coverage succeeds silently, and a stale comment from a
+  # previously-short PR is removed once it's resolved.
   i18n-coverage:
     needs: changes
     runs-on: ubuntu-latest
@@ -114,8 +118,10 @@ jobs:
         with:
           node-version: 26
       - name: Compute translation coverage
+        id: coverage
         run: node frontend/scripts/i18n-coverage.mjs
       - name: Comment on PR
+        if: steps.coverage.outputs.has_shortfall == 'true'
         uses: actions/github-script@v9
         with:
           script: |
@@ -144,6 +150,25 @@ jobs:
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
                 body,
+              });
+            }
+      - name: Remove stale PR comment
+        if: steps.coverage.outputs.has_shortfall == 'false'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const marker = "<!-- i18n-coverage-report -->";
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((c) => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
               });
             }
 

@@ -111,7 +111,9 @@ brand name is the one exception. `src/i18n/locales/en.json` is the source of
 truth: a key MUST exist there before or at the same time it's added to any
 other locale file. Other locale files are allowed to temporarily lag
 `en.json` — CI's `i18n-coverage` job (`scripts/i18n-coverage.mjs`) reports
-each locale's coverage against it as a job summary and a PR comment, but
+each locale's coverage against it as a job summary always, and as a PR
+comment only when some locale is short of 100% (full coverage succeeds
+silently, and a stale comment is removed once a shortfall is resolved);
 that check is informational only and never blocks merging.
 
 ## Data & auth
