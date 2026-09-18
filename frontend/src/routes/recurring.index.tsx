@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -7,7 +8,11 @@ import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
 import { useSummaryModals } from "../components/summary/useSummaryModals";
 import { amountColorClass, formatAmount } from "../lib/amount";
-import { CUSTOM_PRESET_KEY, matchPreset } from "../lib/recurrence";
+import {
+  CUSTOM_PRESET_KEY,
+  matchPreset,
+  perMonthAmount,
+} from "../lib/recurrence";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
 
 type Account = components["schemas"]["Account"];
@@ -66,9 +71,12 @@ function RecurringTransactionsList() {
         </h1>
         <Link
           to="/recurring/new"
-          className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+          aria-label={t("recurring.create")}
+          title={t("recurring.create")}
+          className="flex shrink-0 items-center gap-1.5 rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
-          {t("recurring.create")}
+          <Plus size={16} aria-hidden="true" />
+          <span className="hidden sm:inline">{t("recurring.create")}</span>
         </Link>
       </header>
 
@@ -90,6 +98,9 @@ function RecurringTransactionsList() {
               </th>
               <th className="px-3 py-2 text-right font-medium">
                 {t("recurring.columns.perYearAmount")}
+              </th>
+              <th className="px-3 py-2 text-right font-medium">
+                {t("recurring.columns.perMonthAmount")}
               </th>
               <th className="px-3 py-2 font-medium" />
             </tr>
@@ -142,7 +153,7 @@ function RecurringTransactionsList() {
                     })()}
                   </td>
                   <td
-                    className={`px-3 py-2 text-right font-mono tabular-nums ${amountColorClass(rt.amount)}`}
+                    className={`whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums ${amountColorClass(rt.amount)}`}
                   >
                     {formatAmount(
                       rt.amount,
@@ -152,10 +163,24 @@ function RecurringTransactionsList() {
                     )}
                   </td>
                   <td
-                    className={`px-3 py-2 text-right font-mono tabular-nums ${amountColorClass(rt.per_year_amount)}`}
+                    className={`whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums ${amountColorClass(rt.per_year_amount)}`}
                   >
                     {formatAmount(
                       rt.per_year_amount,
+                      rt.account_currency ?? "",
+                      displayedDecimalPlaces,
+                      i18n.resolvedLanguage ?? "en",
+                    )}
+                  </td>
+                  {/* Coloured by the per-year amount it is derived from, not
+                      by itself: the two always share a sign, and this way a
+                      per-year amount small enough to round to zero per month
+                      can't render a lone grey cell beside a red one. */}
+                  <td
+                    className={`whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums ${amountColorClass(rt.per_year_amount)}`}
+                  >
+                    {formatAmount(
+                      perMonthAmount(rt.per_year_amount),
                       rt.account_currency ?? "",
                       displayedDecimalPlaces,
                       i18n.resolvedLanguage ?? "en",
@@ -165,9 +190,14 @@ function RecurringTransactionsList() {
                     <Link
                       to="/entries/new"
                       search={{ recurring_transaction_id: rt.id }}
-                      className="rounded-md border border-black/15 px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]"
+                      aria-label={t("recurring.createTransaction")}
+                      title={t("recurring.createTransaction")}
+                      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-black/15 px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]"
                     >
-                      {t("recurring.createTransaction")}
+                      <Plus size={14} aria-hidden="true" />
+                      <span className="hidden sm:inline">
+                        {t("recurring.createTransaction")}
+                      </span>
                     </Link>
                   </td>
                 </tr>
@@ -184,29 +214,68 @@ function RecurringTransactionsList() {
       )}
 
       {sums.length > 0 && (
-        <div className="flex flex-col gap-1 rounded-lg border border-black/10 p-4 text-sm dark:border-white/10">
-          <span className="font-medium text-zinc-500 dark:text-zinc-400">
-            {t("recurring.totalPerYear")}
-          </span>
-          <div className="flex flex-wrap gap-x-6 gap-y-1">
-            {sums.map((sum) => (
-              <span
-                key={sum.currency}
-                className={`font-mono text-base tabular-nums ${amountColorClass(sum.amount)}`}
-              >
-                {formatAmount(
-                  sum.amount,
-                  sum.currency,
-                  displayedDecimalPlaces,
-                  i18n.resolvedLanguage ?? "en",
-                )}
-              </span>
-            ))}
-          </div>
+        <div className="grid grid-cols-1 gap-4 rounded-lg border border-black/10 p-4 text-sm sm:grid-cols-2 dark:border-white/10">
+          <TotalGroup
+            label={t("recurring.totalPerYear")}
+            sums={sums}
+            amountOf={(sum) => sum.amount}
+            displayedDecimalPlaces={displayedDecimalPlaces}
+            locale={i18n.resolvedLanguage ?? "en"}
+          />
+          <TotalGroup
+            label={t("recurring.totalPerMonth")}
+            sums={sums}
+            amountOf={(sum) => perMonthAmount(sum.amount)}
+            displayedDecimalPlaces={displayedDecimalPlaces}
+            locale={i18n.resolvedLanguage ?? "en"}
+          />
         </div>
       )}
 
       {summaryModals}
     </section>
+  );
+}
+
+/**
+ * One labelled group of per-currency totals in the list's footer. The
+ * page renders two of these side by side — per year, straight from
+ * `GET /api/recurring-transactions/summary`, and per month, each of those
+ * same totals divided by twelve (see `perMonthAmount`).
+ */
+function TotalGroup({
+  label,
+  sums,
+  amountOf,
+  displayedDecimalPlaces,
+  locale,
+}: {
+  label: string;
+  sums: CurrencySum[];
+  amountOf: (sum: CurrencySum) => number;
+  displayedDecimalPlaces: number;
+  locale: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-medium text-zinc-500 dark:text-zinc-400">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-x-6 gap-y-1">
+        {sums.map((sum) => (
+          <span
+            key={sum.currency}
+            className={`whitespace-nowrap font-mono text-base tabular-nums ${amountColorClass(amountOf(sum))}`}
+          >
+            {formatAmount(
+              amountOf(sum),
+              sum.currency,
+              displayedDecimalPlaces,
+              locale,
+            )}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }

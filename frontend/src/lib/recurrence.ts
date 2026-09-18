@@ -34,3 +34,24 @@ export function matchPreset(unit: IntervalUnit, count: number): string {
     CUSTOM_PRESET_KEY
   );
 }
+
+/**
+ * A recurring transaction's monthly share of its annualized amount —
+ * `per_year_amount` divided by twelve, at the same fixed 4-decimal-place
+ * integer scale.
+ *
+ * Derived on the client rather than sent by the backend: `per_year_amount`
+ * is itself computed on every read and never stored, and this is that same
+ * number divided by a constant. Rounding is half away from zero, mirroring
+ * the backend's own `PerYearAmount`, so a negative (expense) amount rounds
+ * symmetrically to a positive one. At the stored scale that rounding is
+ * accurate to 0.0001 of a currency unit — two orders of magnitude below
+ * the display default, so it can never move a rendered digit.
+ */
+export function perMonthAmount(perYearAmount: number): number {
+  const monthly = perYearAmount / 12;
+  const rounded = Math.sign(monthly) * Math.round(Math.abs(monthly));
+  // `-0` would otherwise reach Intl and render as "-€0.00" for a
+  // per-year amount small enough to round away.
+  return rounded === 0 ? 0 : rounded;
+}
