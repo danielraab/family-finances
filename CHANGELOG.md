@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-18
+
+### Added
+
+- New `self_transfer` entry kind for moving money between two of your own
+  (or shared) accounts as a single entry instead of two unrelated ones: the
+  entry form gains a "Self-transfer" option alongside Transaction and
+  Balance adjustment, revealing a "To account" picker restricted to
+  append+, same-currency, non-disabled accounts. A self-transfer's amount
+  is included in summary/flow-summary totals (unlike a balance adjustment)
+  and renders once per side of the transfer that's within the caller's
+  account scope, with a badge on each leg linking to the other.
+
+### Changed
+
+- **BREAKING**: an account's `currency` can no longer be changed once the
+  account has any entry — `PATCH /api/accounts/{id}` with a changed
+  `currency` on such an account is rejected, closing the gap that could let
+  a same-currency transfer pair drift into a mismatch after the fact. The
+  account edit form disables the currency field accordingly.
+- The i18n-coverage CI job now only comments on a pull request when some
+  locale is short of 100% coverage, and removes a stale comment once a
+  previously-short PR reaches full coverage.
+
+### Fixed
+
+- The entry-kind radio buttons on `/entries/new` no longer stretch apart
+  vertically when they wrap onto multiple lines on narrow/mobile
+  viewports.
+- German translations for the self-transfer feature, which had left German
+  at 99.1% i18n coverage.
+
 ## [0.3.2] - 2026-09-17
 
 ### Added
@@ -163,7 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/danielraab/family-finances/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/danielraab/family-finances/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/danielraab/family-finances/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/danielraab/family-finances/compare/v0.2.0...v0.3.0
