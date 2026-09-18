@@ -1,4 +1,3 @@
-import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../../api/client";
@@ -11,6 +10,7 @@ import type {
 import type { WeekStart } from "../../lib/dateRangePresets";
 import type { Account } from "../../lib/useAccountsWithBalances";
 import { DateRangeFilter } from "../DateRangeFilter";
+import { Modal } from "../Modal";
 
 type Category = components["schemas"]["Category"];
 type Tag = components["schemas"]["Tag"];
@@ -165,207 +165,197 @@ export function CardFormDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="flex w-full max-w-md flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-          <form onSubmit={submit} className="flex flex-col gap-4">
-            <DialogTitle className="text-base font-semibold">
-              {editingCard
-                ? t("dashboard.editCard.heading")
-                : t("dashboard.addCard.heading")}
-            </DialogTitle>
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="md"
+      title={
+        editingCard
+          ? t("dashboard.editCard.heading")
+          : t("dashboard.addCard.heading")
+      }
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          {t("dashboard.addCard.typeLabel")}
+          <select
+            value={type}
+            disabled={!!editingCard}
+            onChange={(e) => setType(e.target.value as DashboardCardType)}
+            className={inputClass}
+          >
+            {CARD_TYPES.map((ct) => (
+              <option key={ct} value={ct}>
+                {t(`dashboard.cardTypes.${ct}`)}
+              </option>
+            ))}
+          </select>
+          {editingCard && (
+            <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
+              {t("dashboard.editCard.typeImmutableHint")}
+            </span>
+          )}
+        </label>
 
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
-              {t("dashboard.addCard.typeLabel")}
-              <select
-                value={type}
-                disabled={!!editingCard}
-                onChange={(e) => setType(e.target.value as DashboardCardType)}
-                className={inputClass}
-              >
-                {CARD_TYPES.map((ct) => (
-                  <option key={ct} value={ct}>
-                    {t(`dashboard.cardTypes.${ct}`)}
-                  </option>
-                ))}
-              </select>
-              {editingCard && (
-                <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">
-                  {t("dashboard.editCard.typeImmutableHint")}
-                </span>
-              )}
-            </label>
+        {type !== "account_stat" && (
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("dashboard.addCard.titleLabel")}
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={t("dashboard.addCard.titlePlaceholder")}
+              className={inputClass}
+            />
+          </label>
+        )}
 
-            {type !== "account_stat" && (
-              <label className="flex flex-col gap-1.5 text-sm font-medium">
-                {t("dashboard.addCard.titleLabel")}
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={t("dashboard.addCard.titlePlaceholder")}
-                  className={inputClass}
-                />
-              </label>
-            )}
-
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          {type === "account_stat"
+            ? t("reports.filters.account")
+            : t("dashboard.addCard.accountOptional")}
+          <select
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">
               {type === "account_stat"
-                ? t("reports.filters.account")
-                : t("dashboard.addCard.accountOptional")}
+                ? t("entries.form.accountPlaceholder")
+                : t("reports.filters.allAccounts")}
+            </option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {type !== "account_stat" && type !== "line_chart" && (
+          <>
+            <label className="flex flex-col gap-1.5 text-sm font-medium">
+              {t("reports.filters.category")}
               <select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
                 className={inputClass}
               >
-                <option value="">
-                  {type === "account_stat"
-                    ? t("entries.form.accountPlaceholder")
-                    : t("reports.filters.allAccounts")}
-                </option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.title}
+                <option value="">{t("reports.filters.selectCategory")}</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </select>
             </label>
 
-            {type !== "account_stat" && type !== "line_chart" && (
-              <>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  {t("reports.filters.category")}
-                  <select
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">
-                      {t("reports.filters.selectCategory")}
-                    </option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {categoryId && (
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={includeSubcategories}
-                      onChange={(e) =>
-                        setIncludeSubcategories(e.target.checked)
-                      }
-                    />
-                    {t("reports.filters.includeSubcategories")}
-                  </label>
-                )}
-
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  {t("reports.filters.tag")}
-                  <select
-                    value={tagId}
-                    onChange={(e) => setTagId(e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">{t("reports.filters.selectTag")}</option>
-                    {tags.map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            )}
-
-            {(type === "query_stat" || type === "entry_list") && (
-              <DateRangeFilter
-                value={range}
-                weekStart={weekStart}
-                onChange={(patch) =>
-                  setRange((prev) => ({ ...prev, ...patch }))
-                }
-                fromLabel={t("reports.filters.from")}
-                toLabel={t("reports.filters.to")}
-              />
-            )}
-
-            {type === "bar_chart" && (
-              <label className="flex flex-col gap-1.5 text-sm font-medium">
-                {t("dashboard.addCard.unitLabel")}
-                <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value as "month" | "day")}
-                  className={inputClass}
-                >
-                  <option value="month">
-                    {t("dashboard.addCard.unitMonth")}
-                  </option>
-                  <option value="day">{t("dashboard.addCard.unitDay")}</option>
-                </select>
-              </label>
-            )}
-
-            {type === "entry_list" && (
-              <label className="flex flex-col gap-1.5 text-sm font-medium">
-                {t("dashboard.addCard.columnsLabel")}
-                <select
-                  value={columns}
-                  onChange={(e) => setColumns(Number(e.target.value))}
-                  className={inputClass}
-                >
-                  <option value={2}>{t("dashboard.addCard.columns2")}</option>
-                  <option value={3}>{t("dashboard.addCard.columns3")}</option>
-                  <option value={4}>{t("dashboard.addCard.columns4")}</option>
-                </select>
-              </label>
-            )}
-
-            {(type === "entry_list" ||
-              type === "bar_chart" ||
-              type === "line_chart") && (
+            {categoryId && (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  checked={showRecurringPreview}
-                  onChange={(e) => setShowRecurringPreview(e.target.checked)}
+                  checked={includeSubcategories}
+                  onChange={(e) => setIncludeSubcategories(e.target.checked)}
                 />
-                {t("dashboard.addCard.showRecurringPreviewLabel")}
+                {t("reports.filters.includeSubcategories")}
               </label>
             )}
 
-            {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-            )}
+            <label className="flex flex-col gap-1.5 text-sm font-medium">
+              {t("reports.filters.tag")}
+              <select
+                value={tagId}
+                onChange={(e) => setTagId(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">{t("reports.filters.selectTag")}</option>
+                {tags.map((tag) => (
+                  <option key={tag.id} value={tag.id}>
+                    {tag.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
 
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-              >
-                {t("categories.edit.cancel")}
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {editingCard
-                  ? saving
-                    ? t("categories.edit.saving")
-                    : t("categories.edit.save")
-                  : t("dashboard.addCard.submit")}
-              </button>
-            </div>
-          </form>
-        </DialogPanel>
-      </div>
-    </Dialog>
+        {(type === "query_stat" || type === "entry_list") && (
+          <DateRangeFilter
+            value={range}
+            weekStart={weekStart}
+            onChange={(patch) => setRange((prev) => ({ ...prev, ...patch }))}
+            fromLabel={t("reports.filters.from")}
+            toLabel={t("reports.filters.to")}
+          />
+        )}
+
+        {type === "bar_chart" && (
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("dashboard.addCard.unitLabel")}
+            <select
+              value={unit}
+              onChange={(e) => setUnit(e.target.value as "month" | "day")}
+              className={inputClass}
+            >
+              <option value="month">{t("dashboard.addCard.unitMonth")}</option>
+              <option value="day">{t("dashboard.addCard.unitDay")}</option>
+            </select>
+          </label>
+        )}
+
+        {type === "entry_list" && (
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("dashboard.addCard.columnsLabel")}
+            <select
+              value={columns}
+              onChange={(e) => setColumns(Number(e.target.value))}
+              className={inputClass}
+            >
+              <option value={2}>{t("dashboard.addCard.columns2")}</option>
+              <option value={3}>{t("dashboard.addCard.columns3")}</option>
+              <option value={4}>{t("dashboard.addCard.columns4")}</option>
+            </select>
+          </label>
+        )}
+
+        {(type === "entry_list" ||
+          type === "bar_chart" ||
+          type === "line_chart") && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showRecurringPreview}
+              onChange={(e) => setShowRecurringPreview(e.target.checked)}
+            />
+            {t("dashboard.addCard.showRecurringPreviewLabel")}
+          </label>
+        )}
+
+        {error && (
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+          >
+            {t("categories.edit.cancel")}
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            {editingCard
+              ? saving
+                ? t("categories.edit.saving")
+                : t("categories.edit.save")
+              : t("dashboard.addCard.submit")}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

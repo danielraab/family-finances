@@ -1,9 +1,9 @@
-import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import L from "leaflet";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type Coordinates, formatCoordinates } from "../lib/location";
 import { OSM_ATTRIBUTION, OSM_TILE_URL } from "./leafletSetup";
+import { Modal } from "./Modal";
 
 type LocationPickerModalProps = {
   open: boolean;
@@ -100,39 +100,36 @@ export function LocationPickerModal({
   }, [open, container, initial]);
 
   return (
-    <Dialog open={open} onClose={onClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="flex w-full max-w-md flex-col gap-3 rounded-lg bg-white p-4 dark:bg-neutral-900">
-          <DialogTitle className="text-base font-semibold">
-            {t("entries.location.pickTitle")}
-          </DialogTitle>
-          <div
-            ref={setContainer}
-            className="h-72 w-full overflow-hidden rounded-md"
-          />
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {t("entries.location.pickHint")}
-          </p>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-            >
-              {t("entries.location.cancel")}
-            </button>
-            <button
-              type="button"
-              disabled={!selected}
-              onClick={() => selected && onConfirm(formatCoordinates(selected))}
-              className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              {t("entries.location.confirm")}
-            </button>
-          </div>
-        </DialogPanel>
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="md"
+      title={t("entries.location.pickTitle")}
+    >
+      <div
+        ref={setContainer}
+        className="h-72 w-full overflow-hidden rounded-md"
+      />
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        {t("entries.location.pickHint")}
+      </p>
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+        >
+          {t("entries.location.cancel")}
+        </button>
+        <button
+          type="button"
+          disabled={!selected}
+          onClick={() => selected && onConfirm(formatCoordinates(selected))}
+          className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+        >
+          {t("entries.location.confirm")}
+        </button>
       </div>
-    </Dialog>
+    </Modal>
   );
 }

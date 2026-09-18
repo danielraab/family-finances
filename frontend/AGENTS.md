@@ -395,6 +395,57 @@ strings the backend never interprets — the meaning lives entirely here:
 - i18n keys live under `entityIcons.*` (group headings, "Icon"/"Colour"
   labels, "None").
 
+## Modals
+
+Every dialog in the app renders through **`src/components/Modal.tsx`** —
+never a hand-rolled `Dialog`/`DialogPanel`. The shell owns the
+`relative z-50` root, the `fixed inset-0 bg-black/40` backdrop, the
+centering wrapper, the panel, and the `DialogTitle`; call sites supply
+only `open`, `onClose`, `title`, their content, and optionally `size`
+(`sm` default, `md` — width only; gap and padding are identical across
+sizes by design) and `dismissable` (`false` keeps a modal open while work
+is in flight, as `BulkActionRunModal` does mid-run).
+
+There is deliberately **no panel `className` passthrough**: a dialog that
+needs an appearance the shell doesn't offer is a reason to add a named
+variant here, not to restyle locally — 23 hand-rolled panels had already
+drifted into three shapes before this was extracted. Every modal sits at
+the same z-index; one opened while another is open renders above it
+because Headless UI portals stack in mount order (`/categories`' delete
+confirmation relies on this).
+
+## Entry and recurring summaries
+
+`src/components/summary/` holds the read-only summary modals an entry or a
+recurring transaction opens into, plus `useSummaryModals` — the hook that
+holds *which* summary is open as one piece of state, so following the
+cross-link between them replaces the modal's content instead of stacking a
+second modal. A host page wires it in three lines: pass the lists it
+already holds (`accounts`, `categories`, `tags`, `userId`,
+`displayedDecimalPlaces`), call `openEntry(entry)` / `openRecurring(id)`
+from a row, and render `summaryModals`.
+
+- **`EntrySummaryModal`** renders entirely from the entry object the
+  listing already holds — no request of its own, so it shows exactly what
+  the row behind it shows. Its Edit action is gated by `canEditEntry` from
+  `src/lib/entryPermissions.ts`, the same predicate
+  `entries.$entryId.edit.tsx` uses, so the summary and the edit page can
+  never disagree about who may edit. (That matters most for a
+  self-transfer, whose rule is stricter: `append`+ on *both* accounts, no
+  `created_by` exemption.)
+- **`RecurringSummaryModal`** is the one that fetches: it opens from an
+  entry's badge, which carries only a `recurring_transaction_id`, and no
+  page holds the recurring transactions themselves.
+- An entry's title is the summary trigger on all four surfaces that list
+  one — the ledger, an account's recent entries, the `/reports` results
+  table, and the dashboard's `entry_list` card. The first two used to
+  navigate to the edit page; the latter two were inert text.
+  `RecurringTransactionBadge` is a button opening the recurring summary,
+  not a link.
+- An id missing from a lookup map is not an error — it means the visitor
+  can't see that entity, and the summary renders the same "not shared"
+  treatment the ledger already uses.
+
 ## Charts
 
 No charting library is a dependency, deliberately — charts are hand-rolled

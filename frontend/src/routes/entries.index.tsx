@@ -11,6 +11,7 @@ import { BulkActionToolbar } from "../components/entries/BulkActionToolbar";
 import { LocationPreviewModal } from "../components/LocationPreviewModal";
 import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
 import { SelfTransferBadge } from "../components/SelfTransferBadge";
+import { useSummaryModals } from "../components/summary/useSummaryModals";
 import { TagLabel } from "../components/TagLabel";
 import { UpcomingBlock } from "../components/UpcomingBlock";
 import {
@@ -376,6 +377,13 @@ function EntriesListPage() {
   const categoryOptions = flattenCategoryTree(categories);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const tagById = new Map(tags.map((tg) => [tg.id, tg]));
+  const { openEntry, openRecurring, summaryModals } = useSummaryModals({
+    accounts,
+    categories,
+    tags,
+    userId: user?.id,
+    displayedDecimalPlaces,
+  });
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-12 sm:px-10">
       <header className="flex items-center justify-between gap-4">
@@ -648,13 +656,13 @@ function EntriesListPage() {
                   })()}
                 </td>
                 <td className="px-3 py-2">
-                  <Link
-                    to="/entries/$entryId/edit"
-                    params={{ entryId: entry.id }}
-                    className="font-medium underline-offset-2 hover:underline"
+                  <button
+                    type="button"
+                    onClick={() => openEntry(entry)}
+                    className="text-left font-medium underline-offset-2 hover:underline"
                   >
                     {entry.title}
-                  </Link>
+                  </button>
                   {(() => {
                     const coords = parseLocation(entry.location);
                     if (!coords) return null;
@@ -672,6 +680,7 @@ function EntriesListPage() {
                   })()}
                   <RecurringTransactionBadge
                     recurringTransactionId={entry.recurring_transaction_id}
+                    onOpen={openRecurring}
                   />
                   <SelfTransferBadge entryId={entry.id} kind={entry.kind} />
                   {entry.counterparty && (
@@ -797,6 +806,8 @@ function EntriesListPage() {
         onClose={() => setPreviewLocation(null)}
         coordinates={previewLocation}
       />
+
+      {summaryModals}
     </section>
   );
 }

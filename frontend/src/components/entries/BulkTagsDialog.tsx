@@ -1,7 +1,7 @@
-import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "../../api/schema";
+import { Modal } from "../Modal";
 import { TagInput } from "../TagInput";
 
 type Tag = components["schemas"]["Tag"];
@@ -42,47 +42,35 @@ export function BulkTagsDialog({
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="flex w-full max-w-sm flex-col gap-4 rounded-lg bg-white p-6 dark:bg-neutral-900">
-          <DialogTitle className="text-base font-semibold">
-            {t(TITLE_KEYS[mode])}
-          </DialogTitle>
-          <TagInput
-            value={names}
-            onChange={setNames}
-            existingTags={existingTags}
-          />
-          {/* onMouseDown preventDefault, mirroring TagInput's own suggestion
-              buttons: without it, mousedown here blurs the tag input first,
-              collapsing its suggestion list and shifting these buttons up
-              before mouseup completes the click — occasionally missing it
-              entirely. */}
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={handleClose}
-              className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
-            >
-              {t("entries.bulk.cancel")}
-            </button>
-            <button
-              type="button"
-              disabled={names.length === 0}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                onApply(names);
-                setNames([]);
-              }}
-              className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              {t("entries.bulk.apply")}
-            </button>
-          </div>
-        </DialogPanel>
+    <Modal open={open} onClose={handleClose} title={t(TITLE_KEYS[mode])}>
+      <TagInput value={names} onChange={setNames} existingTags={existingTags} />
+      {/* onMouseDown preventDefault, mirroring TagInput's own suggestion
+          buttons: without it, mousedown here blurs the tag input first,
+          collapsing its suggestion list and shifting these buttons up
+          before mouseup completes the click — occasionally missing it
+          entirely. */}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={handleClose}
+          className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]"
+        >
+          {t("entries.bulk.cancel")}
+        </button>
+        <button
+          type="button"
+          disabled={names.length === 0}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            onApply(names);
+            setNames([]);
+          }}
+          className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+        >
+          {t("entries.bulk.apply")}
+        </button>
       </div>
-    </Dialog>
+    </Modal>
   );
 }

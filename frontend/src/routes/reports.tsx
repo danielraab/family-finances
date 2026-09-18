@@ -8,6 +8,7 @@ import { useAuth } from "../components/AuthProvider";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
 import { SelfTransferBadge } from "../components/SelfTransferBadge";
+import { useSummaryModals } from "../components/summary/useSummaryModals";
 import { UpcomingBlock } from "../components/UpcomingBlock";
 import { amountColorClass, formatAmount } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
@@ -128,7 +129,7 @@ const inputClass =
   "rounded-md border border-black/15 bg-transparent px-2.5 py-1.5 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
 
 function ReportsPage() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const navigate = useNavigate();
   const search = Route.useSearch();
   const routeNavigate = Route.useNavigate();
@@ -146,6 +147,13 @@ function ReportsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const { openEntry, openRecurring, summaryModals } = useSummaryModals({
+    accounts,
+    categories,
+    tags,
+    userId: user?.id,
+    displayedDecimalPlaces,
+  });
 
   useEffect(() => {
     Promise.all([
@@ -509,9 +517,16 @@ function ReportsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 font-medium">
-                      {entry.title}
+                      <button
+                        type="button"
+                        onClick={() => openEntry(entry)}
+                        className="text-left font-medium underline-offset-2 hover:underline"
+                      >
+                        {entry.title}
+                      </button>
                       <RecurringTransactionBadge
                         recurringTransactionId={entry.recurring_transaction_id}
+                        onOpen={openRecurring}
                       />
                       <SelfTransferBadge entryId={entry.id} kind={entry.kind} />
                     </td>
@@ -560,6 +575,8 @@ function ReportsPage() {
           <div ref={sentinelRef} className="h-1" />
         </>
       )}
+
+      {summaryModals}
     </section>
   );
 }

@@ -10,6 +10,7 @@ import {
   type LineChartSeries,
 } from "../components/charts/LineChart";
 import { FlowChart } from "../components/FlowChart";
+import { useSummaryModals } from "../components/summary/useSummaryModals";
 import {
   amountColorClass,
   formatAmount,
@@ -31,6 +32,8 @@ export const Route = createFileRoute("/accounts/$accountId/")({
 
 type Account = components["schemas"]["Account"];
 type Entry = components["schemas"]["Entry"];
+type Category = components["schemas"]["Category"];
+type Tag = components["schemas"]["Tag"];
 type BalancePoint = components["schemas"]["BalancePoint"];
 
 // Only one chart is on screen at a time; the switcher below picks which.
@@ -72,9 +75,33 @@ function AccountDetails() {
     RecurringTransactionPreviewItem[]
   >([]);
   const recurringPreviewHorizon = useRecurringPreviewHorizon();
+  // Fetched only for the recent-entry summary modal: categories and tags
+  // so it can name them the way the ledger's does, and the full account
+  // list because a self-transfer's edit permission depends on the visitor's
+  // tier on *both* accounts — with only this one in hand, the summary would
+  // hide Edit from someone entitled to it.
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const { openEntry, summaryModals } = useSummaryModals({
+    accounts: allAccounts,
+    categories,
+    tags,
+    userId: user?.id,
+    displayedDecimalPlaces,
+  });
 
   useEffect(() => {
     let cancelled = false;
+    api.GET("/api/accounts").then(({ data }) => {
+      if (!cancelled) setAllAccounts(data ?? []);
+    });
+    api.GET("/api/categories").then(({ data }) => {
+      if (!cancelled) setCategories(data ?? []);
+    });
+    api.GET("/api/tags").then(({ data }) => {
+      if (!cancelled) setTags(data ?? []);
+    });
     api
       .GET("/api/accounts/{id}", { params: { path: { id: accountId } } })
       .then(({ data }) => {
@@ -442,10 +469,10 @@ function AccountDetails() {
           <ul className="flex flex-col gap-2">
             {recent.map((entry) => (
               <li key={entry.id}>
-                <Link
-                  to="/entries/$entryId/edit"
-                  params={{ entryId: entry.id }}
-                  className="flex items-center justify-between gap-4 rounded-lg border border-black/10 px-4 py-3 transition-colors hover:bg-black/[.02] dark:border-white/10 dark:hover:bg-white/[.04]"
+                <button
+                  type="button"
+                  onClick={() => openEntry(entry)}
+                  className="flex w-full items-center justify-between gap-4 rounded-lg border border-black/10 px-4 py-3 text-left transition-colors hover:bg-black/[.02] dark:border-white/10 dark:hover:bg-white/[.04]"
                 >
                   <div className="flex flex-col gap-0.5">
                     <span className="font-medium">{entry.title}</span>
@@ -492,12 +519,14 @@ function AccountDetails() {
                       </span>
                     )}
                   </span>
-                </Link>
+                </button>
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {summaryModals}
     </section>
   );
 }

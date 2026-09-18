@@ -897,5 +897,44 @@
       "life": "Leben",
       "transfers": "Umbuchungen"
     }
+  },
+  "summary": {
+    "close": "Schließen",
+    "edit": "Bearbeiten",
+    "back": "Zurück",
+    "loading": "Wird geladen…",
+    "entry": {
+      "bookedAt": "Gebucht",
+      "amount": "Betrag",
+      "balance": "Saldo danach",
+      "account": "Konto",
+      "toAccount": "Zielkonto",
+      "description": "Beschreibung",
+      "category": "Kategorie",
+      "tags": "Tags",
+      "counterparty": "Gegenpartei",
+      "location": "Ort",
+      "createdBy": "Erstellt von",
+      "viewRecurring": "Wiederkehrende Buchung anzeigen"
+    },
+    "recurring": {
+      "title": "Wiederkehrende Buchung",
+      "amount": "Betrag",
+      "frequency": "Häufigkeit",
+      "perYearAmount": "Pro Jahr",
+      "account": "Konto",
+      "startsOn": "Beginnt",
+      "endsOn": "Endet",
+      "status": "Status",
+      "nextSuggested": "Nächster Vorschlag",
+      "description": "Beschreibung",
+      "category": "Kategorie",
+      "tags": "Tags",
+      "counterparty": "Gegenpartei",
+      "linkedEntries": "Verknüpfte Buchungen",
+      "linkedEntriesCount_one": "{{count}} Buchung",
+      "linkedEntriesCount_other": "{{count}} Buchungen",
+      "loadError": "Diese wiederkehrende Buchung konnte nicht geladen werden."
+    }
   }
 }
