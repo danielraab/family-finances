@@ -131,8 +131,16 @@ the shell is wrong — fix the shell, not the call site.
       opening the recurring summary instead of a `Link`, keeping its
       `stopPropagation` so it never triggers the surrounding row, and
       keeping its `aria-label`/`title`.
-- [x] 7.6 Leave `SelfTransferBadge`'s link to the counterpart entry's edit
-      page as is — it is a different gesture and out of scope.
+- [x] ~~7.6 Leave `SelfTransferBadge`'s link to the counterpart entry's
+      edit page as is — it is a different gesture and out of scope.~~
+      **Corrected after merge:** this was wrong. A self-transfer is listed
+      once per account it touches, sharing one `entry.id` — see the
+      "sharing the same id" comments in `entries.index.tsx`/`reports.tsx`
+      — so `SelfTransferBadge` always resolved to the *same* entry the
+      title does, not a counterpart. Reported by Daniel as inconsistent
+      (title opens the summary, the icon still opened the edit page) and
+      fixed in the follow-up commit: the badge now takes `onOpen` and
+      opens the summary, exactly like the title.
 
 ## 8. Before you're done
 
