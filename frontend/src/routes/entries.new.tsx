@@ -293,7 +293,7 @@ function NewEntry() {
 
         <fieldset className="flex flex-col gap-1.5 text-sm font-medium">
           {t("entries.form.kind")}
-          <div className="flex gap-4 text-sm font-normal">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm font-normal">
             <label className="flex items-center gap-1.5">
               <input
                 type="radio"
