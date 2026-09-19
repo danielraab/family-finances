@@ -625,13 +625,15 @@
     "empty": "Noch keine wiederkehrenden Buchungen.",
     "ended": "Beendet",
     "totalPerYear": "Summe pro Jahr",
+    "totalPerMonth": "Summe pro Monat",
     "customFrequency": "Alle {{count}} {{unit}}",
     "columns": {
       "title": "Titel",
       "category": "Kategorie",
       "frequency": "Häufigkeit",
       "amount": "Betrag",
-      "perYearAmount": "Pro Jahr"
+      "perYearAmount": "Pro Jahr",
+      "perMonthAmount": "Pro Monat"
     },
     "units": {
       "day": "Tag(e)",

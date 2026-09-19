@@ -625,13 +625,15 @@
     "empty": "No recurring transactions yet.",
     "ended": "Ended",
     "totalPerYear": "Total per year",
+    "totalPerMonth": "Total per month",
     "customFrequency": "Every {{count}} {{unit}}",
     "columns": {
       "title": "Title",
       "category": "Category",
       "frequency": "Frequency",
       "amount": "Amount",
-      "perYearAmount": "Per year"
+      "perYearAmount": "Per year",
+      "perMonthAmount": "Per month"
     },
     "units": {
       "day": "day(s)",
