@@ -61,7 +61,7 @@ export function EntryListCard({
     RecurringTransactionPreviewItem[] | null
   >(null);
   const recurringPreviewHorizon = useRecurringPreviewHorizon();
-  const { openEntry, summaryModals } = useSummaryModals({
+  const { openEntry, openRecurring, summaryModals } = useSummaryModals({
     accounts,
     categories,
     tags,
@@ -155,6 +155,8 @@ export function EntryListCard({
           accounts={accounts}
           displayedDecimalPlaces={displayedDecimalPlaces}
           locale={locale}
+          onOpenRecurring={openRecurring}
+          embedded
         />
       )}
 

@@ -478,6 +478,7 @@ function ReportsPage() {
           accounts={accounts}
           displayedDecimalPlaces={displayedDecimalPlaces}
           locale={i18n.resolvedLanguage ?? "en"}
+          onOpenRecurring={openRecurring}
         />
       )}
 
