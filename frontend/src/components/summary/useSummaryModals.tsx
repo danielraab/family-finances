@@ -8,7 +8,14 @@ type Entry = components["schemas"]["Entry"];
 
 type Target =
   | { kind: "entry"; entry: Entry }
-  | { kind: "recurring"; id: string; back: Entry | null };
+  | {
+      kind: "recurring";
+      id: string;
+      /** The projected occurrence this was opened for, when it was opened
+       * from one (an Upcoming row) — see `RecurringSummaryModal`. */
+      bookingTimestamp: string | undefined;
+      back: Entry | null;
+    };
 
 /**
  * The open summary as one piece of state, so following a cross-link
@@ -19,7 +26,10 @@ type Target =
  */
 export function useSummaryModals(sources: SummaryLookupSources): {
   openEntry: (entry: Entry) => void;
-  openRecurring: (recurringTransactionId: string) => void;
+  openRecurring: (
+    recurringTransactionId: string,
+    bookingTimestamp?: string,
+  ) => void;
   summaryModals: ReactNode;
 } {
   const [target, setTarget] = useState<Target | null>(null);
@@ -42,8 +52,8 @@ export function useSummaryModals(sources: SummaryLookupSources): {
   const openEntry = useCallback((entry: Entry) => {
     setTarget({ kind: "entry", entry });
   }, []);
-  const openRecurring = useCallback((id: string) => {
-    setTarget({ kind: "recurring", id, back: null });
+  const openRecurring = useCallback((id: string, bookingTimestamp?: string) => {
+    setTarget({ kind: "recurring", id, bookingTimestamp, back: null });
   }, []);
   const close = useCallback(() => setTarget(null), []);
 
@@ -55,7 +65,12 @@ export function useSummaryModals(sources: SummaryLookupSources): {
           entry={target.entry}
           lookups={lookups}
           onOpenRecurring={(id) =>
-            setTarget({ kind: "recurring", id, back: target.entry })
+            setTarget({
+              kind: "recurring",
+              id,
+              bookingTimestamp: undefined,
+              back: target.entry,
+            })
           }
           onClose={close}
         />
@@ -65,6 +80,7 @@ export function useSummaryModals(sources: SummaryLookupSources): {
     return (
       <RecurringSummaryModal
         recurringTransactionId={target.id}
+        bookingTimestamp={target.bookingTimestamp}
         lookups={lookups}
         onBack={
           back === null

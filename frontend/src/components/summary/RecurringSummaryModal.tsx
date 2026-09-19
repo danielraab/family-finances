@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../../api/client";
@@ -15,6 +16,7 @@ import {
   SummaryField,
   SummaryFields,
   summaryLinkClass,
+  summaryOutlineLinkClass,
   summaryQuietButtonClass,
 } from "./SummaryField";
 
@@ -29,11 +31,18 @@ type RecurringTransaction = components["schemas"]["RecurringTransaction"];
  */
 export function RecurringSummaryModal({
   recurringTransactionId,
+  bookingTimestamp,
   lookups,
   onBack,
   onClose,
 }: {
   recurringTransactionId: string;
+  /** The occurrence this summary was opened for, when it was opened from
+   * one — an Upcoming row names a specific projected date, and Create
+   * transaction here should book that date rather than the template's
+   * next suggested one. Absent everywhere else (a badge on a linked entry,
+   * a `/recurring` row), where the form's own default applies. */
+  bookingTimestamp?: string | undefined;
   lookups: SummaryLookups;
   /** Set only when this was reached from an entry's summary. */
   onBack?: (() => void) | undefined;
@@ -207,6 +216,19 @@ export function RecurringSummaryModal({
         >
           {t("summary.close")}
         </button>
+        <Link
+          to="/entries/new"
+          search={{
+            recurring_transaction_id: recurringTransactionId,
+            ...(bookingTimestamp
+              ? { booking_timestamp: bookingTimestamp }
+              : {}),
+          }}
+          className={summaryOutlineLinkClass}
+        >
+          <Plus size={16} aria-hidden="true" />
+          {t("recurring.createTransaction")}
+        </Link>
         <Link
           to="/recurring/$id/edit"
           params={{ id: recurringTransactionId }}

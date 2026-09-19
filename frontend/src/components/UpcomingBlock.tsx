@@ -41,10 +41,15 @@ export function UpcomingBlock({
   accounts: Account[];
   displayedDecimalPlaces: number;
   locale: string;
-  /** Opens a row's recurring transaction in the read-only summary modal.
-   * Required, not optional: an Upcoming row whose title does nothing is
-   * the inconsistency this prop exists to remove. */
-  onOpenRecurring: (recurringTransactionId: string) => void;
+  /** Opens a row's recurring transaction in the read-only summary modal,
+   * for that row's own projected date — the summary's Create transaction
+   * action books the occurrence the reader clicked, not the template's
+   * next suggested one. Required, not optional: an Upcoming row whose
+   * title does nothing is the inconsistency this prop exists to remove. */
+  onOpenRecurring: (
+    recurringTransactionId: string,
+    bookingTimestamp: string,
+  ) => void;
   /** Set when the block renders inside a card that already draws a
    * bordered, padded box (the dashboard's entry_list card), so it doesn't
    * draw a second one inside it. */
@@ -87,7 +92,10 @@ export function UpcomingBlock({
                     <button
                       type="button"
                       onClick={() =>
-                        onOpenRecurring(item.recurring_transaction_id)
+                        onOpenRecurring(
+                          item.recurring_transaction_id,
+                          item.booking_timestamp,
+                        )
                       }
                       className="truncate text-left font-medium underline-offset-2 hover:underline"
                     >

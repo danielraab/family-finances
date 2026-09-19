@@ -73,7 +73,8 @@ transaction by name where the name does nothing.
   sorted.** Cutoff resolution, the date-ascending order and the
   overdue-stays-in-place rule are untouched.
 - **No change to the recurring summary modal itself**, only to what opens
-  it.
+  it. (Followed up by `recurring-summary-create-transaction`, which gives
+  the summary its own Create transaction action.)
 - **No change to the real entry rows** in the card, the ledger or the
   report table.
 

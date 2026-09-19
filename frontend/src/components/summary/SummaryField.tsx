@@ -49,3 +49,10 @@ export const summaryLinkClass =
 
 export const summaryQuietButtonClass =
   "rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-black/[.04] dark:text-zinc-400 dark:hover:bg-white/[.06]";
+
+/** A secondary action beside the summary's primary one — bordered rather
+ * than filled, so it reads as an action without competing with Edit, and
+ * as an action rather than a dismissal (which is what the quiet class is
+ * for). Mirrors `/recurring`'s own row-level Create transaction control. */
+export const summaryOutlineLinkClass =
+  "inline-flex items-center gap-1.5 rounded-md border border-black/15 px-3 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]";
