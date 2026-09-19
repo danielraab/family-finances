@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-19
+
+### Added
+
+- Convert an existing transaction into a self-transfer, from the entry
+  edit page: you pick the counterparty account and which side the entry's
+  own account is on (sender or receiver), rather than it being inferred
+  from the amount's sign. Backed by a new
+  `POST /api/entries/{id}/self-transfer` that soft-deletes the original
+  entry and creates its replacement in one database transaction,
+  recomputing the balance-adjustment chain on both accounts. Title,
+  description, date, tags and category carry over; counterparty and
+  location are dropped, as on any self-transfer.
+- Read-only summary modals for entries and recurring transactions.
+  Reading an entry no longer means opening its edit form: an entry's
+  title opens a summary on the `/entries` ledger, an account's detail
+  page, `/reports` and the dashboard's entry-list card, and a recurring
+  transaction's title does the same on `/recurring` and from the Upcoming
+  block. Edit is one click away inside, under the same permission rule
+  the edit page applies, and the recurring summary also offers "Create
+  transaction" — carrying the occurrence's own date along when it was
+  opened from an Upcoming row.
+- A per-month amount on `/recurring`, beside the per-year one on every
+  row and in the per-currency footer totals — the figure a household
+  actually budgets against.
+
+### Changed
+
+- The `/entries` ledger's controls now work on a phone: "New entry" is a
+  plus glyph below `sm`, the search field has a clear button, and the
+  seven filters moved into a panel whose header carries "Clear all
+  filters" and, on narrow viewports, a collapse toggle with a count of
+  the active filters, so a collapsed panel never hides that the ledger is
+  filtered. The ledger also remembers its filter, search and sort state,
+  which is what a save or a conversion returns you to.
+- `/recurring` got the same treatment: a plus-glyph create action, and a
+  row's "Create transaction" is now an inline-flex control that no longer
+  renders broken when it wraps.
+- The Upcoming block's rows are now two lines — title against amount,
+  then date and account against the create action — so nothing overflows
+  or truncates to a few characters in a narrow dashboard card, where the
+  block also no longer draws its own box inside the card's.
+- All 23 dialogs now share one `Modal` shell, which owns the backdrop,
+  panel and title and bounds the panel's height — previously nothing did,
+  and the new summaries are the tallest content in the app.
+
+### Fixed
+
+- The i18n-coverage CI job now actually posts its pull request comment.
+  Both the comment and stale-comment-removal steps were implicitly gated
+  on the coverage step succeeding, so they were skipped in exactly the
+  case they exist for: a locale short of 100%.
+- The entry edit page's action buttons wrap onto their own lines on a
+  narrow viewport instead of being squeezed into one row with their text
+  broken mid-word.
+- A self-transfer's badge opens the entry's summary, like the row's title
+  next to it, instead of jumping to the edit page.
+- Negative amounts on `/recurring` no longer wrap after their minus sign.
+- German translations for the self-transfer conversion, which had left
+  German at 99.1% i18n coverage.
+
 ## [0.4.0] - 2026-09-18
 
 ### Added
@@ -195,7 +256,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/danielraab/family-finances/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/danielraab/family-finances/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/danielraab/family-finances/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/danielraab/family-finances/compare/v0.3.0...v0.3.1
