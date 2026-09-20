@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-09-20
+
+### Changed
+
+- The running build's version (added in 0.4.3) moved off the sidebar
+  footer, where it was always on screen, to a "Version" field at the
+  bottom of the Settings page's Profile tab — still there to check, but
+  no longer permanent chrome. Same source (`GET /api/version`) and the
+  same rule for what shows: the release tag when there is one, the
+  short commit otherwise, nothing when the backend reports neither.
+
 ## [0.4.3] - 2026-09-20
 
 ### Added
@@ -346,7 +357,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/danielraab/family-finances/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/danielraab/family-finances/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/danielraab/family-finances/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/danielraab/family-finances/compare/v0.4.0...v0.4.1
