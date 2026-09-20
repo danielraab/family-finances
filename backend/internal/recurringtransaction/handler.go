@@ -220,16 +220,34 @@ func selfTransferMode(r *http.Request) SelfTransferMode {
 	)
 }
 
+// contentFilter reads the account, category and tag parameters every
+// recurring read endpoint accepts, in one place so the listing, the
+// summary and the preview all parse them identically. An invalid
+// category_mode is not rejected here — Service.resolveFilter owns that
+// check, for the listing and the preview alike.
+func contentFilter(r *http.Request) Filter {
+	q := r.URL.Query()
+	f := Filter{
+		AccountIDs:   q["account_id"],
+		CategoryMode: CategoryMode(q.Get("category_mode")),
+	}
+	if v := q.Get("category_id"); v != "" {
+		f.CategoryID = &v
+	}
+	if v := q.Get("tag_id"); v != "" {
+		f.TagID = &v
+	}
+	return f
+}
+
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeUnauthorized(w)
 		return
 	}
-	f := Filter{
-		AccountIDs:    r.URL.Query()["account_id"],
-		SelfTransfers: selfTransferMode(r),
-	}
+	f := contentFilter(r)
+	f.SelfTransfers = selfTransferMode(r)
 	items, err := h.svc.List(r.Context(), user.ID, f)
 	if err != nil {
 		h.renderError(w, r, err)
@@ -247,13 +265,11 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
 		writeUnauthorized(w)
 		return
 	}
-	// The summary takes the same two flags as the listing, resolved the
+	// The summary takes the same parameters as the listing, resolved the
 	// same way, so the total it returns is always the total of the rows
-	// the listing under those flags would return.
-	f := Filter{
-		AccountIDs:    r.URL.Query()["account_id"],
-		SelfTransfers: selfTransferMode(r),
-	}
+	// the listing under those parameters would return.
+	f := contentFilter(r)
+	f.SelfTransfers = selfTransferMode(r)
 	sum, err := h.svc.Summary(r.Context(), user.ID, f)
 	if err != nil {
 		h.renderError(w, r, err)
@@ -285,16 +301,13 @@ func (h *Handler) preview(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
+	content := contentFilter(r)
 	f := PreviewFilter{
-		AccountIDs:   q["account_id"],
-		CategoryMode: CategoryMode(q.Get("category_mode")),
+		AccountIDs:   content.AccountIDs,
+		CategoryID:   content.CategoryID,
+		CategoryMode: content.CategoryMode,
+		TagID:        content.TagID,
 		To:           to,
-	}
-	if v := q.Get("category_id"); v != "" {
-		f.CategoryID = &v
-	}
-	if v := q.Get("tag_id"); v != "" {
-		f.TagID = &v
 	}
 
 	items, err := h.svc.Preview(r.Context(), user.ID, f)

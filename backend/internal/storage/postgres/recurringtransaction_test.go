@@ -13,12 +13,13 @@ import (
 )
 
 type recurringFixture struct {
-	recurring *RecurringTransactionStore
-	entries   *EntryStore
-	tags      *TagStore
-	owner     string
-	accID     string
-	catID     string
+	recurring  *RecurringTransactionStore
+	entries    *EntryStore
+	tags       *TagStore
+	categories *CategoryStore
+	owner      string
+	accID      string
+	catID      string
 }
 
 func newRecurringFixture(t *testing.T) recurringFixture {
@@ -46,12 +47,13 @@ func newRecurringFixture(t *testing.T) recurringFixture {
 	}
 
 	return recurringFixture{
-		recurring: NewRecurringTransactionStore(pool),
-		entries:   NewEntryStore(pool),
-		tags:      NewTagStore(pool),
-		owner:     owner.ID,
-		accID:     acc.ID,
-		catID:     cat.ID,
+		recurring:  NewRecurringTransactionStore(pool),
+		entries:    NewEntryStore(pool),
+		tags:       NewTagStore(pool),
+		categories: catStore,
+		owner:      owner.ID,
+		accID:      acc.ID,
+		catID:      cat.ID,
 	}
 }
 
@@ -252,5 +254,77 @@ func TestPGEntryLinkedToRecurringTransaction(t *testing.T) {
 	}
 	if count, err := f.entries.CountByRecurringTransaction(ctx, created.ID); err != nil || count != 1 {
 		t.Fatalf("CountByRecurringTransaction after unlink = %d, %v, want 1", count, err)
+	}
+}
+
+// TestPGRecurringTransactionListFiltersByCategoryAndTag covers the two
+// clauses List builds beyond the account scope. CategoryIDs is read for
+// nil, never for length, so an empty-but-non-nil set has to match nothing
+// — that is the case a caller filtering by a category they cannot see
+// resolves to (see rt.Filter's doc comment).
+func TestPGRecurringTransactionListFiltersByCategoryAndTag(t *testing.T) {
+	f := newRecurringFixture(t)
+	ctx := context.Background()
+
+	other, err := f.categories.Create(ctx, f.owner, category.New{Name: "Utilities"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tg, err := f.tags.Create(ctx, f.owner, "fixed")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	starts, _ := account.ParseDate("2026-01-01")
+	create := func(title, categoryID string, tagIDs ...string) {
+		t.Helper()
+		if _, err := f.recurring.Create(ctx, f.owner, rt.New{
+			Kind:      rt.KindTransaction,
+			AccountID: f.accID, Title: title, CategoryID: &categoryID, Amount: -80000,
+			IntervalUnit: rt.UnitMonth, IntervalCount: 1, StartsOn: rt.NewDate(starts.Time),
+			TagIDs: tagIDs,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create("Netflix", f.catID)
+	create("Electricity", other.ID, tg.ID)
+
+	accounts := []string{f.accID}
+	titlesOf := func(list []rt.RecurringTransaction) []string {
+		out := make([]string, 0, len(list))
+		for _, item := range list {
+			out = append(out, item.Title)
+		}
+		return out
+	}
+
+	cases := []struct {
+		name   string
+		filter rt.Filter
+		want   []string
+	}{
+		{"no content filter", rt.Filter{AccountIDs: accounts}, []string{"Netflix", "Electricity"}},
+		{"by category", rt.Filter{AccountIDs: accounts, CategoryIDs: []string{other.ID}}, []string{"Electricity"}},
+		{"by tag", rt.Filter{AccountIDs: accounts, TagID: &tg.ID}, []string{"Electricity"}},
+		{"category and tag combined", rt.Filter{AccountIDs: accounts, CategoryIDs: []string{f.catID}, TagID: &tg.ID}, nil},
+		{"empty category set matches nothing", rt.Filter{AccountIDs: accounts, CategoryIDs: []string{}}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			list, err := f.recurring.List(ctx, tc.filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := titlesOf(list)
+			if len(got) != len(tc.want) {
+				t.Fatalf("List = %v, want %v", got, tc.want)
+			}
+			for i, title := range tc.want {
+				if got[i] != title {
+					t.Fatalf("List = %v, want %v", got, tc.want)
+				}
+			}
+		})
 	}
 }

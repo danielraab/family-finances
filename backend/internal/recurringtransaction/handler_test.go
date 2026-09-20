@@ -17,13 +17,20 @@ import (
 )
 
 func newHandlerFixture() (http.Handler, *stubAccounts, *stubCategories) {
+	h, accounts, categories, _ := newHandlerFixtureWithTags()
+	return h, accounts, categories
+}
+
+// newHandlerFixtureWithTags is newHandlerFixture for a test that also has
+// to register a tag — the tag filter's, and nothing else so far.
+func newHandlerFixtureWithTags() (http.Handler, *stubAccounts, *stubCategories, *stubTags) {
 	accounts := newStubAccounts()
 	categories := newStubCategories()
 	tags := newStubTags()
 	svc := rt.NewService(memory.NewRecurringTransactionStore(), accounts, categories, tags)
 	svc.SetEntryLookup(newStubEntries())
 	h := rt.NewHandler(svc, rt.HandlerOptions{RenderError: httpapi.WriteError})
-	return h, accounts, categories
+	return h, accounts, categories, tags
 }
 
 func withUser(req *http.Request, u auth.User) *http.Request {
@@ -229,4 +236,101 @@ func TestHandlerDeleteBlockedWhileLinked(t *testing.T) {
 		t.Fatalf("delete status = %d, want 409", rec.Code)
 	}
 	conforms(t, "DELETE", "/api/recurring-transactions/"+created.ID, rec)
+}
+
+// TestHandlerListAndSummaryAcceptCategoryAndTagFilters walks the three new
+// query parameters through the handler, and asserts the summary narrows
+// with the listing — the property both operations' descriptions promise.
+func TestHandlerListAndSummaryAcceptCategoryAndTagFilters(t *testing.T) {
+	h, accounts, categories, tags := newHandlerFixtureWithTags()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat_parent")
+	categories.addChild("cat_parent", "cat_child")
+	tags.add("tag1", "u1")
+	user := auth.User{ID: "u1"}
+
+	create := func(title, categoryID, tagIDs string) {
+		t.Helper()
+		body := `{"account_id":"acc1","title":"` + title + `","category_id":"` + categoryID +
+			`","tag_ids":[` + tagIDs + `],"amount":-1500,"interval_unit":"month","interval_count":1,"starts_on":"2026-01-01"}`
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, withUser(httptest.NewRequest("POST", "/api/recurring-transactions", strings.NewReader(body)), user))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %s: status = %d, body = %s", title, rec.Code, rec.Body)
+		}
+	}
+	create("Rent", "cat_parent", "")
+	create("Internet", "cat_child", `"tag1"`)
+
+	listTitles := func(query string) []string {
+		t.Helper()
+		target := "/api/recurring-transactions" + query
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", target, nil), user))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("list%s: status = %d, body = %s", query, rec.Code, rec.Body)
+		}
+		conforms(t, "GET", target, rec)
+		var items []rt.RecurringTransaction
+		if err := json.Unmarshal(rec.Body.Bytes(), &items); err != nil {
+			t.Fatal(err)
+		}
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			out = append(out, item.Title)
+		}
+		return out
+	}
+
+	cases := []struct {
+		query string
+		want  []string
+	}{
+		{"", []string{"Rent", "Internet"}},
+		{"?category_id=cat_parent", []string{"Rent", "Internet"}},
+		{"?category_id=cat_parent&category_mode=exact", []string{"Rent"}},
+		{"?tag_id=tag1", []string{"Internet"}},
+		{"?category_id=cat_parent&tag_id=tag1", []string{"Internet"}},
+	}
+	for _, tc := range cases {
+		got := listTitles(tc.query)
+		if len(got) != len(tc.want) {
+			t.Fatalf("list%s = %v, want %v", tc.query, got, tc.want)
+		}
+		for i, title := range tc.want {
+			if got[i] != title {
+				t.Fatalf("list%s = %v, want %v", tc.query, got, tc.want)
+			}
+		}
+	}
+
+	// The summary narrows with the listing: one row at -1500 monthly is
+	// -18000 per year.
+	target := "/api/recurring-transactions/summary?category_id=cat_parent&category_mode=exact"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", target, nil), user))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("summary status = %d, body = %s", rec.Code, rec.Body)
+	}
+	conforms(t, "GET", target, rec)
+	var summary rt.Summary
+	if err := json.Unmarshal(rec.Body.Bytes(), &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Count != 1 || len(summary.Sums) != 1 || summary.Sums[0].Amount != -18000 {
+		t.Fatalf("summary = %+v, want one EUR total of -18000 over 1 row", summary)
+	}
+}
+
+func TestHandlerListRejectsAnInvalidCategoryMode(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withUser(httptest.NewRequest(
+		"GET", "/api/recurring-transactions?category_id=cat1&category_mode=ancestors", nil), auth.User{ID: "u1"}))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body = %s)", rec.Code, rec.Body)
+	}
 }

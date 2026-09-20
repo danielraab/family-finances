@@ -2099,6 +2099,37 @@ paths:
               type: string
           style: form
           explode: true
+        - name: category_id
+          in: query
+          required: false
+          description: >-
+            Matches this category, plus every descendant unless
+            category_mode=exact. A recurring transaction with no category
+            never matches. Unlike GET /api/entries, a category the caller
+            holds permission on does not widen the account scope: a
+            recurring transaction on an account the caller cannot see is
+            never returned.
+          schema:
+            type: string
+        - name: category_mode
+          in: query
+          required: false
+          description: >-
+            Only meaningful together with category_id. subtree (the
+            default) matches the category and every descendant; exact
+            matches only that category.
+          schema:
+            type: string
+            enum: [subtree, exact]
+            default: subtree
+        - name: tag_id
+          in: query
+          required: false
+          description: >-
+            Matches a recurring transaction carrying this tag. Like
+            category_id, it never widens the account scope.
+          schema:
+            type: string
         - name: include_self_transfer
           in: query
           required: false
@@ -2132,6 +2163,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/RecurringTransaction"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
     post:
@@ -2168,8 +2201,8 @@ paths:
         Sum the caller's matching recurring transactions' per-year amounts,
         per currency
       description: >-
-        Accepts the same account_id, include_self_transfer and
-        self_transfer_both_legs parameters as
+        Accepts the same account_id, category_id/category_mode, tag_id,
+        include_self_transfer and self_transfer_both_legs parameters as
         GET /api/recurring-transactions, resolved identically — so this
         total is always the total of the rows that listing would return
         under the same parameters. Excludes any recurring transaction whose
@@ -2189,6 +2222,37 @@ paths:
               type: string
           style: form
           explode: true
+        - name: category_id
+          in: query
+          required: false
+          description: >-
+            Matches this category, plus every descendant unless
+            category_mode=exact. A recurring transaction with no category
+            never matches. Unlike GET /api/entries, a category the caller
+            holds permission on does not widen the account scope: a
+            recurring transaction on an account the caller cannot see is
+            never returned.
+          schema:
+            type: string
+        - name: category_mode
+          in: query
+          required: false
+          description: >-
+            Only meaningful together with category_id. subtree (the
+            default) matches the category and every descendant; exact
+            matches only that category.
+          schema:
+            type: string
+            enum: [subtree, exact]
+            default: subtree
+        - name: tag_id
+          in: query
+          required: false
+          description: >-
+            Matches a recurring transaction carrying this tag. Like
+            category_id, it never widens the account scope.
+          schema:
+            type: string
         - name: include_self_transfer
           in: query
           required: false
@@ -2220,6 +2284,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EntrySummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
 

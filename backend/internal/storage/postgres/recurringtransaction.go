@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	rt "at.draab/familyfinances/internal/recurringtransaction"
@@ -253,6 +254,13 @@ func (s *RecurringTransactionStore) List(ctx context.Context, f rt.Filter) ([]rt
 	if len(f.AccountIDs) == 0 {
 		return nil, nil
 	}
+	args := []any{f.AccountIDs}
+	// arg appends v and returns its positional placeholder, the same
+	// accumulate-as-you-go shape EntryStore's own filter building uses.
+	arg := func(v any) string {
+		args = append(args, v)
+		return "$" + strconv.Itoa(len(args))
+	}
 	where := `deleted_at IS NULL AND account_id = ANY($1::uuid[])`
 	switch f.SelfTransfers {
 	case rt.SelfTransferBothLegs:
@@ -262,6 +270,16 @@ func (s *RecurringTransactionStore) List(ctx context.Context, f rt.Filter) ([]rt
 	default:
 		where += ` AND native AND kind = 'transaction'`
 	}
+	// Tested for nil, never for length: an empty CategoryIDs is a category
+	// filter that matches nothing (a category the caller holds no
+	// permission on), not the absence of one — see rt.Filter's doc comment.
+	if f.CategoryIDs != nil {
+		where += ` AND category_id = ANY(` + arg(f.CategoryIDs) + `::uuid[])`
+	}
+	if f.TagID != nil {
+		where += ` AND EXISTS (SELECT 1 FROM recurring_transaction_tags rtt
+			WHERE rtt.recurring_transaction_id = recurring_transaction_legs.id AND rtt.tag_id = ` + arg(*f.TagID) + `::uuid)`
+	}
 	// native DESC puts a template's outgoing leg immediately before its
 	// incoming one when both are listed; created_at/id keep the existing
 	// ordering otherwise.
@@ -269,7 +287,7 @@ func (s *RecurringTransactionStore) List(ctx context.Context, f rt.Filter) ([]rt
 		`SELECT `+recurringColsFor("recurring_transaction_legs")+`, native FROM recurring_transaction_legs
 		WHERE `+where+`
 		ORDER BY created_at, id, native DESC`,
-		f.AccountIDs,
+		args...,
 	)
 	if err != nil {
 		return nil, err

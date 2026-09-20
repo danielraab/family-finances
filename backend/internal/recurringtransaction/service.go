@@ -445,10 +445,25 @@ func (s *Service) Delete(ctx context.Context, callerID, id string) error {
 	return s.store.SoftDelete(ctx, id)
 }
 
-// resolveAccountIDs narrows f.AccountIDs to callerID's own visible accounts
-// (owned or shared), intersected with any caller-supplied AccountIDs —
-// mirrors internal/entry's own account-visibility resolution.
-func (s *Service) resolveAccountIDs(ctx context.Context, callerID string, f Filter) (Filter, error) {
+// resolveFilter turns a caller-supplied Filter into the one a Store reads:
+// f.AccountIDs narrowed to callerID's own visible accounts (owned or
+// shared), intersected with any caller-supplied AccountIDs, and
+// f.CategoryID expanded into f.CategoryIDs. It mirrors internal/entry's
+// resolveFilter, with one deliberate omission — there is no AllAccounts
+// equivalent here, so a category or tag filter narrows the account scope
+// and never widens it (see Filter's doc comment and design.md of
+// add-recurring-list-filters).
+//
+// CategoryLookup.Subtree doubles as the category's permission check: it
+// returns nothing for a category callerID neither owns nor holds a share
+// on. That case must match no recurring transaction rather than every one
+// in scope, so CategoryIDs is left nil only when there is no category
+// filter at all, and is otherwise a non-nil — possibly empty — set.
+func (s *Service) resolveFilter(ctx context.Context, callerID string, f Filter) (Filter, error) {
+	if !f.CategoryMode.valid() {
+		return Filter{}, ErrInvalidValue
+	}
+
 	visible, err := s.accounts.VisibleIDs(ctx, callerID)
 	if err != nil {
 		return Filter{}, err
@@ -458,13 +473,29 @@ func (s *Service) resolveAccountIDs(ctx context.Context, callerID string, f Filt
 	} else {
 		f.AccountIDs = visible
 	}
+
+	if f.CategoryID != nil {
+		if f.CategoryMode == CategoryModeExact {
+			f.CategoryIDs = []string{*f.CategoryID}
+		} else {
+			permitted, err := s.categories.Subtree(ctx, callerID, *f.CategoryID)
+			if err != nil {
+				return Filter{}, err
+			}
+			// Never nil past here: an empty subtree is a filter that
+			// matches nothing, not the absence of one.
+			f.CategoryIDs = append([]string{}, permitted...)
+		}
+	}
+
 	return f, nil
 }
 
-// List resolves f's caller-supplied AccountIDs against callerID's visible
-// accounts and returns every matching recurring transaction, decorated.
+// List resolves f's caller-supplied AccountIDs and CategoryID against
+// callerID's visible accounts and category tree, and returns every
+// matching recurring transaction, decorated.
 func (s *Service) List(ctx context.Context, callerID string, f Filter) ([]RecurringTransaction, error) {
-	f, err := s.resolveAccountIDs(ctx, callerID, f)
+	f, err := s.resolveFilter(ctx, callerID, f)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +518,7 @@ func (s *Service) List(ctx context.Context, callerID string, f Filter) ([]Recurr
 // non-ended recurring transaction's PerYearAmount grouped by its account's
 // currency — mirrors internal/entry's Sum, with the ended-exclusion added.
 func (s *Service) Summary(ctx context.Context, callerID string, f Filter) (Summary, error) {
-	f, err := s.resolveAccountIDs(ctx, callerID, f)
+	f, err := s.resolveFilter(ctx, callerID, f)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -537,16 +568,17 @@ func (s *Service) Preview(ctx context.Context, callerID string, f PreviewFilter)
 	if f.To.IsZero() {
 		return nil, ErrInvalidValue
 	}
-	if !f.CategoryMode.valid() {
-		return nil, ErrInvalidValue
-	}
 
 	// Preview always projects both legs of a self_transfer, with no
 	// equivalent of List/Summary's caller-chosen mode — see PreviewItem's
-	// doc comment and design.md.
-	resolved, err := s.resolveAccountIDs(ctx, callerID, Filter{
+	// doc comment and design.md. Everything else it narrows by is the
+	// listing's own Filter, resolved by the listing's own rule.
+	resolved, err := s.resolveFilter(ctx, callerID, Filter{
 		AccountIDs:    f.AccountIDs,
 		SelfTransfers: SelfTransferBothLegs,
+		CategoryID:    f.CategoryID,
+		CategoryMode:  f.CategoryMode,
+		TagID:         f.TagID,
 	})
 	if err != nil {
 		return nil, err
@@ -554,22 +586,6 @@ func (s *Service) Preview(ctx context.Context, callerID string, f PreviewFilter)
 	rows, err := s.store.List(ctx, resolved)
 	if err != nil {
 		return nil, err
-	}
-
-	var allowedCategories map[string]bool
-	if f.CategoryID != nil {
-		permitted, err := s.categories.Subtree(ctx, callerID, *f.CategoryID)
-		if err != nil {
-			return nil, err
-		}
-		allowedCategories = map[string]bool{}
-		if f.CategoryMode == CategoryModeExact {
-			allowedCategories[*f.CategoryID] = true
-		} else {
-			for _, id := range permitted {
-				allowedCategories[id] = true
-			}
-		}
 	}
 
 	today := s.today(ctx, callerID)
@@ -581,14 +597,6 @@ func (s *Service) Preview(ctx context.Context, callerID string, f PreviewFilter)
 		// contributes, regardless of how stale its next_suggested_date is
 		// — mirrors Summary's own ended-exclusion above.
 		if Ended(rt.EndsOn, today) {
-			continue
-		}
-		if allowedCategories != nil {
-			if rt.CategoryID == nil || !allowedCategories[*rt.CategoryID] {
-				continue
-			}
-		}
-		if f.TagID != nil && !containsString(rt.TagIDs, *f.TagID) {
 			continue
 		}
 
@@ -629,16 +637,6 @@ func (s *Service) Preview(ctx context.Context, callerID string, f PreviewFilter)
 		return items[i].BookingTimestamp.Before(items[j].BookingTimestamp)
 	})
 	return items, nil
-}
-
-// containsString reports whether id appears in ids.
-func containsString(ids []string, id string) bool {
-	for _, v := range ids {
-		if v == id {
-			return true
-		}
-	}
-	return false
 }
 
 // CurrencySum is one currency's total within a Summary — same shape as
