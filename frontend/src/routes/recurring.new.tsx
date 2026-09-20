@@ -122,13 +122,18 @@ function NewRecurringTransaction() {
             {
               body: {
                 account_id: values.account_id,
+                kind: values.kind,
                 title: values.title,
-                category_id: values.category_id,
                 amount: values.amount,
                 interval_unit: values.interval_unit,
                 interval_count: values.interval_count,
                 starts_on: values.starts_on,
                 ...compact({
+                  // Omitted rather than sent empty for a self-transfer,
+                  // which has no category requirement and rejects
+                  // counterparty/location outright.
+                  category_id: values.category_id || undefined,
+                  to_account_id: values.to_account_id || undefined,
                   description: values.description || undefined,
                   counterparty: values.counterparty || undefined,
                   location: values.location || undefined,

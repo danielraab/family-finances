@@ -8,6 +8,7 @@ import {
   type RecurringTransactionPreviewItem,
 } from "../lib/recurringPreview";
 import { AccountLabel } from "./AccountLabel";
+import { SelfTransferIcon } from "./SelfTransferIcon";
 
 type Account = components["schemas"]["Account"];
 
@@ -105,6 +106,19 @@ export function UpcomingBlock({
                         the title's `truncate` box it was ellipsised along
                         with the title, so the longer the title the less of
                         the marker survived. */}
+                    {item.kind === "self_transfer" && (
+                      <span
+                        className="shrink-0 text-zinc-500 dark:text-zinc-400"
+                        title={t(
+                          item.amount < 0
+                            ? "recurring.selfTransferTo"
+                            : "recurring.selfTransferFrom",
+                          { account: item.to_account_name ?? "" },
+                        )}
+                      >
+                        <SelfTransferIcon width={14} height={14} />
+                      </span>
+                    )}
                     {item.overdue && (
                       <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                         {t("recurringPreview.overdue")}

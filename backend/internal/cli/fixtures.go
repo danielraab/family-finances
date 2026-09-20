@@ -318,6 +318,7 @@ func generateRecurringTransactions(
 		startsOn := recurringtransaction.NewDate(randomOffsetDate(fx.startsOnDaysOffset))
 
 		_, err := recurringSvc.Create(ctx, ownerID, recurringtransaction.New{
+			Kind:          recurringtransaction.KindTransaction,
 			AccountID:     accountID,
 			Title:         fx.title,
 			CategoryID:    &catID,

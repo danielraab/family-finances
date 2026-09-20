@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
+import { SelfTransferIcon } from "../components/SelfTransferIcon";
 import { useSummaryModals } from "../components/summary/useSummaryModals";
 import { amountColorClass, formatAmount } from "../lib/amount";
 import {
@@ -21,12 +22,37 @@ type RecurringTransaction = components["schemas"]["RecurringTransaction"];
 type CurrencySum = components["schemas"]["CurrencySum"];
 type Tag = components["schemas"]["Tag"];
 
+type RecurringSearch = {
+  include_self_transfer?: boolean | undefined;
+  self_transfer_both_legs?: boolean | undefined;
+};
+
 export const Route = createFileRoute("/recurring/")({
+  // Both flags live in the URL, the way /entries keeps its own filter
+  // state, so a filtered list can be bookmarked, shared and restored by
+  // the back button. Absent means false in both cases.
+  validateSearch: (search: Record<string, unknown>): RecurringSearch => ({
+    include_self_transfer:
+      search["include_self_transfer"] === true ||
+      search["include_self_transfer"] === "true"
+        ? true
+        : undefined,
+    self_transfer_both_legs:
+      search["self_transfer_both_legs"] === true ||
+      search["self_transfer_both_legs"] === "true"
+        ? true
+        : undefined,
+  }),
   component: RecurringTransactionsList,
 });
 
 function RecurringTransactionsList() {
   const { t, i18n } = useTranslation();
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: "/recurring" });
+  const includeSelfTransfer = search.include_self_transfer === true;
+  const bothLegs =
+    includeSelfTransfer && search.self_transfer_both_legs === true;
   const { user } = useAuth();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
 
@@ -38,13 +64,21 @@ function RecurringTransactionsList() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // The list and the summary always go out with the same two flags, so
+    // the total below the table is always the total of the rows in it.
+    const query = {
+      include_self_transfer: includeSelfTransfer,
+      self_transfer_both_legs: bothLegs,
+    };
+    let cancelled = false;
     Promise.all([
-      api.GET("/api/recurring-transactions"),
-      api.GET("/api/recurring-transactions/summary"),
+      api.GET("/api/recurring-transactions", { params: { query } }),
+      api.GET("/api/recurring-transactions/summary", { params: { query } }),
       api.GET("/api/accounts"),
       api.GET("/api/categories"),
       api.GET("/api/tags"),
     ]).then(([list, summary, accts, cats, tgs]) => {
+      if (cancelled) return;
       setItems(list.data ?? []);
       setSums(summary.data?.sums ?? []);
       setAccounts(accts.data ?? []);
@@ -52,7 +86,10 @@ function RecurringTransactionsList() {
       setTags(tgs.data ?? []);
       setLoading(false);
     });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [includeSelfTransfer, bothLegs]);
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const { openRecurring, summaryModals } = useSummaryModals({
@@ -79,6 +116,46 @@ function RecurringTransactionsList() {
           <span className="hidden sm:inline">{t("recurring.create")}</span>
         </Link>
       </header>
+
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={includeSelfTransfer}
+            onChange={(e) =>
+              navigate({
+                search: {
+                  include_self_transfer: e.target.checked ? true : undefined,
+                  // Unchecking the first clears the second, so the two can
+                  // never be left in the meaningless "both sides, transfers
+                  // hidden" combination.
+                  self_transfer_both_legs: undefined,
+                },
+              })
+            }
+          />
+          {t("recurring.filters.includeSelfTransfer")}
+        </label>
+        {includeSelfTransfer && (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={bothLegs}
+              onChange={(e) =>
+                navigate({
+                  search: {
+                    include_self_transfer: true,
+                    self_transfer_both_legs: e.target.checked
+                      ? true
+                      : undefined,
+                  },
+                })
+              }
+            />
+            {t("recurring.filters.selfTransferBothLegs")}
+          </label>
+        )}
+      </div>
 
       <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
         <table className="w-full text-left text-sm">
@@ -112,7 +189,9 @@ function RecurringTransactionsList() {
                 : undefined;
               return (
                 <tr
-                  key={rt.id}
+                  // Both sides of one transfer share an id, so the leg has
+                  // to be part of the key.
+                  key={`${rt.id}-${rt.native}`}
                   className={`border-b border-black/5 last:border-0 dark:border-white/5 ${
                     rt.ended ? "opacity-50" : ""
                   }`}
@@ -125,6 +204,20 @@ function RecurringTransactionsList() {
                     >
                       {rt.title}
                     </button>
+                    {rt.kind === "self_transfer" && (
+                      <span className="ml-2 inline-flex items-center gap-1 whitespace-nowrap align-middle text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                        <SelfTransferIcon width={14} height={14} />
+                        {/* Which side this row is reads off its own amount:
+                            money leaving goes to the other account, money
+                            arriving comes from it. */}
+                        {t(
+                          rt.amount < 0
+                            ? "recurring.selfTransferTo"
+                            : "recurring.selfTransferFrom",
+                          { account: rt.to_account_name ?? "" },
+                        )}
+                      </span>
+                    )}
                     {rt.ended && (
                       <span className="ml-2 rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
                         {t("recurring.ended")}

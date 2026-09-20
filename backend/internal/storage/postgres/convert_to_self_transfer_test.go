@@ -17,6 +17,7 @@ func TestPGConvertToSelfTransferSenderKeepsRecurringLinkAndAmount(t *testing.T) 
 
 	starts, _ := account.ParseDate("2024-01-01")
 	created, err := recurring.Create(ctx, f.owner, rt.New{
+		Kind:      rt.KindTransaction,
 		AccountID: f.accID, Title: "Netflix", CategoryID: &f.catID,
 		Amount: -1500, IntervalUnit: rt.UnitMonth, IntervalCount: 1,
 		StartsOn: rt.NewDate(starts.Time),
@@ -85,6 +86,7 @@ func TestPGConvertToSelfTransferReceiverSwapsAccountsAndDropsRecurringLink(t *te
 
 	starts, _ := account.ParseDate("2024-01-01")
 	created, err := recurring.Create(ctx, f.owner, rt.New{
+		Kind:      rt.KindTransaction,
 		AccountID: f.accID, Title: "Netflix", CategoryID: &f.catID,
 		Amount: -1500, IntervalUnit: rt.UnitMonth, IntervalCount: 1,
 		StartsOn: rt.NewDate(starts.Time),

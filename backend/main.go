@@ -116,6 +116,10 @@ func main() {
 	// when accountSvc is built above, so this is wired here too, the same
 	// post-construction pattern as every other cross-wiring on this page.
 	accountSvc.SetEntryLookup(entrySvc)
+	// The other half of that same rule: an account named by a self_transfer
+	// recurring transaction is currency-locked too, even with no entries
+	// yet (add-recurring-self-transfers).
+	accountSvc.SetRecurringTransactionLookup(recurringSvc)
 
 	srv := httpapi.New(cfg, httpapi.Deps{
 		Static:                      staticFS,

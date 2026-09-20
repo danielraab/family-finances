@@ -72,6 +72,9 @@ export function RecurringSummaryModal({
   }, [recurringTransactionId]);
 
   const account = item ? lookups.accountById.get(item.account_id) : undefined;
+  const toAccount = item?.to_account_id
+    ? lookups.accountById.get(item.to_account_id)
+    : undefined;
   const category =
     item?.category_id !== null && item?.category_id !== undefined
       ? lookups.categoryById.get(item.category_id)
@@ -143,6 +146,19 @@ export function RecurringSummaryModal({
               </span>
             )}
           </SummaryField>
+          {item.kind === "self_transfer" && (
+            <SummaryField label={t("summary.entry.toAccount")}>
+              {toAccount ? (
+                <AccountLabel account={toAccount} iconSize={16} />
+              ) : (
+                (item.to_account_name ?? (
+                  <span className="italic text-zinc-500 dark:text-zinc-400">
+                    {t("entries.notShared")}
+                  </span>
+                ))
+              )}
+            </SummaryField>
+          )}
           <SummaryField label={t("summary.recurring.startsOn")}>
             {new Date(item.starts_on).toLocaleDateString(locale)}
           </SummaryField>

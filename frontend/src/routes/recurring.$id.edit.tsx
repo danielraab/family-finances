@@ -55,9 +55,12 @@ function EditRecurringTransaction() {
         setLinkedEntryCount(data.linked_entry_count);
         setValues({
           account_id: data.account_id,
+          to_account_id: data.to_account_id ?? "",
+          kind: data.kind,
           title: data.title,
           description: data.description ?? "",
-          category_id: data.category_id,
+          // Optional for a self-transfer, so it can legitimately be absent.
+          category_id: data.category_id ?? "",
           counterparty: data.counterparty ?? "",
           location: data.location ?? "",
           tagNames: [],
@@ -152,6 +155,7 @@ function EditRecurringTransaction() {
 
       <RecurringTransactionForm
         initial={values}
+        kindLocked
         submitLabel={t("recurring.form.save")}
         submitting={submitting}
         serverError={error}
@@ -163,10 +167,15 @@ function EditRecurringTransaction() {
             {
               params: { path: { id } },
               body: {
+                // kind and to_account_id are immutable — the request body
+                // has no field for either, and the backend rejects both.
                 account_id: body.account_id,
                 title: body.title,
                 description: body.description,
-                category_id: body.category_id,
+                // Omitted rather than sent empty for a self-transfer,
+                // which needs no category — an empty string would be
+                // rejected as an invalid value.
+                ...(body.category_id ? { category_id: body.category_id } : {}),
                 counterparty: body.counterparty,
                 location: body.location,
                 tag_ids: body.tag_ids,

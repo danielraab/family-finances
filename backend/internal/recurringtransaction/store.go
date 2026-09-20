@@ -105,6 +105,16 @@ type Store interface {
 
 	// List returns every non-deleted recurring transaction matching filter
 	// (already resolved by Service — AccountIDs is the effective set to
-	// filter by, already narrowed to the caller's visible accounts).
+	// filter by, already narrowed to the caller's visible accounts, and
+	// SelfTransfers is the resolved mode). A both-legs listing returns a
+	// self_transfer template once per account of its two that is in scope,
+	// the receiving side with its two account ids swapped and Amount
+	// negated — see the recurring_transaction_legs view.
 	List(ctx context.Context, filter Filter) ([]RecurringTransaction, error)
+
+	// HasSelfTransferAccount reports whether accountID is named on either
+	// side of any non-deleted self_transfer recurring transaction. Backs
+	// internal/account's currency-immutability rule — a cheap existence
+	// check, never a per-template currency comparison.
+	HasSelfTransferAccount(ctx context.Context, accountID string) (bool, error)
 }

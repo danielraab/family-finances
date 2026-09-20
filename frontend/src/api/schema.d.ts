@@ -863,7 +863,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the caller's recurring transactions */
+        /**
+         * List the caller's recurring transactions
+         * @description A self_transfer recurring transaction is listed according to include_self_transfer and self_transfer_both_legs: not at all, once from its sending account's side, or once per account of its two that is within the caller's requested/resolved account scope. Every other filter applies identically to both occurrences, since they represent the same underlying recurring transaction, and the two share an id — so id is not unique within a both-legs response.
+         */
         get: operations["getRecurringTransactions"];
         put?: never;
         /**
@@ -928,7 +931,7 @@ export interface paths {
         };
         /**
          * Sum the caller's matching recurring transactions' per-year amounts, per currency
-         * @description Accepts the same account_id filter as GET /api/recurring-transactions. Excludes any recurring transaction whose ends_on is before the current date (in the caller's resolved timezone) from the total.
+         * @description Accepts the same account_id, include_self_transfer and self_transfer_both_legs parameters as GET /api/recurring-transactions, resolved identically — so this total is always the total of the rows that listing would return under the same parameters. Excludes any recurring transaction whose ends_on is before the current date (in the caller's resolved timezone) from the total.
          */
         get: operations["getRecurringTransactionsSummary"];
         put?: never;
@@ -1520,10 +1523,12 @@ export interface components {
             account_id: string;
             /**
              * Format: int64
-             * @description The signed amount at the same fixed 4-decimal-place scale as an Entry's amount — what is booked each occurrence, before the per_year_amount multiplier.
+             * @description The signed amount at the same fixed 4-decimal-place scale as an Entry's amount — what is booked each occurrence, before the per_year_amount multiplier. For a self_transfer it is signed from account_id's perspective; the receiving side effectively sees -amount, which is the value returned on that side's own occurrence in a both-legs listing.
              */
             amount: number;
-            category_id: string;
+            /** @description Required for kind=transaction, optional for kind=self_transfer — the same asymmetry an Entry of each kind already has. */
+            category_id?: string;
+            /** @description Accepted only when kind is transaction, rejected (400) on a self_transfer. */
             counterparty?: string;
             /** Format: date-time */
             created_at: string;
@@ -1534,13 +1539,18 @@ export interface components {
             ended: boolean;
             /** Format: date */
             ends_on?: string | null;
+            /** @description Not unique within a listing that shows both sides of a self-transfer: the two occurrences of one template share it. */
             id: string;
             /** @description Positive integer — "every interval_count interval_units". */
             interval_count: number;
             interval_unit: components["schemas"]["IntervalUnit"];
+            kind: components["schemas"]["RecurringTransactionKind"];
             /** @description The number of non-deleted entries currently linked to this recurring transaction, computed server-side. A non-zero value means DELETE will be rejected (409) until every linked entry is unlinked. */
             linked_entry_count: number;
+            /** @description Accepted only when kind is transaction, rejected (400) on a self_transfer. */
             location?: string;
+            /** @description False only for the receiving-side occurrence of a self_transfer in a self_transfer_both_legs listing, whose account_id and to_account_id are swapped and whose amount is negated; true for every other row, including every single-row read. */
+            native: boolean;
             /**
              * Format: date
              * @description Computed server-side, never stored: the latest non-deleted linked entry's booking_timestamp advanced by one recurrence interval, or starts_on when there is no linked entry yet.
@@ -1555,14 +1565,21 @@ export interface components {
             starts_on: string;
             tag_ids: string[];
             title: string;
+            /** @description to_account_id's currency, always equal to account_currency, since a self_transfer requires both accounts to share one. */
+            to_account_currency?: string;
+            /** @description The receiving account of a self_transfer — present only when kind is self_transfer, null otherwise. Fixed at creation, never reassigned afterward. */
+            to_account_id?: string | null;
+            /** @description to_account_id's title, resolved server-side regardless of the caller's own permission on that account — the same unconditional resolution account_currency already follows. */
+            to_account_name?: string;
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description category_id is required when kind is transaction and optional when it is self_transfer; counterparty and location are accepted only when kind is transaction, rejected (400) otherwise. to_account_id is required when kind is self_transfer and rejected otherwise (400); it must differ from account_id and name a non-disabled account the caller holds append+ permission on, sharing account_id's currency (400 otherwise) — the same rules POST /api/entries already applies to a self_transfer entry, checked here so a template can never describe a movement that could not be booked. */
         RecurringTransactionCreate: {
             account_id: string;
             /** Format: int64 */
             amount: number;
-            category_id: string;
+            category_id?: string;
             counterparty?: string;
             description?: string;
             /**
@@ -1572,13 +1589,22 @@ export interface components {
             ends_on?: string;
             interval_count: number;
             interval_unit: components["schemas"]["IntervalUnit"];
+            /** @description Defaults to transaction when omitted. */
+            kind?: components["schemas"]["RecurringTransactionKind"];
             location?: string;
             /** Format: date */
             starts_on: string;
             tag_ids?: string[];
             title: string;
+            /** @description Required for kind=self_transfer (the receiving account); must be omitted otherwise. */
+            to_account_id?: string;
         };
-        /** @description One projected future occurrence of a recurring transaction — never persisted, carries no id. */
+        /**
+         * @description Whether a recurring transaction templates an ordinary transaction entry or a self_transfer between two of the caller's own accounts. There is deliberately no balance_adjustment: an absolute balance reading is a correction, and correcting a balance on a schedule is meaningless.
+         * @enum {string}
+         */
+        RecurringTransactionKind: "transaction" | "self_transfer";
+        /** @description One projected future occurrence of a recurring transaction — never persisted, carries no id. A self_transfer template projects one item per account of its two that is within the caller's scope — twice when both are, the receiving side with account_id and to_account_id swapped and amount negated. Preview does this unconditionally: it accepts neither include_self_transfer nor self_transfer_both_legs, which govern the listing only. */
         RecurringTransactionPreviewItem: {
             account_currency?: string;
             account_id: string;
@@ -1592,13 +1618,18 @@ export interface components {
             category_id?: string;
             counterparty?: string;
             description?: string;
+            kind: components["schemas"]["RecurringTransactionKind"];
             location?: string;
             /** @description True when booking_timestamp is before the current date, in the caller's resolved timezone. */
             overdue: boolean;
             recurring_transaction_id: string;
             tag_ids: string[];
             title: string;
+            /** @description The other account of a self_transfer occurrence — present only when kind is self_transfer. */
+            to_account_id?: string | null;
+            to_account_name?: string;
         };
+        /** @description No kind field — it is immutable after creation; no to_account_id field either, since a self_transfer template's two accounts are fixed when it is written. account_id may move a transaction template to another account the caller can append to, and is rejected outright (400) on a self_transfer. counterparty and location remain rejected on a self_transfer. Editing a self_transfer additionally requires the caller to currently hold append+ permission on both of its accounts (403 otherwise), whatever field is being changed. */
         RecurringTransactionUpdate: {
             account_id?: string;
             /** Format: int64 */
@@ -3356,6 +3387,10 @@ export interface operations {
             query?: {
                 /** @description Repeatable. Omitted means every non-deleted account the caller has any permission on. */
                 account_id?: string[];
+                /** @description When false (the default), self_transfer recurring transactions are excluded entirely. When true, each appears once, from its sending account's side, unless self_transfer_both_legs is also true. */
+                include_self_transfer?: boolean;
+                /** @description When true alongside include_self_transfer, each self_transfer recurring transaction appears once per account of its two that is within the caller's resolved account scope — twice when both are, the receiving side with its two account ids swapped and amount negated, so the two cancel in the summary's per-currency total. Ignored when include_self_transfer is false. */
+                self_transfer_both_legs?: boolean;
             };
             header?: never;
             path?: never;
@@ -3518,6 +3553,10 @@ export interface operations {
             query?: {
                 /** @description Repeatable. Omitted means every non-deleted account the caller has any permission on. */
                 account_id?: string[];
+                /** @description When false (the default), self_transfer recurring transactions are excluded entirely. When true, each appears once, from its sending account's side, unless self_transfer_both_legs is also true. */
+                include_self_transfer?: boolean;
+                /** @description When true alongside include_self_transfer, each self_transfer recurring transaction appears once per account of its two that is within the caller's resolved account scope — twice when both are, the receiving side with its two account ids swapped and amount negated, so the two cancel in the summary's per-currency total. Ignored when include_self_transfer is false. */
+                self_transfer_both_legs?: boolean;
             };
             header?: never;
             path?: never;

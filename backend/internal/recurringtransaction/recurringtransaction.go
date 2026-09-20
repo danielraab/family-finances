@@ -100,14 +100,67 @@ func (u Unit) valid() bool {
 	return u == UnitDay || u == UnitWeek || u == UnitMonth || u == UnitYear
 }
 
+// Kind is whether a recurring transaction templates an ordinary transaction
+// or a self-transfer between two of the caller's own accounts. There is
+// deliberately no balance_adjustment: an absolute balance reading is a
+// correction, and correcting a balance on a schedule is meaningless — see
+// design.md of add-recurring-self-transfers, which reopened only the
+// self_transfer half of this package's original "no kind field" decision.
+type Kind string
+
+const (
+	// KindTransaction templates an ordinary transaction entry — what every
+	// recurring transaction was before ToAccountID existed.
+	KindTransaction Kind = "transaction"
+	// KindSelfTransfer templates a self_transfer entry: Amount moved from
+	// AccountID to ToAccountID, required exactly for this kind.
+	KindSelfTransfer Kind = "self_transfer"
+)
+
+func (k Kind) valid() bool { return k == KindTransaction || k == KindSelfTransfer }
+
+// SelfTransferMode is how a List/Summary call treats self_transfer
+// templates — the resolved form of the API's include_self_transfer and
+// self_transfer_both_legs pair, so Store sees one value rather than two
+// booleans whose fourth combination means nothing (see design.md).
+type SelfTransferMode string
+
+const (
+	// SelfTransferExclude (the default) leaves self_transfer templates out
+	// of the result entirely.
+	SelfTransferExclude SelfTransferMode = "exclude"
+	// SelfTransferNative includes each self_transfer template at most once,
+	// from its sending account's side — the row as stored.
+	SelfTransferNative SelfTransferMode = "native"
+	// SelfTransferBothLegs includes each self_transfer template once per
+	// account of its two that is in scope: income and outcome.
+	SelfTransferBothLegs SelfTransferMode = "both_legs"
+)
+
+// ResolveSelfTransferMode maps the two API booleans onto a mode.
+// bothLegs without include is ignored, per the spec.
+func ResolveSelfTransferMode(include, bothLegs bool) SelfTransferMode {
+	switch {
+	case !include:
+		return SelfTransferExclude
+	case bothLegs:
+		return SelfTransferBothLegs
+	default:
+		return SelfTransferNative
+	}
+}
+
 // RecurringTransaction is a recurring transaction template: the same
 // content fields as a transaction entry (AccountID, Title, Description,
 // CategoryID, Counterparty, Location, TagIDs, Amount), plus a recurrence
 // rule (Unit/IntervalCount), StartsOn, and an optional EndsOn.
 //
-// AccountCurrency and CreatedByName are resolved server-side by the
-// Postgres store's query, the same way entry.Entry's equivalent fields
-// are — never by Service. PerYearAmount, Ended, and NextSuggestedDate are
+// AccountCurrency, CreatedByName and — for a self_transfer —
+// ToAccountName/ToAccountCurrency are resolved server-side by the Postgres
+// store's query, the same way entry.Entry's equivalent fields are — never
+// by Service, and regardless of the reading caller's own permission on the
+// account named, since a reader who can see only one side of a transfer
+// still needs to know where the money goes and in what currency. PerYearAmount, Ended, and NextSuggestedDate are
 // computed by Service on every read, never stored (see design.md) —
 // PerYearAmount and Ended are pure functions of Amount/IntervalUnit/
 // IntervalCount/EndsOn; NextSuggestedDate additionally depends on the
@@ -116,6 +169,10 @@ type RecurringTransaction struct {
 	ID                string    `json:"id"`
 	AccountID         string    `json:"account_id"`
 	AccountCurrency   string    `json:"account_currency,omitempty"`
+	ToAccountID       *string   `json:"to_account_id,omitempty"`
+	ToAccountName     string    `json:"to_account_name,omitempty"`
+	ToAccountCurrency string    `json:"to_account_currency,omitempty"`
+	Kind              Kind      `json:"kind"`
 	Title             string    `json:"title"`
 	Description       string    `json:"description,omitempty"`
 	CategoryID        *string   `json:"category_id,omitempty"`
@@ -139,13 +196,20 @@ type RecurringTransaction struct {
 	// via EntryLookup, never stored. Lets the client disable the delete
 	// action before ever attempting it; a 409 is still the authoritative
 	// guard server-side (see design.md).
-	LinkedEntryCount int        `json:"linked_entry_count"`
-	DeletedAt        *time.Time `json:"-"`
+	LinkedEntryCount int `json:"linked_entry_count"`
+	// Native reports whether this row is the template as stored (true) or
+	// the flipped, receiving-side leg of a self_transfer (false) — see the
+	// recurring_transaction_legs view. Always true outside a both-legs
+	// listing, and for every KindTransaction template.
+	Native    bool       `json:"native"`
+	DeletedAt *time.Time `json:"-"`
 }
 
 // New is the input to creating a recurring transaction.
 type New struct {
 	AccountID     string
+	ToAccountID   *string
+	Kind          Kind
 	Title         string
 	Description   string
 	CategoryID    *string
@@ -161,7 +225,10 @@ type New struct {
 
 // Update is a partial change to a recurring transaction. A nil field is
 // left untouched; EndsOn uses OptionalDate so it can also be explicitly
-// cleared.
+// cleared. Kind and ToAccountID are deliberately absent — both are
+// immutable after creation, mirroring entry.Kind/entry.Entry.ToAccountID,
+// and the handler's request body has no field for either, so
+// DisallowUnknownFields rejects an attempt to set them.
 type Update struct {
 	AccountID     *string
 	Title         *string
@@ -182,6 +249,10 @@ type Update struct {
 // further by a caller-supplied filter) before reaching Store.
 type Filter struct {
 	AccountIDs []string
+	// SelfTransfers is how self_transfer templates are treated — resolved
+	// by Service from the caller's two booleans before Store sees it. The
+	// zero value is not a valid mode; Service always sets one.
+	SelfTransfers SelfTransferMode
 }
 
 // CategoryMode controls how PreviewFilter.CategoryID is resolved — a local
@@ -221,10 +292,21 @@ type PreviewFilter struct {
 // carries the same content fields a materialized entry from that template
 // would, plus which template it came from, the projected date, and whether
 // that date is already in the past.
+//
+// A self_transfer template projects one item per account of its two that is
+// within the caller's scope — twice when both are, the receiving side with
+// AccountID/ToAccountID swapped and Amount negated. Preview does this
+// unconditionally, with no equivalent of List/Summary's SelfTransferMode:
+// the surfaces it feeds sit beside real self_transfer entries that are
+// already two-sided, and a projected balance that omitted the receiving
+// side would be wrong rather than merely terse (see design.md).
 type PreviewItem struct {
 	RecurringTransactionID string   `json:"recurring_transaction_id"`
 	AccountID              string   `json:"account_id"`
 	AccountCurrency        string   `json:"account_currency,omitempty"`
+	ToAccountID            *string  `json:"to_account_id,omitempty"`
+	ToAccountName          string   `json:"to_account_name,omitempty"`
+	Kind                   Kind     `json:"kind"`
 	Title                  string   `json:"title"`
 	Description            string   `json:"description,omitempty"`
 	CategoryID             *string  `json:"category_id,omitempty"`
@@ -240,11 +322,32 @@ func validateNew(in New) error {
 	if strings.TrimSpace(in.AccountID) == "" {
 		return ErrInvalidValue
 	}
+	if !in.Kind.valid() {
+		return ErrInvalidValue
+	}
 	if strings.TrimSpace(in.Title) == "" {
 		return ErrInvalidValue
 	}
-	if in.CategoryID == nil || strings.TrimSpace(*in.CategoryID) == "" {
-		return ErrInvalidValue
+	// The per-kind field rules below are exactly internal/entry's, because
+	// what they govern is the entry this template materializes: a template
+	// must never be able to describe something POST /api/entries refuses.
+	if in.Kind == KindSelfTransfer {
+		if in.ToAccountID == nil || strings.TrimSpace(*in.ToAccountID) == "" {
+			return ErrInvalidValue
+		}
+		if *in.ToAccountID == in.AccountID {
+			return ErrInvalidValue
+		}
+		if in.Counterparty != "" || in.Location != "" {
+			return ErrInvalidValue
+		}
+	} else {
+		if in.ToAccountID != nil {
+			return ErrInvalidValue
+		}
+		if in.CategoryID == nil || strings.TrimSpace(*in.CategoryID) == "" {
+			return ErrInvalidValue
+		}
 	}
 	if !in.IntervalUnit.valid() {
 		return ErrInvalidValue
@@ -270,6 +373,12 @@ func validateUpdate(current RecurringTransaction, upd Update) error {
 	}
 	if upd.CategoryID != nil && strings.TrimSpace(*upd.CategoryID) == "" {
 		return ErrInvalidValue
+	}
+	if current.Kind == KindSelfTransfer {
+		if (upd.Counterparty != nil && *upd.Counterparty != "") ||
+			(upd.Location != nil && *upd.Location != "") {
+			return ErrInvalidValue
+		}
 	}
 	if upd.IntervalUnit != nil && !upd.IntervalUnit.valid() {
 		return ErrInvalidValue

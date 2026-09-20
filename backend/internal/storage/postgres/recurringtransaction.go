@@ -24,28 +24,54 @@ func NewRecurringTransactionStore(pool *pgxpool.Pool) *RecurringTransactionStore
 	return &RecurringTransactionStore{pool: pool}
 }
 
-const recurringCols = `id::text, created_by::text, account_id::text, title, COALESCE(description, ''),
+// recurringColsFor returns the SELECT column list every recurring
+// transaction read query uses, correlating its subqueries against table —
+// "recurring_transactions" for a single-row canonical fetch (Get, or
+// Create/Update's post-write re-select) or "recurring_transaction_legs"
+// for a listing. The legs view (migration 0031) presents every template
+// once per account it touches, its account_id/to_account_id already
+// reflecting the per-leg viewing perspective, so the same column shape
+// works against either table unchanged — exactly the arrangement
+// entryColsFor already uses for entries and entry_legs.
+// account_currency/to_account_name/to_account_currency are resolved
+// unconditionally, never gated by the reading caller's permission on the
+// account named.
+func recurringColsFor(table string) string {
+	return `id::text, created_by::text, account_id::text, to_account_id::text, kind, title, COALESCE(description, ''),
 	category_id::text, COALESCE(counterparty, ''), COALESCE(location, ''), amount, interval_unit, interval_count,
 	starts_on, ends_on, created_at, updated_at,
-	COALESCE((SELECT array_agg(tag_id::text) FROM recurring_transaction_tags WHERE recurring_transaction_id = recurring_transactions.id), '{}'),
-	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = recurring_transactions.created_by), ''),
-	COALESCE((SELECT currency FROM accounts WHERE accounts.id = recurring_transactions.account_id), '')`
+	COALESCE((SELECT array_agg(tag_id::text) FROM recurring_transaction_tags WHERE recurring_transaction_id = ` + table + `.id), '{}'),
+	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = ` + table + `.created_by), ''),
+	COALESCE((SELECT currency FROM accounts WHERE accounts.id = ` + table + `.account_id), ''),
+	COALESCE((SELECT title FROM accounts WHERE accounts.id = ` + table + `.to_account_id), ''),
+	COALESCE((SELECT currency FROM accounts WHERE accounts.id = ` + table + `.to_account_id), '')`
+}
 
-func scanRecurring(row pgx.Row) (rt.RecurringTransaction, error) {
+// recurringCols is recurringColsFor("recurring_transactions") — the
+// plain-table shape Get and the post-write re-selects use.
+var recurringCols = recurringColsFor("recurring_transactions")
+
+// scanRecurringRow scans one recurringColsFor row, plus any caller-supplied
+// extra destinations appended after the fixed column list (List uses this
+// for the legs view's trailing "native" column).
+func scanRecurringRow(row pgx.Row, extra ...any) (rt.RecurringTransaction, error) {
 	var r rt.RecurringTransaction
 	var unit string
+	var kind string
 	var startsOn time.Time
 	var endsOn *time.Time
-	err := row.Scan(&r.ID, &r.CreatedBy, &r.AccountID, &r.Title, &r.Description,
+	dest := []any{&r.ID, &r.CreatedBy, &r.AccountID, &r.ToAccountID, &kind, &r.Title, &r.Description,
 		&r.CategoryID, &r.Counterparty, &r.Location, &r.Amount, &unit, &r.IntervalCount,
 		&startsOn, &endsOn, &r.CreatedAt, &r.UpdatedAt,
-		&r.TagIDs, &r.CreatedByName, &r.AccountCurrency)
+		&r.TagIDs, &r.CreatedByName, &r.AccountCurrency, &r.ToAccountName, &r.ToAccountCurrency}
+	err := row.Scan(append(dest, extra...)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return rt.RecurringTransaction{}, rt.ErrNotFound
 	}
 	if err != nil {
 		return rt.RecurringTransaction{}, err
 	}
+	r.Kind = rt.Kind(kind)
 	r.IntervalUnit = rt.Unit(unit)
 	r.StartsOn = rt.NewDate(startsOn)
 	if endsOn != nil {
@@ -55,6 +81,17 @@ func scanRecurring(row pgx.Row) (rt.RecurringTransaction, error) {
 	if r.TagIDs == nil {
 		r.TagIDs = []string{}
 	}
+	return r, nil
+}
+
+// scanRecurring scans a canonical, single-row fetch — always the template
+// as stored, so Native is true.
+func scanRecurring(row pgx.Row) (rt.RecurringTransaction, error) {
+	r, err := scanRecurringRow(row)
+	if err != nil {
+		return rt.RecurringTransaction{}, err
+	}
+	r.Native = true
 	return r, nil
 }
 
@@ -73,10 +110,10 @@ func (s *RecurringTransactionStore) Create(ctx context.Context, createdBy string
 
 	var id string
 	err = tx.QueryRow(ctx, `
-		INSERT INTO recurring_transactions (created_by, account_id, title, description, category_id, counterparty, location, amount, interval_unit, interval_count, starts_on, ends_on)
-		VALUES ($1, $2, $3, NULLIF($4, ''), $5, NULLIF($6, ''), NULLIF($7, ''), $8, $9, $10, $11, $12)
+		INSERT INTO recurring_transactions (created_by, account_id, to_account_id, kind, title, description, category_id, counterparty, location, amount, interval_unit, interval_count, starts_on, ends_on)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14)
 		RETURNING id::text`,
-		createdBy, in.AccountID, in.Title, in.Description, in.CategoryID, in.Counterparty, in.Location, in.Amount,
+		createdBy, in.AccountID, in.ToAccountID, string(in.Kind), in.Title, in.Description, in.CategoryID, in.Counterparty, in.Location, in.Amount,
 		string(in.IntervalUnit), in.IntervalCount, in.StartsOn.Time, endsOn,
 	).Scan(&id)
 	if isForeignKeyViolation(err) || isCheckViolation(err) {
@@ -205,14 +242,33 @@ func (s *RecurringTransactionStore) SoftDelete(ctx context.Context, id string) e
 	return nil
 }
 
+// List queries recurring_transaction_legs (migration 0031) rather than the
+// table, which is what makes a self_transfer template appear once per
+// account of its two that is in scope — or twice when both are. The three
+// self-transfer modes are one extra WHERE clause each over that single
+// view; account_id = ANY(...) applies unchanged in all three, so "once per
+// account in scope" falls out of the same filter that already scopes an
+// ordinary template. See design.md of add-recurring-self-transfers.
 func (s *RecurringTransactionStore) List(ctx context.Context, f rt.Filter) ([]rt.RecurringTransaction, error) {
 	if len(f.AccountIDs) == 0 {
 		return nil, nil
 	}
+	where := `deleted_at IS NULL AND account_id = ANY($1::uuid[])`
+	switch f.SelfTransfers {
+	case rt.SelfTransferBothLegs:
+		// Every leg of every kind — no extra clause.
+	case rt.SelfTransferNative:
+		where += ` AND native`
+	default:
+		where += ` AND native AND kind = 'transaction'`
+	}
+	// native DESC puts a template's outgoing leg immediately before its
+	// incoming one when both are listed; created_at/id keep the existing
+	// ordering otherwise.
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+recurringCols+` FROM recurring_transactions
-		WHERE deleted_at IS NULL AND account_id = ANY($1::uuid[])
-		ORDER BY created_at, id`,
+		`SELECT `+recurringColsFor("recurring_transaction_legs")+`, native FROM recurring_transaction_legs
+		WHERE `+where+`
+		ORDER BY created_at, id, native DESC`,
 		f.AccountIDs,
 	)
 	if err != nil {
@@ -222,11 +278,27 @@ func (s *RecurringTransactionStore) List(ctx context.Context, f rt.Filter) ([]rt
 
 	var out []rt.RecurringTransaction
 	for rows.Next() {
-		r, err := scanRecurring(rows)
+		var native bool
+		r, err := scanRecurringRow(rows, &native)
 		if err != nil {
 			return nil, err
 		}
+		r.Native = native
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// HasSelfTransferAccount reports whether accountID is named on either side
+// of any non-deleted self_transfer template — the existence check backing
+// internal/account's currency-immutability rule.
+func (s *RecurringTransactionStore) HasSelfTransferAccount(ctx context.Context, accountID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM recurring_transactions
+			WHERE kind = 'self_transfer' AND deleted_at IS NULL
+				AND (account_id = $1 OR to_account_id = $1)
+		)`, accountID).Scan(&exists)
+	return exists, err
 }

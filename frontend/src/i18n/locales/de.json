@@ -664,7 +664,8 @@
       "endsOnBeforeStarts": "Enddatum darf nicht vor dem Startdatum liegen.",
       "create": "Wiederkehrende Buchung erstellen",
       "save": "Änderungen speichern",
-      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut."
+      "saveError": "Speichern fehlgeschlagen — bitte überprüfe das Formular und versuche es erneut.",
+      "selfTransferReadOnly": "Dieser Übertrag kann nicht mehr bearbeitet werden — dafür sind auf beiden Konten Schreibrechte nötig."
     },
     "new": {
       "title": "Neue wiederkehrende Buchung"
@@ -683,7 +684,13 @@
         "empty": "Dieser wiederkehrenden Buchung sind noch keine Buchungen zugeordnet.",
         "loadMore": "Mehr laden"
       }
-    }
+    },
+    "filters": {
+      "includeSelfTransfer": "Eigenüberträge anzeigen",
+      "selfTransferBothLegs": "Beide Seiten anzeigen (Eingang und Ausgang)"
+    },
+    "selfTransferTo": "auf {{account}}",
+    "selfTransferFrom": "von {{account}}"
   },
   "recurringPreview": {
     "toggleLabel": "Anstehende Buchungen anzeigen",

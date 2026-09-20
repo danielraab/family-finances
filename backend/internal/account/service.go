@@ -40,11 +40,12 @@ type Mailer interface {
 // plus the optional UserLookup/Mailer side-effect interfaces sharing uses,
 // and the optional EntryLookup the currency-immutability rule uses.
 type Service struct {
-	store   Store
-	users   UserLookup  // nil until SetUserLookup is called
-	mailer  Mailer      // nil disables the share-notification email
-	entries EntryLookup // nil until SetEntryLookup is called
-	baseURL string
+	store      Store
+	users      UserLookup                 // nil until SetUserLookup is called
+	mailer     Mailer                     // nil disables the share-notification email
+	entries    EntryLookup                // nil until SetEntryLookup is called
+	recurrings RecurringTransactionLookup // nil until SetRecurringTransactionLookup is called
+	baseURL    string
 }
 
 // Option customizes a Service at construction.
@@ -84,6 +85,38 @@ func (s *Service) SetUserLookup(u UserLookup) { s.users = u }
 // HasEntries below always report false, leaving currency freely editable —
 // the safe default for a caller (e.g. a test) that never wires this in.
 func (s *Service) SetEntryLookup(e EntryLookup) { s.entries = e }
+
+// SetRecurringTransactionLookup wires the other half of the
+// currency-immutability rule, after construction and for the same reason
+// SetEntryLookup is. A nil lookup (never called) reports false, leaving
+// that half of the rule inert — the safe default for a caller that never
+// wires it in.
+func (s *Service) SetRecurringTransactionLookup(l RecurringTransactionLookup) { s.recurrings = l }
+
+// currencyLocked reports whether id's currency may no longer be changed:
+// once it has any entry, or once a self_transfer recurring transaction
+// names either of its sides.
+func (s *Service) currencyLocked(ctx context.Context, id string) (bool, error) {
+	if s.entries != nil {
+		hasEntries, err := s.entries.HasEntries(ctx, id)
+		if err != nil {
+			return false, err
+		}
+		if hasEntries {
+			return true, nil
+		}
+	}
+	if s.recurrings != nil {
+		named, err := s.recurrings.HasSelfTransferAccount(ctx, id)
+		if err != nil {
+			return false, err
+		}
+		if named {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 // Create validates in and creates an account owned by ownerID — the real
 // owner, always the caller.
@@ -163,12 +196,12 @@ func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (
 	if err := validateUpdate(current, upd); err != nil {
 		return Account{}, err
 	}
-	if upd.Currency != nil && s.entries != nil {
-		hasEntries, err := s.entries.HasEntries(ctx, id)
+	if upd.Currency != nil {
+		locked, err := s.currencyLocked(ctx, id)
 		if err != nil {
 			return Account{}, err
 		}
-		if hasEntries {
+		if locked {
 			return Account{}, ErrInvalidValue
 		}
 	}

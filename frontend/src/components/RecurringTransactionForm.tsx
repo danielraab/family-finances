@@ -18,9 +18,12 @@ type Account = components["schemas"]["Account"];
 type Category = components["schemas"]["Category"];
 type Tag = components["schemas"]["Tag"];
 type IntervalUnit = components["schemas"]["IntervalUnit"];
+type RecurringKind = components["schemas"]["RecurringTransactionKind"];
 
 export type RecurringTransactionFormValues = {
   account_id: string;
+  to_account_id: string;
+  kind: RecurringKind;
   title: string;
   description: string;
   category_id: string;
@@ -37,6 +40,8 @@ export type RecurringTransactionFormValues = {
 
 export const emptyRecurringTransactionForm: RecurringTransactionFormValues = {
   account_id: "",
+  to_account_id: "",
+  kind: "transaction",
   title: "",
   description: "",
   category_id: "",
@@ -57,6 +62,9 @@ export const emptyRecurringTransactionForm: RecurringTransactionFormValues = {
  * empty ends_on is represented (omitted vs. explicit null). */
 export type RecurringTransactionSubmitValues = {
   account_id: string;
+  /** Empty unless kind is self_transfer — the parent omits it otherwise. */
+  to_account_id: string;
+  kind: RecurringKind;
   title: string;
   description: string;
   category_id: string;
@@ -81,6 +89,7 @@ export function RecurringTransactionForm({
   serverError,
   onSubmit,
   accountLocked,
+  kindLocked,
 }: {
   initial: RecurringTransactionFormValues;
   submitLabel: string;
@@ -90,6 +99,10 @@ export function RecurringTransactionForm({
   /** True once the caller has append+ on at most one account — locks the
    * field the same way entries.new.tsx locks a preset account_id. */
   accountLocked?: boolean;
+  /** True on the edit form: kind and to_account_id are immutable after
+   * creation (the backend rejects either on PATCH), so both are shown as
+   * read-only rather than as controls that would fail on save. */
+  kindLocked?: boolean;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState(initial);
@@ -136,6 +149,29 @@ export function RecurringTransactionForm({
   }
 
   const selectableAccounts = accounts.filter((a) => a.permission !== "view");
+  const account = accounts.find((a) => a.id === values.account_id);
+  // The same predicate entries.new.tsx applies to its own to-account
+  // picker: append+, not disabled, not the source account, same currency.
+  const toAccountOptions = accounts.filter(
+    (a) =>
+      a.permission !== "view" &&
+      !a.disabled &&
+      a.id !== values.account_id &&
+      (account === undefined || a.currency === account.currency),
+  );
+  const isSelfTransfer = values.kind === "self_transfer";
+  // Editing a self-transfer template requires append+ on both of its
+  // accounts, still held now — the backend rejects the save outright
+  // otherwise, so the form says why up front rather than letting the
+  // visitor fill it in and fail. An account the caller has no permission
+  // on at all is simply absent from /api/accounts.
+  const canAppend = (id: string) =>
+    accounts.some((a) => a.id === id && a.permission !== "view");
+  const readOnly =
+    kindLocked === true &&
+    isSelfTransfer &&
+    accounts.length > 0 &&
+    (!canAppend(values.account_id) || !canAppend(values.to_account_id));
   const categoryOptions = flattenCategoryTree(
     categories
       .filter((c) => !c.disabled && c.permission !== "view")
@@ -156,7 +192,13 @@ export function RecurringTransactionForm({
       setInvalidField("title");
       return;
     }
-    if (!values.category_id) {
+    if (isSelfTransfer && !values.to_account_id) {
+      setInvalidField("to_account_id");
+      return;
+    }
+    // A category is required for a transaction and optional for a
+    // self-transfer, mirroring what the entry form already enforces.
+    if (!isSelfTransfer && !values.category_id) {
       setInvalidField("category_id");
       return;
     }
@@ -184,11 +226,15 @@ export function RecurringTransactionForm({
 
     onSubmit({
       account_id: values.account_id,
+      to_account_id: isSelfTransfer ? values.to_account_id : "",
+      kind: values.kind,
       title: values.title.trim(),
       description: values.description.trim(),
       category_id: values.category_id,
-      counterparty: values.counterparty.trim(),
-      location: values.location.trim(),
+      // A self-transfer rejects both outright, so they are never sent for
+      // that kind however the form was filled in before switching.
+      counterparty: isSelfTransfer ? "" : values.counterparty.trim(),
+      location: isSelfTransfer ? "" : values.location.trim(),
       tag_ids: tagIds,
       amount: values.negative ? -magnitude : magnitude,
       interval_unit: values.interval_unit,
@@ -198,15 +244,23 @@ export function RecurringTransactionForm({
     });
   }
 
-  const account = accounts.find((a) => a.id === values.account_id);
-
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5 text-sm font-medium">
         {t("entries.form.account")}
         <select
           value={values.account_id}
-          onChange={(e) => set("account_id", e.target.value)}
+          onChange={(e) =>
+            setValues((prev) => ({
+              ...prev,
+              account_id: e.target.value,
+              // A new source account may invalidate the chosen target one
+              // (different currency, or now the same account), so the
+              // choice is reset rather than preserved — the entry form
+              // does exactly this for the same reason.
+              to_account_id: "",
+            }))
+          }
           className={inputClass}
           disabled={accountLocked}
           required
@@ -226,6 +280,74 @@ export function RecurringTransactionForm({
           </span>
         )}
       </label>
+
+      {kindLocked ? (
+        <div className="flex flex-col gap-1.5 text-sm font-medium">
+          {t("entries.form.kind")}
+          <p className="text-sm font-normal text-zinc-500 dark:text-zinc-400">
+            {isSelfTransfer
+              ? t("entries.kind.selfTransfer")
+              : t("entries.kind.transaction")}
+          </p>
+        </div>
+      ) : (
+        <fieldset className="flex flex-col gap-1.5 text-sm font-medium">
+          {t("entries.form.kind")}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm font-normal">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                checked={values.kind === "transaction"}
+                onChange={() => set("kind", "transaction")}
+              />
+              {t("entries.kind.transaction")}
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                checked={isSelfTransfer}
+                onChange={() => set("kind", "self_transfer")}
+              />
+              {t("entries.kind.selfTransfer")}
+            </label>
+          </div>
+        </fieldset>
+      )}
+
+      {isSelfTransfer &&
+        (kindLocked ? (
+          <div className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.toAccount")}
+            <p className="text-sm font-normal text-zinc-500 dark:text-zinc-400">
+              {accounts.find((a) => a.id === values.to_account_id)?.title ??
+                "—"}
+            </p>
+          </div>
+        ) : (
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t("entries.form.toAccount")}
+            <select
+              value={values.to_account_id}
+              onChange={(e) => set("to_account_id", e.target.value)}
+              className={inputClass}
+              required
+            >
+              <option value="" disabled>
+                {t("entries.form.toAccountPlaceholder")}
+              </option>
+              {toAccountOptions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.title} ({a.currency})
+                </option>
+              ))}
+            </select>
+            {invalidField === "to_account_id" && (
+              <span className="text-xs font-normal text-red-600 dark:text-red-400">
+                {t("entries.form.toAccountRequired")}
+              </span>
+            )}
+          </label>
+        ))}
 
       <div className="flex flex-col gap-1.5 text-sm font-medium">
         {t("entries.form.amount", { currency: account?.currency ?? "" })}
@@ -291,30 +413,34 @@ export function RecurringTransactionForm({
         )}
       </label>
 
-      <label className="flex flex-col gap-1.5 text-sm font-medium">
-        {t("entries.form.counterparty")}
-        <input
-          list="recurring-counterparty-suggestions"
-          value={values.counterparty}
-          onChange={(e) => set("counterparty", e.target.value)}
-          placeholder={t("entries.form.counterpartyPlaceholder")}
-          className={inputClass}
-        />
-        <datalist id="recurring-counterparty-suggestions">
-          {counterparties.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
-      </label>
+      {!isSelfTransfer && (
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          {t("entries.form.counterparty")}
+          <input
+            list="recurring-counterparty-suggestions"
+            value={values.counterparty}
+            onChange={(e) => set("counterparty", e.target.value)}
+            placeholder={t("entries.form.counterpartyPlaceholder")}
+            className={inputClass}
+          />
+          <datalist id="recurring-counterparty-suggestions">
+            {counterparties.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </label>
+      )}
 
-      <div className="flex flex-col gap-1.5 text-sm font-medium">
-        {t("entries.form.location")}
-        <LocationField
-          value={values.location}
-          onChange={(v) => set("location", v)}
-          inputClassName={inputClass}
-        />
-      </div>
+      {!isSelfTransfer && (
+        <div className="flex flex-col gap-1.5 text-sm font-medium">
+          {t("entries.form.location")}
+          <LocationField
+            value={values.location}
+            onChange={(v) => set("location", v)}
+            inputClassName={inputClass}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5 text-sm font-medium">
         {t("entries.form.tags")}
@@ -418,6 +544,12 @@ export function RecurringTransactionForm({
         </label>
       </fieldset>
 
+      {readOnly && (
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          {t("recurring.form.selfTransferReadOnly")}
+        </p>
+      )}
+
       {serverError && (
         <p className="text-sm text-red-600 dark:text-red-400">{serverError}</p>
       )}
@@ -425,7 +557,7 @@ export function RecurringTransactionForm({
       <div>
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || readOnly}
           className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
           {submitLabel}

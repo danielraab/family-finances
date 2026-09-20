@@ -121,8 +121,16 @@ function NewEntry() {
           })
           .then(({ data: rt }) => {
             if (!rt) return;
+            // Always the template as stored — GET by id never returns a
+            // leg — so booking from an incoming Upcoming row still creates
+            // an entry on the template's sending account, the orientation
+            // recurring_transaction_id is validated against.
             setRecurringAccountId(rt.account_id);
             setAccountId(rt.account_id);
+            setKind(rt.kind);
+            if (rt.to_account_id) {
+              setToAccountId(rt.to_account_id);
+            }
             setTransactionNegative(rt.amount < 0);
             setTransactionAmount(amountToInput(Math.abs(rt.amount)));
             setTitle(rt.title);
