@@ -24,29 +24,27 @@ COPY --from=frontend /src/frontend/out/. static/out/
 # stage never has one (only backend/ and openapi/openapi.yaml are copied in
 # above) — so a caller that already knows its version/commit (CI's publish
 # job, which has github.ref_name/github.sha) passes them as build args.
-# A caller that doesn't (e.g. Dokploy building this Dockerfile directly off
-# a git checkout, with no build-arg wiring of its own) gets them derived
-# here instead: --mount=type=bind reads .git straight from the build
-# context — the outer `docker build` context, not this stage's copied
-# files — without ever copying it into an image layer. VERSION stays empty
-# unless HEAD is exactly a tag (an in-progress branch build correctly shows
-# no version, only a commit); REVISION is HEAD's full hash. An explicit
-# build arg always wins over the derived value.
-#
-# This does mean the build context must contain .git for this RUN to
-# succeed at all — a bind-mount source that doesn't exist fails the build,
-# and Dockerfile syntax has no way to make that mount conditional. That's
-# true of every normal `docker build` run from a git checkout (Dokploy's
-# included), which is the only case this backs; it is not true of a
-# context built from a source tarball/export with no .git, which is not a
-# supported input to this Dockerfile.
+# A caller that doesn't gets them derived here instead, from .git, if the
+# build context happens to have one: --mount=type=bind exposes the outer
+# `docker build` context read-only, without ever copying it into an image
+# layer. Mounted at the context *root* ("."), not straight at ".git":
+# a bind-mount source that doesn't exist fails the build outright with no
+# way to make the mount itself conditional, whereas "." always exists (it
+# is the context). ".git" itself is checked for with a plain [ -d ] before
+# it's ever used, so a context that doesn't have one (confirmed true of
+# Dokploy, which builds from an export, not a working copy) just skips
+# this and builds unstamped, same as before this existed — never a broken
+# build. VERSION stays empty unless HEAD is exactly a tag (an in-progress
+# branch build correctly shows no version, only a commit); REVISION is
+# HEAD's full hash. An explicit build arg always wins over the derived
+# value.
 ARG VERSION=""
 ARG REVISION=""
-RUN --mount=type=bind,source=.git,target=/tmp/.git,ro set -e && \
+RUN --mount=type=bind,source=.,target=/tmp/ctx,ro set -e && \
     V="$VERSION" && R="$REVISION" && \
-    if [ -z "$V" ] || [ -z "$R" ]; then \
+    if { [ -z "$V" ] || [ -z "$R" ]; } && [ -d /tmp/ctx/.git ]; then \
       apk add --no-cache git >/dev/null && \
-      export GIT_DIR=/tmp/.git && \
+      export GIT_DIR=/tmp/ctx/.git && \
       { [ -n "$V" ] || V=$(git describe --tags --exact-match 2>/dev/null || echo ""); } && \
       { [ -n "$R" ] || R=$(git rev-parse HEAD 2>/dev/null || echo ""); }; \
     fi && \

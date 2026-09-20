@@ -81,35 +81,43 @@ platform it was raised for.
 
 Instead, the backend stage derives `VERSION`/`REVISION` itself when a
 build arg is left at its empty default, using a `RUN
---mount=type=bind,source=.git,target=/tmp/.git,ro` — a BuildKit bind
-mount that reads a path from the *outer build context* (the whole
-`docker build .` context, i.e. the repo root that context is built
-from) directly into that `RUN`'s filesystem view, without a `COPY` and
-without that content ever entering an image layer. Inside, `git
-describe --tags --exact-match` gives `VERSION` (empty unless `HEAD` is
-exactly a tag — a branch build on Dokploy correctly reports no version,
-only a commit) and `git rev-parse HEAD` gives `REVISION`. An explicit
-build arg — CI's own path — always wins over the derived value, so
-nothing changes for the `publish` job; it's Dokploy (and anyone else
-running a bare `docker build .` from a checkout) that starts getting a
-correct answer for free.
+--mount=type=bind,source=.,target=/tmp/ctx,ro` — a BuildKit bind mount
+that exposes the *outer build context* (the whole `docker build .`
+context) read-only inside that one `RUN`'s filesystem view, without a
+`COPY` and without that content ever entering an image layer. If
+`/tmp/ctx/.git` exists, `git describe --tags --exact-match` gives
+`VERSION` (empty unless `HEAD` is exactly a tag — a branch build
+correctly reports no version, only a commit) and `git rev-parse HEAD`
+gives `REVISION`. An explicit build arg — CI's own path — always wins
+over the derived value.
 
-This does add a real constraint the previous design didn't have: **the
-build context must contain `.git`** — a bind-mount source that doesn't
-exist fails the `RUN` outright, and Dockerfile syntax has no way to make
-a mount conditional on the source existing. Verified directly (see
-Migration Plan/testing below): the shell logic run against this repo's
-own `.git` correctly returns an empty `VERSION` on an untagged commit
-and the exact tag when `HEAD` is tagged. The full `docker build` itself
-could not be exercised end-to-end in the environment this change was
-built in — its sandbox's egress policy blocks pulling base images from
-Docker Hub (`golang`, `node`, `distroless`), a policy denial rather than
-a technical failure, confirmed by first getting a real `dockerd` running
-there and reproducing the same 403 through it. That risk was raised with
-Daniel before implementing (a `.git`-less build context, which no
-current caller of this Dockerfile produces, would now fail rather than
-silently building unstamped) and accepted, on the basis that it fixes
-the one deployment path — Dokploy — that this change exists for.
+**First attempt mounted the bind straight at `.git` (`source=.git`)
+instead of at the context root, and that broke Daniel's actual Dokploy
+build within the hour**: `failed to compute cache key: ... "/.git":
+not found`. A bind-mount source that doesn't exist fails the `RUN`
+outright, with no Dockerfile syntax to make the mount itself
+conditional — and Dokploy's build context, it turns out, does not carry
+`.git` at all (it builds from an export, not a working copy), which is
+exactly backwards from what this section originally assumed and
+committed on unverified. The fix mounts at the context *root* instead —
+`.` always exists, because it *is* the context — and checks for
+`/tmp/ctx/.git` with a plain `[ -d ]` before ever touching it. A context
+without one now degrades to "unstamped", exactly like before this
+feature existed, on Dokploy or anywhere else; the git derivation itself
+is best-effort, never load-bearing for the build succeeding.
+
+Both branches of that shell logic (present / absent `.git`, and
+present-and-tagged) were verified directly against real `.git`
+directories in the environment this was authored in. The full `docker
+build` of the actual multi-stage Dockerfile could not be exercised
+end-to-end there — its sandbox's egress policy blocks pulling base
+images from Docker Hub (`golang`, `node`, `distroless`), a policy denial
+rather than a technical failure, confirmed by bringing up a real
+`dockerd` and reproducing the same 403 through it — which is exactly how
+the `source=.git` mistake made it to Daniel's real build in the first
+place. Lesson applied here, not just stated: prefer a mount source that
+cannot fail to resolve, and treat anything conditional on repository
+contents as untrusted until a real build says otherwise.
 
 ### Unauthenticated, like the other meta endpoints
 
