@@ -28,13 +28,17 @@ which already holds the tag as `github.ref_name`.
   `/api/openapi.yaml`).
 - The root `Dockerfile` takes `VERSION` and `REVISION` build args and
   passes them through as `-ldflags`; CI's `publish` job supplies
-  `github.ref_name` and `github.sha`. When either arg is left empty —
-  as it is for Daniel's Dokploy stage environment, which builds this
-  `Dockerfile` directly with no build-arg wiring of its own — the
-  backend stage derives it from the build context's own `.git` instead
-  (the tag `HEAD` is exactly on, and its commit), so any ordinary
-  `docker build` run from a git checkout reports correctly with zero
-  platform-specific configuration.
+  `github.ref_name` and `github.sha`. When either arg is left empty, the
+  backend stage falls back to deriving it from the build context's own
+  `.git`, if the context has one — a `docker build` run from an ordinary
+  git checkout then reports correctly with zero platform-specific
+  configuration. Daniel's Dokploy stage environment builds this
+  `Dockerfile` directly with no build-arg wiring of its own, which is
+  what this fallback was added for — but Dokploy's build context turns
+  out not to carry `.git` at all (it builds from an export), so on
+  Dokploy specifically this still reports nothing, same as before the
+  fallback existed; it isn't a broken build, just not a solved problem
+  for that one platform.
 - The sidebar footer renders the result as one small, muted line below
   the user control: the release tag when there is one, otherwise the
   short commit hash, and nothing at all when the backend reports

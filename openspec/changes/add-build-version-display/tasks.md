@@ -46,12 +46,21 @@
 - [x] 4.3 Make the two args self-deriving for a caller that doesn't
       supply them (Dokploy, building the `Dockerfile` directly with no
       build-arg wiring): in the same `RUN`, `--mount=type=bind,
-      source=.git,target=/tmp/.git,ro` and, when `VERSION`/`REVISION`
-      is empty, `git describe --tags --exact-match` /
+      source=.,target=/tmp/ctx,ro` (the context *root*, not `.git`
+      directly — see 4.4) and, when `VERSION`/`REVISION` is empty and
+      `/tmp/ctx/.git` exists, `git describe --tags --exact-match` /
       `git rev-parse HEAD` against it (installing `git` in that `RUN`
       only when needed) before the `go build`. An explicit build arg
-      still wins. See design.md for why, and for the accepted
-      constraint that the build context must contain `.git`.
+      still wins.
+- [x] 4.4 **Fixed after shipping**: the first cut mounted the bind
+      straight at `source=.git`, which broke Daniel's real Dokploy
+      build (`"/.git": not found` — its build context doesn't carry
+      `.git`). A bind-mount source that doesn't exist fails the `RUN`
+      outright with no way to make the mount conditional, so re-target
+      the mount at the context root (`.`, which always exists) and
+      check `[ -d /tmp/ctx/.git ]` before using it — a context without
+      one now just builds unstamped, as it did before this feature
+      existed, instead of failing. See design.md.
 
 ## 5. Frontend
 
@@ -74,12 +83,19 @@
       line renders in both expanded and collapsed sidebar states and
       disappears when the endpoint returns empty strings.
 - [x] 6.4 Verify the Dockerfile's git-derivation shell logic directly
-      against this repo's real `.git` (no image build): confirms empty
-      `VERSION`/full-hash `REVISION` on an untagged commit, and the
-      exact tag when `HEAD` is tagged. A full `docker build` of the
-      image could not be run in the environment this change was
-      authored in — its egress policy blocks pulling Docker Hub base
-      images (confirmed by running a real `dockerd` there and hitting
-      the same policy denial) — so the `RUN` instruction's exact syntax
-      should be confirmed with one real build (Dokploy's own next
-      deploy, or a local `docker build .`) before relying on it.
+      (no image build, since a full `docker build` could not be run in
+      the environment this change was authored in — its egress policy
+      blocks pulling Docker Hub base images, confirmed by running a
+      real `dockerd` there and hitting the same policy denial): confirms
+      empty `VERSION`/full-hash `REVISION` on an untagged commit, the
+      exact tag when `HEAD` is tagged, and — after 4.4's fix — that a
+      context with no `.git` at all skips the derivation cleanly rather
+      than failing.
+- [x] 6.5 Confirmed against Daniel's real Dokploy build: the
+      `source=.git` version (pre-4.4) broke it outright; the
+      `source=.` + `[ -d .../.git ]` version is the one actually
+      shipped. Still worth a final confirmation on Dokploy's next
+      deploy that the build now succeeds (it should show no version,
+      since Dokploy's build context has no `.git` — the derivation is a
+      no-op there, not a fix for that specific platform's missing
+      version line).
