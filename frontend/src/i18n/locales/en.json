@@ -353,6 +353,12 @@
       "custom": "Custom"
     }
   },
+  "filters": {
+    "heading": "Filters",
+    "activeCount_one": "{{count}} filter active",
+    "activeCount_other": "{{count}} filters active",
+    "clearAll": "Clear all filters"
+  },
   "entries": {
     "title": "Entries",
     "create": "New entry",
@@ -381,11 +387,7 @@
       "from": "From",
       "to": "To",
       "search": "Search",
-      "clearSearch": "Clear search",
-      "heading": "Filters",
-      "activeCount_one": "{{count}} filter active",
-      "activeCount_other": "{{count}} filters active",
-      "clearAll": "Clear all filters"
+      "clearSearch": "Clear search"
     },
     "kind": {
       "transaction": "Transaction",
@@ -624,6 +626,7 @@
     "create": "New recurring transaction",
     "createTransaction": "Create transaction",
     "empty": "No recurring transactions yet.",
+    "emptyFiltered": "No recurring transactions match these filters.",
     "ended": "Ended",
     "totalPerYear": "Total per year",
     "totalPerMonth": "Total per month",
@@ -686,6 +689,12 @@
       }
     },
     "filters": {
+      "account": "Account",
+      "allAccounts": "All accounts",
+      "category": "Category",
+      "allCategories": "All categories",
+      "tag": "Tag",
+      "allTags": "All tags",
       "includeSelfTransfer": "Show self-transfers",
       "selfTransferBothLegs": "Show both sides (income and outcome)"
     },

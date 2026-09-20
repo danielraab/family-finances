@@ -931,7 +931,7 @@ export interface paths {
         };
         /**
          * Sum the caller's matching recurring transactions' per-year amounts, per currency
-         * @description Accepts the same account_id, include_self_transfer and self_transfer_both_legs parameters as GET /api/recurring-transactions, resolved identically — so this total is always the total of the rows that listing would return under the same parameters. Excludes any recurring transaction whose ends_on is before the current date (in the caller's resolved timezone) from the total.
+         * @description Accepts the same account_id, category_id/category_mode, tag_id, include_self_transfer and self_transfer_both_legs parameters as GET /api/recurring-transactions, resolved identically — so this total is always the total of the rows that listing would return under the same parameters. Excludes any recurring transaction whose ends_on is before the current date (in the caller's resolved timezone) from the total.
          */
         get: operations["getRecurringTransactionsSummary"];
         put?: never;
@@ -3387,10 +3387,16 @@ export interface operations {
             query?: {
                 /** @description Repeatable. Omitted means every non-deleted account the caller has any permission on. */
                 account_id?: string[];
+                /** @description Matches this category, plus every descendant unless category_mode=exact. A recurring transaction with no category never matches. Unlike GET /api/entries, a category the caller holds permission on does not widen the account scope: a recurring transaction on an account the caller cannot see is never returned. */
+                category_id?: string;
+                /** @description Only meaningful together with category_id. subtree (the default) matches the category and every descendant; exact matches only that category. */
+                category_mode?: "subtree" | "exact";
                 /** @description When false (the default), self_transfer recurring transactions are excluded entirely. When true, each appears once, from its sending account's side, unless self_transfer_both_legs is also true. */
                 include_self_transfer?: boolean;
                 /** @description When true alongside include_self_transfer, each self_transfer recurring transaction appears once per account of its two that is within the caller's resolved account scope — twice when both are, the receiving side with its two account ids swapped and amount negated, so the two cancel in the summary's per-currency total. Ignored when include_self_transfer is false. */
                 self_transfer_both_legs?: boolean;
+                /** @description Matches a recurring transaction carrying this tag. Like category_id, it never widens the account scope. */
+                tag_id?: string;
             };
             header?: never;
             path?: never;
@@ -3407,6 +3413,7 @@ export interface operations {
                     "application/json": components["schemas"]["RecurringTransaction"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -3553,10 +3560,16 @@ export interface operations {
             query?: {
                 /** @description Repeatable. Omitted means every non-deleted account the caller has any permission on. */
                 account_id?: string[];
+                /** @description Matches this category, plus every descendant unless category_mode=exact. A recurring transaction with no category never matches. Unlike GET /api/entries, a category the caller holds permission on does not widen the account scope: a recurring transaction on an account the caller cannot see is never returned. */
+                category_id?: string;
+                /** @description Only meaningful together with category_id. subtree (the default) matches the category and every descendant; exact matches only that category. */
+                category_mode?: "subtree" | "exact";
                 /** @description When false (the default), self_transfer recurring transactions are excluded entirely. When true, each appears once, from its sending account's side, unless self_transfer_both_legs is also true. */
                 include_self_transfer?: boolean;
                 /** @description When true alongside include_self_transfer, each self_transfer recurring transaction appears once per account of its two that is within the caller's resolved account scope — twice when both are, the receiving side with its two account ids swapped and amount negated, so the two cancel in the summary's per-currency total. Ignored when include_self_transfer is false. */
                 self_transfer_both_legs?: boolean;
+                /** @description Matches a recurring transaction carrying this tag. Like category_id, it never widens the account scope. */
+                tag_id?: string;
             };
             header?: never;
             path?: never;
@@ -3573,6 +3586,7 @@ export interface operations {
                     "application/json": components["schemas"]["EntrySummary"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
