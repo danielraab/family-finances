@@ -10,7 +10,8 @@
   },
   "sidebar": {
     "closeSidebar": "Seitenleiste schließen",
-    "githubRepo": "Quellcode auf GitHub ansehen"
+    "githubRepo": "Quellcode auf GitHub ansehen",
+    "buildVersion": "Build {{commit}}"
   },
   "topbar": {
     "expandSidebar": "Seitenleiste ausklappen",

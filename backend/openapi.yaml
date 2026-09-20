@@ -91,6 +91,25 @@ paths:
               schema:
                 type: string
 
+  /api/version:
+    get:
+      operationId: getVersion
+      summary: The running build's release version and commit
+      description: >-
+        Unauthenticated. Reports the git tag and commit the running backend
+        was built from, stamped in at image-build time. Either field may be
+        an empty string when it could not be determined (an untagged or
+        unstamped build) — never null or omitted.
+      tags: [meta]
+      security: []
+      responses:
+        "200":
+          description: The running build's identity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuildInfo"
+
   /api/auth/config:
     get:
       operationId: getAuthConfig
@@ -2766,6 +2785,23 @@ components:
         type: string
 
   schemas:
+    BuildInfo:
+      type: object
+      required: [version, commit]
+      properties:
+        version:
+          type: string
+          description: >-
+            The git tag the running build was made from (e.g. "v0.4.2"), or
+            an empty string when the build was not made from a tag.
+        commit:
+          type: string
+          description: >-
+            The git commit hash the running build was made from, or an
+            empty string when it could not be determined. Suffixed
+            "-dirty" when built from a working copy with uncommitted
+            changes.
+
     User:
       type: object
       required: [id, email, is_admin, created_at, language]

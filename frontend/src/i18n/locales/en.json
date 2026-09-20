@@ -10,7 +10,8 @@
   },
   "sidebar": {
     "closeSidebar": "Close sidebar",
-    "githubRepo": "View source on GitHub"
+    "githubRepo": "View source on GitHub",
+    "buildVersion": "Build {{commit}}"
   },
   "topbar": {
     "expandSidebar": "Expand sidebar",
