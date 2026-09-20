@@ -28,7 +28,13 @@ which already holds the tag as `github.ref_name`.
   `/api/openapi.yaml`).
 - The root `Dockerfile` takes `VERSION` and `REVISION` build args and
   passes them through as `-ldflags`; CI's `publish` job supplies
-  `github.ref_name` and `github.sha`.
+  `github.ref_name` and `github.sha`. When either arg is left empty —
+  as it is for Daniel's Dokploy stage environment, which builds this
+  `Dockerfile` directly with no build-arg wiring of its own — the
+  backend stage derives it from the build context's own `.git` instead
+  (the tag `HEAD` is exactly on, and its commit), so any ordinary
+  `docker build` run from a git checkout reports correctly with zero
+  platform-specific configuration.
 - The sidebar footer renders the result as one small, muted line below
   the user control: the release tag when there is one, otherwise the
   short commit hash, and nothing at all when the backend reports
@@ -69,7 +75,8 @@ which already holds the tag as `github.ref_name`.
   the `GET /api/version` route.
 - `openapi/openapi.yaml` (+ the two committed generated artifacts) — the
   new operation and its `BuildInfo` schema.
-- `Dockerfile` — `VERSION`/`REVISION` args, `-ldflags` on `go build`.
+- `Dockerfile` — `VERSION`/`REVISION` args, `-ldflags` on `go build`,
+  and a `.git` bind-mount fallback for when they're unset.
 - `.github/workflows/ci.yml` — `build-args` on the publish step.
 - `frontend/src/components/{Sidebar,SidebarVersion}.tsx` — the footer
   line.
