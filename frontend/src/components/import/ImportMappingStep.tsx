@@ -2,7 +2,10 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "../../api/schema";
 import { flattenCategoryTree } from "../../lib/categoryTree";
-import { truncateExample } from "../../lib/import/formatExample";
+import {
+  collectFieldExamples,
+  truncateExample,
+} from "../../lib/import/formatExample";
 import type {
   DecimalSeparator,
   ThousandsSeparator,
@@ -113,19 +116,10 @@ export function ImportMappingStep({
     onMappingChange({ ...mapping, [key]: value });
   }
 
-  const fieldExamples = useMemo(() => {
-    const examples: Record<string, string> = {};
-    for (const field of fields) {
-      for (const row of rows) {
-        const value = row[field];
-        if (value && value.trim() !== "") {
-          examples[field] = value;
-          break;
-        }
-      }
-    }
-    return examples;
-  }, [fields, rows]);
+  const fieldExamples = useMemo(
+    () => collectFieldExamples(fields, rows),
+    [fields, rows],
+  );
 
   const categoryOptions = flattenCategoryTree(
     categories

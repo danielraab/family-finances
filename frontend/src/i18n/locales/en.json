@@ -617,7 +617,21 @@
           "remapHeading": "Fix this field",
           "remapNote": "Pick a different column for this row only — the mapping for every other row is unchanged.",
           "hideSuccessful": "Hide successful rows",
-          "startImport": "Start import"
+          "selectAll": "Select all listed rows",
+          "selectRow": "Select row {{row}}",
+          "selectedCount_one": "{{count}} row selected",
+          "selectedCount_other": "{{count}} rows selected",
+          "clearSelection": "Clear selection",
+          "bulkRemapHeading": "Remap the selected rows",
+          "bulkRemapKeep": "— Keep current —",
+          "bulkRemapNote_one": "Pick a different column for the selected row. Fields left on “Keep current” stay as they are, and no other row is touched.",
+          "bulkRemapNote_other": "Pick a different column for the {{count}} selected rows. Fields left on “Keep current” stay as they are, and no other row is touched.",
+          "bulkRemapApply_one": "Apply to {{count}} row",
+          "bulkRemapApply_other": "Apply to {{count}} rows",
+          "importAll_one": "Import all ({{count}} entry)",
+          "importAll_other": "Import all ({{count}} entries)",
+          "importSelected_one": "Import selected ({{count}} entry)",
+          "importSelected_other": "Import selected ({{count}} entries)"
         }
       }
     }
