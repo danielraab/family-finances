@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-09-20
+
+### Added
+
+- The running build's version in the sidebar footer. The published image
+  is tagged with the git tag that built it, but nothing in the app said
+  which one is actually running, so after a pull and restart there was no
+  way short of `docker image inspect` on the host to tell a fresh release
+  from one deployed weeks ago. The footer now shows the release tag, or
+  the short commit when the build was not made from a tag, in both the
+  expanded and collapsed sidebar, and shows nothing when the backend
+  reports neither. Served by a new unauthenticated `GET /api/version`,
+  stamped into the binary at build time by the container build (CI's
+  publish job passes the pushed tag and commit) and falling back to the
+  Go toolchain's own VCS information for a plain local build. A
+  `docker build` that passes no build args derives both from the build
+  context's `.git` when there is one, so an image built straight from a
+  checkout is stamped too; a context without `.git` builds unstamped
+  rather than failing.
+- Row selection on the import dry-run step. The step could previously
+  only fix one failed row at a time and only start an all-or-nothing
+  import, so a bank export carrying the merchant in a different column
+  for half its rows had to be remapped row by row, and importing part of
+  a file was not possible at all. Rows now carry checkboxes; a non-empty
+  selection reveals a bulk remap panel that writes the same per-row
+  overrides across every selected row at once, and "Start import"
+  becomes "Import all" and "Import selected", each labelled with what it
+  would create. The results view reports on whichever scope was chosen,
+  so a row nobody asked to import is no longer listed as a failure.
+
+### Fixed
+
+- Two column headings in the import results table rendered as raw
+  translation keys, because they pointed at keys under the mapping step's
+  namespace that only exist under the dry-run step's.
+
 ## [0.4.2] - 2026-09-20
 
 ### Added
@@ -310,7 +346,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/danielraab/family-finances/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/danielraab/family-finances/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/danielraab/family-finances/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/danielraab/family-finances/compare/v0.3.2...v0.4.0
