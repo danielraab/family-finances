@@ -353,6 +353,12 @@
       "custom": "Benutzerdefiniert"
     }
   },
+  "filters": {
+    "heading": "Filter",
+    "activeCount_one": "{{count}} Filter aktiv",
+    "activeCount_other": "{{count}} Filter aktiv",
+    "clearAll": "Alle Filter zurücksetzen"
+  },
   "entries": {
     "title": "Buchungen",
     "create": "Neue Buchung",
@@ -381,11 +387,7 @@
       "from": "Von",
       "to": "Bis",
       "search": "Suche",
-      "clearSearch": "Suche leeren",
-      "heading": "Filter",
-      "activeCount_one": "{{count}} Filter aktiv",
-      "activeCount_other": "{{count}} Filter aktiv",
-      "clearAll": "Alle Filter löschen"
+      "clearSearch": "Suche leeren"
     },
     "kind": {
       "transaction": "Transaktion",
@@ -624,6 +626,7 @@
     "create": "Neue wiederkehrende Buchung",
     "createTransaction": "Buchung erstellen",
     "empty": "Noch keine wiederkehrenden Buchungen.",
+    "emptyFiltered": "Keine Daueraufträge entsprechen diesen Filtern.",
     "ended": "Beendet",
     "totalPerYear": "Summe pro Jahr",
     "totalPerMonth": "Summe pro Monat",
@@ -686,6 +689,12 @@
       }
     },
     "filters": {
+      "account": "Konto",
+      "allAccounts": "Alle Konten",
+      "category": "Kategorie",
+      "allCategories": "Alle Kategorien",
+      "tag": "Tag",
+      "allTags": "Alle Tags",
       "includeSelfTransfer": "Eigenüberträge anzeigen",
       "selfTransferBothLegs": "Beide Seiten anzeigen (Eingang und Ausgang)"
     },

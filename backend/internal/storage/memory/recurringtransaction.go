@@ -142,12 +142,24 @@ func (s *RecurringTransactionStore) List(_ context.Context, f rt.Filter) ([]rt.R
 	defer s.mu.Unlock()
 
 	accountSet := toSet(f.AccountIDs)
+	// Nil means no category filter; an empty (but non-nil) set is a filter
+	// that matches nothing — see rt.Filter's doc comment.
+	var categorySet map[string]bool
+	if f.CategoryIDs != nil {
+		categorySet = toSet(f.CategoryIDs)
+	}
 	var out []rt.RecurringTransaction
 	for _, row := range s.rows {
 		if row.DeletedAt != nil {
 			continue
 		}
 		if row.Kind == rt.KindSelfTransfer && f.SelfTransfers == rt.SelfTransferExclude {
+			continue
+		}
+		if categorySet != nil && (row.CategoryID == nil || !categorySet[*row.CategoryID]) {
+			continue
+		}
+		if f.TagID != nil && !hasTag(row.TagIDs, *f.TagID) {
 			continue
 		}
 		if accountSet[row.AccountID] {
@@ -194,4 +206,14 @@ func (s *RecurringTransactionStore) HasSelfTransferAccount(_ context.Context, ac
 		}
 	}
 	return false, nil
+}
+
+// hasTag reports whether tagID appears in ids.
+func hasTag(ids []string, tagID string) bool {
+	for _, v := range ids {
+		if v == tagID {
+			return true
+		}
+	}
+	return false
 }

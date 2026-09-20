@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -9,6 +9,7 @@ import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { BulkActionToolbar } from "../components/entries/BulkActionToolbar";
+import { FilterPanel, filterControlClass } from "../components/FilterPanel";
 import { LocationPreviewModal } from "../components/LocationPreviewModal";
 import { RecurringTransactionBadge } from "../components/RecurringTransactionBadge";
 import { SelfTransferBadge } from "../components/SelfTransferBadge";
@@ -166,9 +167,6 @@ function toRangeEnd(date: string): string {
   return new Date(`${date}T23:59:59.999Z`).toISOString();
 }
 
-const inputClass =
-  "w-full rounded-md border border-black/15 bg-transparent px-2.5 py-1.5 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
-
 function EntriesListPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -216,7 +214,6 @@ function EntriesListPage() {
   // Whether the filter panel is expanded below `sm`. Deliberately not
   // persisted: the header's active-filter badge is what tells a visitor
   // the ledger is filtered, so a closed panel hides nothing.
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -459,186 +456,141 @@ function EntriesListPage() {
         </div>
       </header>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-black/10 p-3 dark:border-white/10">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((open) => !open)}
-            aria-expanded={filtersOpen}
-            aria-controls="entry-filter-controls"
-            className="flex items-center gap-2 text-sm font-medium sm:hidden"
+      <FilterPanel
+        id="entry-filter-controls"
+        activeCount={activeFilters}
+        onClearAll={clearAllFilters}
+      >
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {t("entries.filters.account")}
+          <select
+            className={filterControlClass}
+            value={search.account_id ?? ""}
+            onChange={(e) =>
+              patchSearch({ account_id: e.target.value || undefined })
+            }
           >
-            {t("entries.filters.heading")}
-            {activeFilters > 0 && (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="rounded-full bg-zinc-900 px-1.5 py-0.5 text-xs leading-none text-white dark:bg-white dark:text-zinc-900"
-                >
-                  {activeFilters}
-                </span>
-                <span className="sr-only">
-                  {t("entries.filters.activeCount", { count: activeFilters })}
-                </span>
-              </>
-            )}
-            <ChevronDown
-              size={14}
-              aria-hidden="true"
-              className={`text-zinc-400 transition-transform dark:text-zinc-500 ${filtersOpen ? "rotate-180" : ""}`}
-            />
-          </button>
-          <span className="hidden text-sm font-medium sm:inline">
-            {t("entries.filters.heading")}
-          </span>
-          {activeFilters > 0 && (
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              className="rounded-md border border-black/15 px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:bg-black/[.04] dark:border-white/15 dark:text-zinc-300 dark:hover:bg-white/[.06]"
-            >
-              {t("entries.filters.clearAll")}
-            </button>
-          )}
-        </div>
-
-        <div
-          id="entry-filter-controls"
-          className={`${filtersOpen ? "grid" : "hidden"} grid-cols-1 items-end gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-3`}
-        >
-          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            {t("entries.filters.account")}
-            <select
-              className={inputClass}
-              value={search.account_id ?? ""}
-              onChange={(e) =>
-                patchSearch({ account_id: e.target.value || undefined })
-              }
-            >
-              <option value="">{t("entries.filters.allAccounts")}</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.title}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            {t("entries.filters.category")}
-            <select
-              className={inputClass}
-              value={search.category_id ?? ""}
-              onChange={(e) =>
-                patchSearch({ category_id: e.target.value || undefined })
-              }
-            >
-              <option value="">{t("entries.filters.allCategories")}</option>
-              {categoryOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                  {c.shared &&
-                    ` — ${t("categories.shared.badgeTitle", { owner: c.ownerName ?? "" })}`}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            {t("entries.filters.tag")}
-            <select
-              className={inputClass}
-              value={search.tag_id ?? ""}
-              onChange={(e) =>
-                patchSearch({ tag_id: e.target.value || undefined })
-              }
-            >
-              <option value="">{t("entries.filters.allTags")}</option>
-              {tags.map((tag) => (
-                <option key={tag.id} value={tag.id}>
-                  {tag.name}
-                  {tag.shared &&
-                    ` — ${t("tags.shared.badgeTitle", { owner: tag.owner_name ?? "" })}`}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-            {t("entries.filters.kind")}
-            <select
-              className={inputClass}
-              value={search.kind ?? ""}
-              onChange={(e) =>
-                patchSearch({
-                  kind: (e.target.value || undefined) as EntryKind | undefined,
-                })
-              }
-            >
-              <option value="">{t("entries.filters.allKinds")}</option>
-              <option value="transaction">
-                {t("entries.kind.transaction")}
+            <option value="">{t("entries.filters.allAccounts")}</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title}
               </option>
-              <option value="balance_adjustment">
-                {t("entries.kind.balanceAdjustment")}
-              </option>
-            </select>
-          </label>
+            ))}
+          </select>
+        </label>
 
-          <DateRangeFilter
-            value={{ range: search.range, from: search.from, to: search.to }}
-            weekStart={weekStart}
-            defaultPreset={DEFAULT_RANGE_PRESET}
-            onChange={(patch) => patchSearch(patch)}
-            fromLabel={t("entries.filters.from")}
-            toLabel={t("entries.filters.to")}
-            fullWidth
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {t("entries.filters.category")}
+          <select
+            className={filterControlClass}
+            value={search.category_id ?? ""}
+            onChange={(e) =>
+              patchSearch({ category_id: e.target.value || undefined })
+            }
+          >
+            <option value="">{t("entries.filters.allCategories")}</option>
+            {categoryOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+                {c.shared &&
+                  ` — ${t("categories.shared.badgeTitle", { owner: c.ownerName ?? "" })}`}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {t("entries.filters.tag")}
+          <select
+            className={filterControlClass}
+            value={search.tag_id ?? ""}
+            onChange={(e) =>
+              patchSearch({ tag_id: e.target.value || undefined })
+            }
+          >
+            <option value="">{t("entries.filters.allTags")}</option>
+            {tags.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+                {tag.shared &&
+                  ` — ${t("tags.shared.badgeTitle", { owner: tag.owner_name ?? "" })}`}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {t("entries.filters.kind")}
+          <select
+            className={filterControlClass}
+            value={search.kind ?? ""}
+            onChange={(e) =>
+              patchSearch({
+                kind: (e.target.value || undefined) as EntryKind | undefined,
+              })
+            }
+          >
+            <option value="">{t("entries.filters.allKinds")}</option>
+            <option value="transaction">{t("entries.kind.transaction")}</option>
+            <option value="balance_adjustment">
+              {t("entries.kind.balanceAdjustment")}
+            </option>
+          </select>
+        </label>
+
+        <DateRangeFilter
+          value={{ range: search.range, from: search.from, to: search.to }}
+          weekStart={weekStart}
+          defaultPreset={DEFAULT_RANGE_PRESET}
+          onChange={(patch) => patchSearch(patch)}
+          fromLabel={t("entries.filters.from")}
+          toLabel={t("entries.filters.to")}
+          fullWidth
+        />
+
+        <label className="flex items-center gap-2 pb-1.5 text-sm">
+          <input
+            type="checkbox"
+            checked={search.show_recurring ?? false}
+            onChange={(e) =>
+              patchSearch({ show_recurring: e.target.checked || undefined })
+            }
           />
+          {t("recurringPreview.toggleLabel")}
+        </label>
 
-          <label className="flex items-center gap-2 pb-1.5 text-sm">
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 sm:col-span-2 lg:col-span-3 dark:text-zinc-400">
+          {t("entries.filters.search")}
+          <div className="relative">
             <input
-              type="checkbox"
-              checked={search.show_recurring ?? false}
-              onChange={(e) =>
-                patchSearch({ show_recurring: e.target.checked || undefined })
-              }
+              ref={searchInputRef}
+              type="search"
+              className={`${filterControlClass} pr-8 [&::-webkit-search-cancel-button]:hidden`}
+              value={qDraft}
+              onChange={(e) => {
+                const value = e.target.value;
+                setQDraft(value);
+                window.clearTimeout(qDebounceRef.current);
+                qDebounceRef.current = window.setTimeout(
+                  () => patchSearch({ q: value || undefined }),
+                  300,
+                );
+              }}
             />
-            {t("recurringPreview.toggleLabel")}
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 sm:col-span-2 lg:col-span-3 dark:text-zinc-400">
-            {t("entries.filters.search")}
-            <div className="relative">
-              <input
-                ref={searchInputRef}
-                type="search"
-                className={`${inputClass} pr-8 [&::-webkit-search-cancel-button]:hidden`}
-                value={qDraft}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setQDraft(value);
-                  window.clearTimeout(qDebounceRef.current);
-                  qDebounceRef.current = window.setTimeout(
-                    () => patchSearch({ q: value || undefined }),
-                    300,
-                  );
-                }}
-              />
-              {qDraft !== "" && (
-                <button
-                  type="button"
-                  onClick={clearSearch}
-                  aria-label={t("entries.filters.clearSearch")}
-                  title={t("entries.filters.clearSearch")}
-                  className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-zinc-400 transition-colors hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-200"
-                >
-                  <X size={14} aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          </label>
-        </div>
-      </div>
+            {qDraft !== "" && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                aria-label={t("entries.filters.clearSearch")}
+                title={t("entries.filters.clearSearch")}
+                className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-zinc-400 transition-colors hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-200"
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        </label>
+      </FilterPanel>
 
       {showUpcoming && (
         <UpcomingBlock

@@ -244,18 +244,38 @@ type Update struct {
 	EndsOn        OptionalDate
 }
 
-// Filter narrows a List/Summary call. AccountIDs is always resolved by
-// Service to the caller's own visible accounts (optionally narrowed
-// further by a caller-supplied filter) before reaching Store.
+// Filter narrows a List/Summary/Preview call. AccountIDs is always
+// resolved by Service to the caller's own visible accounts (optionally
+// narrowed further by a caller-supplied filter) before reaching Store, and
+// CategoryID likewise is resolved into CategoryIDs — a Store reads only
+// CategoryIDs and TagID, never CategoryID/CategoryMode. This mirrors
+// internal/entry's own Filter, minus its AllAccounts widening: a category
+// or tag the caller holds permission on never exposes a recurring
+// transaction on an account they cannot see (see design.md of
+// add-recurring-list-filters).
 type Filter struct {
 	AccountIDs []string
 	// SelfTransfers is how self_transfer templates are treated — resolved
 	// by Service from the caller's two booleans before Store sees it. The
 	// zero value is not a valid mode; Service always sets one.
 	SelfTransfers SelfTransferMode
+	// CategoryID/CategoryMode are the caller-supplied category filter.
+	CategoryID   *string
+	CategoryMode CategoryMode
+	// CategoryIDs is the resolved set CategoryID stands for, and the only
+	// form a Store sees. It is nil when there is no category filter at
+	// all, and non-nil — possibly empty — whenever CategoryID was set:
+	// an empty set matches nothing, which is exactly what a category the
+	// caller holds no permission on must do. A Store therefore tests it
+	// for nil, never for length.
+	CategoryIDs []string
+	// TagID matches a recurring transaction carrying that tag. Applied by
+	// Store as supplied — a tag outside the caller's reach simply appears
+	// on none of the templates in scope.
+	TagID *string
 }
 
-// CategoryMode controls how PreviewFilter.CategoryID is resolved — a local
+// CategoryMode controls how Filter.CategoryID is resolved — a local
 // mirror of internal/entry's identical CategoryMode, kept package-local per
 // this repo's "domain packages don't share value types across a package
 // boundary" rule (see the local Date type above for the same reasoning).
@@ -273,12 +293,10 @@ func (m CategoryMode) valid() bool {
 	return m == "" || m == CategoryModeSubtree || m == CategoryModeExact
 }
 
-// PreviewFilter narrows a Preview call. AccountIDs is resolved the same way
-// Filter's is; CategoryID/CategoryMode/TagID are resolved in-process against
-// each candidate recurring transaction (see Service.Preview) rather than
-// pushed down to Store, since Preview's result set is always small (bounded
-// by To and the per-template occurrence cap) and never paginated. To is
-// required — Preview never computes an unbounded result.
+// PreviewFilter narrows a Preview call: the same account, category and tag
+// filters Filter carries — Preview resolves them into one (see
+// Service.Preview), so the three endpoints narrow identically — plus To,
+// which is required, since Preview never computes an unbounded result.
 type PreviewFilter struct {
 	AccountIDs   []string
 	CategoryID   *string

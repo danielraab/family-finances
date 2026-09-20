@@ -6,9 +6,11 @@ import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
+import { FilterPanel, filterControlClass } from "../components/FilterPanel";
 import { SelfTransferIcon } from "../components/SelfTransferIcon";
 import { useSummaryModals } from "../components/summary/useSummaryModals";
 import { amountColorClass, formatAmount } from "../lib/amount";
+import { flattenCategoryTree } from "../lib/categoryTree";
 import {
   CUSTOM_PRESET_KEY,
   matchPreset,
@@ -23,15 +25,41 @@ type CurrencySum = components["schemas"]["CurrencySum"];
 type Tag = components["schemas"]["Tag"];
 
 type RecurringSearch = {
+  account_id?: string | undefined;
+  category_id?: string | undefined;
+  tag_id?: string | undefined;
   include_self_transfer?: boolean | undefined;
   self_transfer_both_legs?: boolean | undefined;
 };
 
+function asString(v: unknown): string | undefined {
+  return typeof v === "string" && v !== "" ? v : undefined;
+}
+
+/**
+ * How many filters the visitor has actually applied, for the panel's badge
+ * and for deciding whether "Clear all filters" is offered — one per
+ * control, the same way /entries counts its own. The revealed both-legs
+ * flag is folded into the checkbox that reveals it, since it can never be
+ * set on its own.
+ */
+function activeFilterCount(search: RecurringSearch): number {
+  return [
+    search.account_id !== undefined,
+    search.category_id !== undefined,
+    search.tag_id !== undefined,
+    search.include_self_transfer === true,
+  ].filter(Boolean).length;
+}
+
 export const Route = createFileRoute("/recurring/")({
-  // Both flags live in the URL, the way /entries keeps its own filter
-  // state, so a filtered list can be bookmarked, shared and restored by
-  // the back button. Absent means false in both cases.
+  // Every filter lives in the URL, the way /entries keeps its own state,
+  // so a filtered list can be bookmarked, shared and restored by the back
+  // button. An absent flag means false in both boolean cases.
   validateSearch: (search: Record<string, unknown>): RecurringSearch => ({
+    account_id: asString(search["account_id"]),
+    category_id: asString(search["category_id"]),
+    tag_id: asString(search["tag_id"]),
     include_self_transfer:
       search["include_self_transfer"] === true ||
       search["include_self_transfer"] === "true"
@@ -63,14 +91,25 @@ function RecurringTransactionsList() {
   const [sums, setSums] = useState<CurrencySum[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const {
+    account_id: accountID,
+    category_id: categoryID,
+    tag_id: tagID,
+  } = search;
+
   useEffect(() => {
-    // The list and the summary always go out with the same two flags, so
-    // the total below the table is always the total of the rows in it.
+    // The list and the summary always go out with the same filters, so the
+    // totals below the table are always the totals of the rows in it.
+    // account_id is repeatable on the wire; this page sends at most one.
     const query = {
+      ...(accountID ? { account_id: [accountID] } : {}),
+      ...(categoryID ? { category_id: categoryID } : {}),
+      ...(tagID ? { tag_id: tagID } : {}),
       include_self_transfer: includeSelfTransfer,
       self_transfer_both_legs: bothLegs,
     };
     let cancelled = false;
+    setLoading(true);
     Promise.all([
       api.GET("/api/recurring-transactions", { params: { query } }),
       api.GET("/api/recurring-transactions/summary", { params: { query } }),
@@ -89,9 +128,21 @@ function RecurringTransactionsList() {
     return () => {
       cancelled = true;
     };
-  }, [includeSelfTransfer, bothLegs]);
+  }, [accountID, categoryID, tagID, includeSelfTransfer, bothLegs]);
+
+  // Every control patches the search rather than replacing it, so setting
+  // one filter never silently drops another.
+  function patchSearch(patch: Partial<RecurringSearch>) {
+    navigate({ search: (prev) => ({ ...prev, ...patch }) });
+  }
+
+  // Drops every filter in one navigation.
+  function clearAllFilters() {
+    navigate({ search: {} });
+  }
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const categoryOptions = flattenCategoryTree(categories);
   const { openRecurring, summaryModals } = useSummaryModals({
     accounts,
     categories,
@@ -117,45 +168,100 @@ function RecurringTransactionsList() {
         </Link>
       </header>
 
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-        <label className="flex items-center gap-2">
+      <FilterPanel
+        id="recurring-filter-controls"
+        activeCount={activeFilterCount(search)}
+        onClearAll={clearAllFilters}
+      >
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {t("recurring.filters.account")}
+          <select
+            className={filterControlClass}
+            value={search.account_id ?? ""}
+            onChange={(e) =>
+              patchSearch({ account_id: e.target.value || undefined })
+            }
+          >
+            <option value="">{t("recurring.filters.allAccounts")}</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {t("recurring.filters.category")}
+          <select
+            className={filterControlClass}
+            value={search.category_id ?? ""}
+            onChange={(e) =>
+              patchSearch({ category_id: e.target.value || undefined })
+            }
+          >
+            <option value="">{t("recurring.filters.allCategories")}</option>
+            {categoryOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+                {c.shared &&
+                  ` — ${t("categories.shared.badgeTitle", { owner: c.ownerName ?? "" })}`}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {t("recurring.filters.tag")}
+          <select
+            className={filterControlClass}
+            value={search.tag_id ?? ""}
+            onChange={(e) =>
+              patchSearch({ tag_id: e.target.value || undefined })
+            }
+          >
+            <option value="">{t("recurring.filters.allTags")}</option>
+            {tags.map((tag) => (
+              <option key={tag.id} value={tag.id}>
+                {tag.name}
+                {tag.shared &&
+                  ` — ${t("tags.shared.badgeTitle", { owner: tag.owner_name ?? "" })}`}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2 pb-1.5 text-sm">
           <input
             type="checkbox"
             checked={includeSelfTransfer}
             onChange={(e) =>
-              navigate({
-                search: {
-                  include_self_transfer: e.target.checked ? true : undefined,
-                  // Unchecking the first clears the second, so the two can
-                  // never be left in the meaningless "both sides, transfers
-                  // hidden" combination.
-                  self_transfer_both_legs: undefined,
-                },
+              patchSearch({
+                include_self_transfer: e.target.checked ? true : undefined,
+                // Unchecking the first clears the second, so the two can
+                // never be left in the meaningless "both sides, transfers
+                // hidden" combination.
+                self_transfer_both_legs: undefined,
               })
             }
           />
           {t("recurring.filters.includeSelfTransfer")}
         </label>
         {includeSelfTransfer && (
-          <label className="flex items-center gap-2">
+          <label className="flex items-center gap-2 pb-1.5 text-sm">
             <input
               type="checkbox"
               checked={bothLegs}
               onChange={(e) =>
-                navigate({
-                  search: {
-                    include_self_transfer: true,
-                    self_transfer_both_legs: e.target.checked
-                      ? true
-                      : undefined,
-                  },
+                patchSearch({
+                  self_transfer_both_legs: e.target.checked ? true : undefined,
                 })
               }
             />
             {t("recurring.filters.selfTransferBothLegs")}
           </label>
         )}
-      </div>
+      </FilterPanel>
 
       <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
         <table className="w-full text-left text-sm">
@@ -302,7 +408,11 @@ function RecurringTransactionsList() {
 
       {!loading && items.length === 0 && (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          {t("recurring.empty")}
+          {t(
+            activeFilterCount(search) > 0
+              ? "recurring.emptyFiltered"
+              : "recurring.empty",
+          )}
         </p>
       )}
 
