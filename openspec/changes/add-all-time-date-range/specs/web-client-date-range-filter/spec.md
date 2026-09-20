@@ -66,6 +66,61 @@ is valid.
 - **THEN** the filter applies an open-ended range starting at that date,
   the same as today's unfiltered `to` behavior
 
+### Requirement: Filter state encodes as a preset key or explicit bounds, never both
+
+The filter's state SHALL be represented as a URL search parameter `range`
+holding the selected preset's key when a named preset is active, or as
+`from`/`to` search parameters holding explicit date strings when `Custom` is
+active. These two representations SHALL be mutually exclusive: applying a
+named preset SHALL clear any existing `from`/`to` parameters, and setting a
+`from` or `to` value directly SHALL clear any existing `range` parameter and
+switch the filter to `Custom`. A `from`/`to` URL parameter pair that predates
+this filter SHALL continue to be interpreted exactly as before (as an
+explicit `Custom` range).
+
+When `Custom` is selected while neither bound is set — and so there is
+nothing for `from`/`to` to carry — the filter SHALL write `range=custom`
+to mark the mode, since a URL carrying no date-range parameter at all is
+instead read as "apply this page's default". Any `range` value that is not
+a recognized preset key SHALL be interpreted as `Custom` with whatever
+`from`/`to` are present, and the presence of any date-range parameter SHALL
+suppress the page's default. Setting either bound SHALL clear that marker,
+so a `range` value and explicit bounds never coexist.
+
+#### Scenario: Applying a preset clears explicit bounds
+
+- **WHEN** an authenticated visitor has `from`/`to` set via Custom and then
+  selects a named preset
+- **THEN** the URL's `from` and `to` parameters are removed and a `range`
+  parameter with the preset's key is set
+
+#### Scenario: Editing a date field clears the active preset
+
+- **WHEN** an authenticated visitor has a named preset active and edits the
+  `from` or `to` date input directly
+- **THEN** the URL's `range` parameter is removed, the filter switches to
+  Custom, and the edited `from`/`to` parameter is set
+
+#### Scenario: Selecting Custom from All time marks the mode in the URL
+
+- **WHEN** an authenticated visitor on a page defaulting to "Last 2 weeks"
+  has All time active and selects "Custom"
+- **THEN** the URL carries `range=custom` with no `from`/`to`, the filter
+  shows Custom with two empty editable inputs, and the page's own default
+  is not re-applied
+
+#### Scenario: Setting a bound clears the Custom marker
+
+- **WHEN** an authenticated visitor with `range=custom` in the URL sets a
+  `from` date
+- **THEN** the URL carries that `from` alone, with no `range` parameter
+
+#### Scenario: A pre-existing from/to link still works
+
+- **WHEN** an authenticated visitor opens a URL containing only `from` and
+  `to` parameters from before this filter existed
+- **THEN** the filter shows Custom selected with those exact bounds applied
+
 ### Requirement: The date inputs stay visible and reflect the resolved range under every mode
 
 Within the opened panel, the filter SHALL always show two date inputs,

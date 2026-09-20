@@ -15,7 +15,8 @@ export type PresetKey =
   | "last_2_weeks"
   | "this_month"
   | "last_month"
-  | "this_year";
+  | "this_year"
+  | "all_time";
 
 export const DATE_RANGE_PRESET_KEYS: PresetKey[] = [
   "today",
@@ -28,6 +29,7 @@ export const DATE_RANGE_PRESET_KEYS: PresetKey[] = [
   "this_month",
   "last_month",
   "this_year",
+  "all_time",
 ];
 
 /** Maps each preset key to the camelCase suffix of its
@@ -43,9 +45,15 @@ export const PRESET_I18N_KEYS: Record<PresetKey, string> = {
   this_month: "thisMonth",
   last_month: "lastMonth",
   this_year: "thisYear",
+  all_time: "allTime",
 };
 
 export const CUSTOM_RANGE_KEY = "custom";
+
+/** The one preset resolving to neither bound — named because the filter
+ * and `resolveEffectiveRange` both reach for it directly, as the key for
+ * "no date restriction at all". */
+export const ALL_TIME_KEY = "all_time" satisfies PresetKey;
 
 export function isPresetKey(v: string | undefined): v is PresetKey {
   return v !== undefined && DATE_RANGE_PRESET_KEYS.includes(v as PresetKey);
@@ -77,12 +85,16 @@ function currentWeekStart(today: Date, weekStart: WeekStart): Date {
 }
 
 /** Resolves a preset key to a concrete `{ from, to }` date-string pair, as
- * of `today`. See design.md's preset formula table. */
+ * of `today`. See design.md's preset formula table. Both bounds are
+ * nullable because `all_time` resolves to neither — every other preset
+ * returns two concrete dates. The keys are always present (rather than
+ * optional) so the result spreads straight into an `EffectiveDateRange`
+ * under `exactOptionalPropertyTypes`. */
 export function resolvePreset(
   key: PresetKey,
   weekStart: WeekStart,
   today: Date,
-): { from: string; to: string } {
+): { from: string | undefined; to: string | undefined } {
   switch (key) {
     case "today":
       return { from: toDateString(today), to: toDateString(today) };
@@ -137,16 +149,19 @@ export function resolvePreset(
       const end = new Date(today.getFullYear(), 11, 31);
       return { from: toDateString(start), to: toDateString(end) };
     }
+    case "all_time":
+      return { from: undefined, to: undefined };
   }
 }
 
 /** Reverse-lookup: finds the preset (if any) whose resolved bounds exactly
- * match `from`/`to`. Used only to decide the dropdown's initial selection
- * when a page's implicit default is in effect — an explicit `from`/`to` URL
- * pair is always shown as Custom regardless of whether it happens to match a
- * preset (see web-client-date-range-filter's "Filter state encodes as a
- * preset key or explicit bounds" requirement), so this is never applied to
- * URL-supplied bounds. */
+ * match `from`/`to` — a pair of undefined bounds matches `all_time`, the
+ * one preset that resolves to neither. Used only to decide the dropdown's
+ * initial selection when a page's implicit default is in effect — an
+ * explicit `from`/`to` URL pair is always shown as Custom regardless of
+ * whether it happens to match a preset (see web-client-date-range-filter's
+ * "Filter state encodes as a preset key or explicit bounds" requirement),
+ * so this is never applied to URL-supplied bounds. */
 export function matchPreset(
   from: string | undefined,
   to: string | undefined,
@@ -176,8 +191,10 @@ export type EffectiveDateRange = {
 
 /** Resolves a route's raw `value` into the concrete range actually applied
  * and the preset the dropdown should show as selected. `defaultPreset` is
- * used only when `value` has neither `range` nor `from`/`to` at all — see
- * "A consuming page supplies its own default effective range". */
+ * used only when `value` has neither `range` nor `from`/`to` at all; with
+ * no default either, the range is unrestricted and the dropdown shows
+ * `all_time`, the preset that names exactly that — see "A consuming page
+ * supplies its own default effective range". */
 export function resolveEffectiveRange(
   value: DateRangeValue,
   weekStart: WeekStart,
@@ -188,12 +205,21 @@ export function resolveEffectiveRange(
     const resolved = resolvePreset(value.range, weekStart, today);
     return { selectedKey: value.range, ...resolved };
   }
-  if (value.from !== undefined || value.to !== undefined) {
+  // Any date-range parameter at all — including a bare `range=custom` with
+  // no bounds yet — means the visitor has chosen something, so the page's
+  // default must not overrule it. Without this, selecting Custom with
+  // nothing to carry in would clear every parameter and a page like
+  // /entries would silently snap back to its own default.
+  if (
+    value.range !== undefined ||
+    value.from !== undefined ||
+    value.to !== undefined
+  ) {
     return { selectedKey: CUSTOM_RANGE_KEY, from: value.from, to: value.to };
   }
   if (defaultPreset) {
     const resolved = resolvePreset(defaultPreset, weekStart, today);
     return { selectedKey: defaultPreset, ...resolved };
   }
-  return { selectedKey: CUSTOM_RANGE_KEY, from: undefined, to: undefined };
+  return { selectedKey: ALL_TIME_KEY, from: undefined, to: undefined };
 }

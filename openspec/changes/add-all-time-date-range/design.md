@@ -71,12 +71,14 @@ URL state                    effective range on /entries
 ?from=2026-01-01          →  custom, from only
 ```
 
-### 2. `resolvePreset` returns optional bounds
+### 2. `resolvePreset` returns nullable bounds
 
-Today its signature promises `{ from: string; to: string }` and its
-`switch` returns a concrete pair in all ten arms. `all_time` returns
+Today its signature promises two concrete strings and its `switch`
+returns a pair in all ten arms. `all_time` returns
 `{ from: undefined, to: undefined }`, so the return type becomes
-`{ from?: string; to?: string }`.
+`{ from: string | undefined; to: string | undefined }` — keys always
+present rather than optional, since `exactOptionalPropertyTypes` is on and
+the result is spread straight into an `EffectiveDateRange`.
 
 The ripple is contained: `resolvePreset` is called only from `matchPreset`
 and `resolveEffectiveRange`, both in the same file, and
@@ -146,9 +148,40 @@ existing `dateRangeFilter.placeholder` ("All time" / "Gesamter Zeitraum").
 Both name the same effective range — the preset label in the dropdown and
 on the trigger, the placeholder on the trigger while Custom is open with
 no bounds set — so showing identical text is correct, not a collision.
-The placeholder stays: Custom with both fields empty remains reachable
-(decision 4 only redirects the *clearing* path, and selecting Custom from
-All time lands there directly).
+The placeholder stays: Custom with both fields empty remains reachable —
+selecting `Custom` while All time is active lands exactly there (see
+decision 7, which is what makes that state representable at all).
+
+### 7. Selecting Custom with no bounds to carry writes `range=custom`
+
+`selectPreset(CUSTOM_RANGE_KEY)` carries the outgoing preset's resolved
+bounds into `from`/`to`. From `all_time` there are none to carry, so the
+patch clears every date-range parameter — and a URL with no date-range
+parameter is exactly how a page says "use my default". On `/entries` the
+visitor would pick `Custom` and be thrown back to Last 2 weeks, with the
+inputs disabled again. (Browser-verified before the fix: selecting Custom
+from All time landed on `/entries` with `last_2_weeks` selected.)
+
+So when `Custom` is selected with neither bound to carry, the filter
+writes `range=custom`. `resolveEffectiveRange` treats *any* `range` value
+that is not a known preset key as Custom with the given bounds, and — the
+part that matters — stops short of the page default whenever any
+date-range parameter is present at all.
+
+```
+URL state                    /entries dropdown + bounds
+──────────────────────────────────────────────────────────
+(nothing)                 →  Last 2 weeks, two dates
+?range=all_time           →  All time, two empty disabled inputs
+?range=custom             →  Custom, two empty editable inputs
+?from=2026-01-01          →  Custom, from only
+```
+
+The marker never coexists with a bound: editing either date input under
+Custom clears `range` in the same patch, so the two representations stay
+mutually exclusive the moment there is anything to represent. This is the
+same hole decision 4 closes from the other side — every route into "no
+bounds" now has a URL that survives a page default.
 
 ## Risks / Trade-offs
 
@@ -166,6 +199,13 @@ All time lands there directly).
 - **The disabling-as-you-clear moment** in decision 4. Documented above;
   judged better than a silent snap-back to a range the visitor did not ask
   for.
+- **Two URLs for one effective range.** `?range=all_time` and
+  `?range=custom` both apply no date filter; they differ only in whether
+  the inputs are editable. That is the point — the mode is part of the
+  state the URL has to carry — but it does mean a card saved from the
+  Custom-with-no-bounds state stores `preset: "custom"`, which resolves
+  through the same unknown-key path and filters nothing, exactly as an
+  empty stored range does today.
 
 ## Migration Plan
 
