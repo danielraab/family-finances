@@ -66,6 +66,7 @@ func TestPGRecurringTransactionCreateGetUpdateDelete(t *testing.T) {
 
 	starts, _ := account.ParseDate("2026-01-01")
 	created, err := f.recurring.Create(ctx, f.owner, rt.New{
+		Kind:          rt.KindTransaction,
 		AccountID:     f.accID,
 		Title:         "Netflix",
 		CategoryID:    &f.catID,
@@ -127,6 +128,7 @@ func TestPGRecurringTransactionEndsOnClearable(t *testing.T) {
 	starts, _ := account.ParseDate("2026-01-01")
 	ends, _ := account.ParseDate("2026-12-31")
 	created, err := f.recurring.Create(ctx, f.owner, rt.New{
+		Kind:          rt.KindTransaction,
 		AccountID:     f.accID,
 		Title:         "Gym",
 		CategoryID:    &f.catID,
@@ -160,6 +162,7 @@ func TestPGRecurringTransactionListScopedToAccounts(t *testing.T) {
 
 	starts, _ := account.ParseDate("2026-01-01")
 	if _, err := f.recurring.Create(ctx, f.owner, rt.New{
+		Kind:      rt.KindTransaction,
 		AccountID: f.accID, Title: "Rent", CategoryID: &f.catID, Amount: -80000,
 		IntervalUnit: rt.UnitMonth, IntervalCount: 1, StartsOn: rt.NewDate(starts.Time),
 	}); err != nil {
@@ -193,6 +196,7 @@ func TestPGEntryLinkedToRecurringTransaction(t *testing.T) {
 
 	starts, _ := account.ParseDate("2026-01-01")
 	created, err := f.recurring.Create(ctx, f.owner, rt.New{
+		Kind:      rt.KindTransaction,
 		AccountID: f.accID, Title: "Rent", CategoryID: &f.catID, Amount: -80000,
 		IntervalUnit: rt.UnitMonth, IntervalCount: 1, StartsOn: rt.NewDate(starts.Time),
 	})

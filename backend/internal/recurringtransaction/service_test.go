@@ -182,6 +182,7 @@ func newService() (*rt.Service, *stubAccounts, *stubCategories, *stubTags, *stub
 func baseNew(accountID, categoryID string) rt.New {
 	return rt.New{
 		AccountID:     accountID,
+		Kind:          rt.KindTransaction,
 		Title:         "Netflix",
 		CategoryID:    &categoryID,
 		Amount:        -1500,

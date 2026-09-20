@@ -306,6 +306,43 @@ func TestUpdateAllowsCurrencyChangeWithNoEntries(t *testing.T) {
 	}
 }
 
+// stubRecurringLookup satisfies account.RecurringTransactionLookup for the
+// other half of the currency-immutability rule.
+type stubRecurringLookup struct{ named bool }
+
+func (s stubRecurringLookup) HasSelfTransferAccount(context.Context, string) (bool, error) {
+	return s.named, nil
+}
+
+func TestUpdateRejectsCurrencyChangeWhenASelfTransferTemplateNamesTheAccount(t *testing.T) {
+	svc, _ := newService(t)
+	// No entries at all — a self_transfer recurring transaction pairs two
+	// accounts long before either necessarily has one, and locks both.
+	svc.SetEntryLookup(stubEntryLookup{has: false})
+	svc.SetRecurringTransactionLookup(stubRecurringLookup{named: true})
+	acc := newAccount(t, svc, "u1", "X", "Checking")
+
+	_, err := svc.Update(context.Background(), "u1", acc.ID, account.Update{Currency: ptr("USD")})
+	if !errors.Is(err, account.ErrInvalidValue) {
+		t.Fatalf("err = %v, want ErrInvalidValue", err)
+	}
+}
+
+func TestUpdateAllowsCurrencyChangeWithNeitherEntriesNorTemplates(t *testing.T) {
+	svc, _ := newService(t)
+	svc.SetEntryLookup(stubEntryLookup{has: false})
+	svc.SetRecurringTransactionLookup(stubRecurringLookup{named: false})
+	acc := newAccount(t, svc, "u1", "X", "Checking")
+
+	got, err := svc.Update(context.Background(), "u1", acc.ID, account.Update{Currency: ptr("USD")})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got.Currency != "USD" {
+		t.Fatalf("Currency = %q, want USD", got.Currency)
+	}
+}
+
 func TestUpdateAllowsCurrencyChangeWhenEntryLookupIsNotWired(t *testing.T) {
 	svc, _ := newService(t)
 	acc := newAccount(t, svc, "u1", "X", "Checking")

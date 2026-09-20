@@ -92,6 +92,32 @@ func (s *Service) checkAccount(ctx context.Context, callerID, accountID string) 
 	return nil
 }
 
+// checkSelfTransferAccounts runs checkAccount against both of a
+// self_transfer template's accounts and confirms they share a currency —
+// the same rule internal/entry already applies when creating a
+// self_transfer entry, applied here at template time so a template can
+// never describe a movement its author could not book (see design.md).
+func (s *Service) checkSelfTransferAccounts(ctx context.Context, callerID, accountID, toAccountID string) error {
+	if err := s.checkAccount(ctx, callerID, accountID); err != nil {
+		return err
+	}
+	if err := s.checkAccount(ctx, callerID, toAccountID); err != nil {
+		return err
+	}
+	from, _, _, err := s.accounts.Access(ctx, accountID, callerID)
+	if err != nil {
+		return err
+	}
+	to, _, _, err := s.accounts.Access(ctx, toAccountID, callerID)
+	if err != nil {
+		return err
+	}
+	if from != to {
+		return ErrInvalidValue
+	}
+	return nil
+}
+
 // authorizeWrite fetches id and resolves callerID's write access to it,
 // mirroring internal/entry's authorizeEntryWrite: ErrNotFound when callerID
 // has no permission at all on its parent account; ErrForbidden when
@@ -115,6 +141,20 @@ func (s *Service) authorizeWrite(ctx context.Context, callerID, id string) (Recu
 	}
 	if permission == PermissionAppend && current.CreatedBy != callerID {
 		return RecurringTransaction{}, ErrForbidden
+	}
+	// Editing a self_transfer template additionally requires append+ on its
+	// far account, still held now — mirroring account-entries' identical
+	// rule for a self_transfer entry, and for the same reason: the amount
+	// this template carries governs a movement into an account the editor
+	// must still be trusted with. Delete does not go through here.
+	if current.Kind == KindSelfTransfer && current.ToAccountID != nil {
+		_, _, farStr, err := s.accounts.Access(ctx, *current.ToAccountID, callerID)
+		if err != nil {
+			return RecurringTransaction{}, err
+		}
+		if !Permission(farStr).AtLeast(PermissionAppend) {
+			return RecurringTransaction{}, ErrForbidden
+		}
 	}
 	return current, nil
 }
@@ -178,20 +218,30 @@ func (s *Service) nextSuggestedDate(ctx context.Context, rt RecurringTransaction
 }
 
 // Create validates in, confirms callerID holds at least append permission
-// on the target account and that it is not disabled, confirms the category/
-// tags are usable by callerID, and creates the recurring transaction with
-// CreatedBy set to callerID.
+// on the target account and that it is not disabled — on both accounts,
+// sharing a currency, for a self_transfer — confirms the category/tags are
+// usable by callerID, and creates the recurring transaction with CreatedBy
+// set to callerID.
 func (s *Service) Create(ctx context.Context, callerID string, in New) (RecurringTransaction, error) {
 	if err := validateNew(in); err != nil {
 		return RecurringTransaction{}, err
 	}
-	if err := s.checkAccount(ctx, callerID, in.AccountID); err != nil {
+	if in.Kind == KindSelfTransfer {
+		if err := s.checkSelfTransferAccounts(ctx, callerID, in.AccountID, *in.ToAccountID); err != nil {
+			return RecurringTransaction{}, err
+		}
+	} else if err := s.checkAccount(ctx, callerID, in.AccountID); err != nil {
 		return RecurringTransaction{}, err
 	}
-	if ok, err := s.categories.Usable(ctx, callerID, *in.CategoryID); err != nil {
-		return RecurringTransaction{}, err
-	} else if !ok {
-		return RecurringTransaction{}, ErrInvalidValue
+	// A category is required for a transaction and optional for a
+	// self_transfer (validateNew enforces which); when one is supplied it is
+	// checked the same way for both kinds.
+	if in.CategoryID != nil {
+		if ok, err := s.categories.Usable(ctx, callerID, *in.CategoryID); err != nil {
+			return RecurringTransaction{}, err
+		} else if !ok {
+			return RecurringTransaction{}, ErrInvalidValue
+		}
 	}
 	if len(in.TagIDs) > 0 {
 		ok, err := s.tags.Usable(ctx, callerID, in.TagIDs)
@@ -217,14 +267,36 @@ func (s *Service) Get(ctx context.Context, callerID, id string) (RecurringTransa
 	if err != nil {
 		return RecurringTransaction{}, err
 	}
-	_, _, permStr, err := s.accounts.Access(ctx, rt.AccountID, callerID)
+	visible, err := s.readable(ctx, callerID, rt)
 	if err != nil {
 		return RecurringTransaction{}, err
 	}
-	if !Permission(permStr).AtLeast(PermissionView) {
+	if !visible {
 		return RecurringTransaction{}, ErrNotFound
 	}
 	return s.decorate(ctx, callerID, rt)
+}
+
+// readable reports whether callerID may read rt: view+ on its account, or —
+// for a self_transfer, whose two accounts are both parents — on either of
+// them, mirroring account-entries' "either parent account is sufficient"
+// read rule for a self_transfer entry.
+func (s *Service) readable(ctx context.Context, callerID string, rt RecurringTransaction) (bool, error) {
+	_, _, permStr, err := s.accounts.Access(ctx, rt.AccountID, callerID)
+	if err != nil {
+		return false, err
+	}
+	if Permission(permStr).AtLeast(PermissionView) {
+		return true, nil
+	}
+	if rt.Kind != KindSelfTransfer || rt.ToAccountID == nil {
+		return false, nil
+	}
+	_, _, farStr, err := s.accounts.Access(ctx, *rt.ToAccountID, callerID)
+	if err != nil {
+		return false, err
+	}
+	return Permission(farStr).AtLeast(PermissionView), nil
 }
 
 // Update validates and applies a partial change to id, authorized for
@@ -240,6 +312,12 @@ func (s *Service) Update(ctx context.Context, callerID, id string, upd Update) (
 	}
 
 	if upd.AccountID != nil {
+		// A self_transfer template's accounts are fixed at creation, the
+		// same way its entry counterpart's are — moving one side alone
+		// would silently repoint a pair that was validated together.
+		if current.Kind == KindSelfTransfer {
+			return RecurringTransaction{}, ErrInvalidValue
+		}
 		if err := s.checkAccount(ctx, callerID, *upd.AccountID); err != nil {
 			return RecurringTransaction{}, err
 		}
@@ -312,10 +390,47 @@ func (s *Service) SameAccount(ctx context.Context, id, accountID string) (bool, 
 	return current.AccountID == accountID, nil
 }
 
-// Delete soft-deletes id, authorized for callerID per authorizeWrite, and
+// authorizeDelete is authorizeWrite's rule evaluated against AccountID
+// alone — deleting a self_transfer template removes a suggestion and moves
+// no money, so unlike editing it needs nothing on the far account. Mirrors
+// the same edit-needs-both/delete-needs-one asymmetry add-self-transfer
+// settled on for entries.
+func (s *Service) authorizeDelete(ctx context.Context, callerID, id string) error {
+	current, err := s.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	_, _, permStr, err := s.accounts.Access(ctx, current.AccountID, callerID)
+	if err != nil {
+		return err
+	}
+	permission := Permission(permStr)
+	if !permission.AtLeast(PermissionView) {
+		return ErrNotFound
+	}
+	if !permission.AtLeast(PermissionAppend) {
+		return ErrForbidden
+	}
+	if permission == PermissionAppend && current.CreatedBy != callerID {
+		return ErrForbidden
+	}
+	return nil
+}
+
+// HasSelfTransferAccount satisfies internal/account's lookup for the
+// currency-immutability rule: it reports whether accountID is named on
+// either side of any non-deleted self_transfer recurring transaction.
+// Deliberately unauthenticated, like SameAccount — it answers a question
+// about the account being edited, whose own permission check has already
+// run in internal/account.
+func (s *Service) HasSelfTransferAccount(ctx context.Context, accountID string) (bool, error) {
+	return s.store.HasSelfTransferAccount(ctx, accountID)
+}
+
+// Delete soft-deletes id, authorized for callerID per authorizeDelete, and
 // rejected (ErrInUse) while any non-deleted entry still links to it.
 func (s *Service) Delete(ctx context.Context, callerID, id string) error {
-	if _, err := s.authorizeWrite(ctx, callerID, id); err != nil {
+	if err := s.authorizeDelete(ctx, callerID, id); err != nil {
 		return err
 	}
 	if s.entries != nil {
@@ -426,7 +541,13 @@ func (s *Service) Preview(ctx context.Context, callerID string, f PreviewFilter)
 		return nil, ErrInvalidValue
 	}
 
-	resolved, err := s.resolveAccountIDs(ctx, callerID, Filter{AccountIDs: f.AccountIDs})
+	// Preview always projects both legs of a self_transfer, with no
+	// equivalent of List/Summary's caller-chosen mode — see PreviewItem's
+	// doc comment and design.md.
+	resolved, err := s.resolveAccountIDs(ctx, callerID, Filter{
+		AccountIDs:    f.AccountIDs,
+		SelfTransfers: SelfTransferBothLegs,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -485,6 +606,9 @@ func (s *Service) Preview(ctx context.Context, callerID string, f PreviewFilter)
 				RecurringTransactionID: rt.ID,
 				AccountID:              rt.AccountID,
 				AccountCurrency:        currency,
+				ToAccountID:            rt.ToAccountID,
+				ToAccountName:          rt.ToAccountName,
+				Kind:                   rt.Kind,
 				Title:                  rt.Title,
 				Description:            rt.Description,
 				CategoryID:             rt.CategoryID,

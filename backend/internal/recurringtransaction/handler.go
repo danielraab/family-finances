@@ -51,6 +51,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h.mux.Serv
 
 type recurringCreateBody struct {
 	AccountID     *string  `json:"account_id"`
+	ToAccountID   *string  `json:"to_account_id"`
+	Kind          *string  `json:"kind"`
 	Title         *string  `json:"title"`
 	Description   *string  `json:"description"`
 	CategoryID    *string  `json:"category_id"`
@@ -64,6 +66,9 @@ type recurringCreateBody struct {
 	EndsOn        *Date    `json:"ends_on"`
 }
 
+// recurringUpdateBody deliberately carries neither kind nor to_account_id:
+// both are immutable after creation, so decodeJSON's DisallowUnknownFields
+// rejects an attempt to supply either.
 type recurringUpdateBody struct {
 	AccountID     *string      `json:"account_id"`
 	Title         *string      `json:"title"`
@@ -90,7 +95,18 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ErrInvalidValue)
 		return
 	}
-	in := New{CategoryID: body.CategoryID, TagIDs: body.TagIDs}
+	in := New{
+		CategoryID:  body.CategoryID,
+		TagIDs:      body.TagIDs,
+		ToAccountID: body.ToAccountID,
+		// An omitted kind is a transaction — what every recurring
+		// transaction was before this field existed, so an older client's
+		// body keeps working unchanged.
+		Kind: KindTransaction,
+	}
+	if body.Kind != nil {
+		in.Kind = Kind(*body.Kind)
+	}
 	if body.AccountID != nil {
 		in.AccountID = *body.AccountID
 	}
@@ -192,13 +208,28 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// selfTransferMode resolves the include_self_transfer and
+// self_transfer_both_legs query parameters. Anything other than "true" —
+// including an absent parameter — is false, and both_legs without include
+// is ignored (see ResolveSelfTransferMode).
+func selfTransferMode(r *http.Request) SelfTransferMode {
+	q := r.URL.Query()
+	return ResolveSelfTransferMode(
+		q.Get("include_self_transfer") == "true",
+		q.Get("self_transfer_both_legs") == "true",
+	)
+}
+
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
 		writeUnauthorized(w)
 		return
 	}
-	f := Filter{AccountIDs: r.URL.Query()["account_id"]}
+	f := Filter{
+		AccountIDs:    r.URL.Query()["account_id"],
+		SelfTransfers: selfTransferMode(r),
+	}
 	items, err := h.svc.List(r.Context(), user.ID, f)
 	if err != nil {
 		h.renderError(w, r, err)
@@ -216,7 +247,13 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
 		writeUnauthorized(w)
 		return
 	}
-	f := Filter{AccountIDs: r.URL.Query()["account_id"]}
+	// The summary takes the same two flags as the listing, resolved the
+	// same way, so the total it returns is always the total of the rows
+	// the listing under those flags would return.
+	f := Filter{
+		AccountIDs:    r.URL.Query()["account_id"],
+		SelfTransfers: selfTransferMode(r),
+	}
 	sum, err := h.svc.Summary(r.Context(), user.ID, f)
 	if err != nil {
 		h.renderError(w, r, err)

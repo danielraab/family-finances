@@ -1,50 +1,50 @@
 ## 1. Database migration
 
-- [ ] 1.1 Add a migration under `backend/internal/storage/postgres/migrations/` adding `kind text NOT NULL DEFAULT 'transaction'` to `recurring_transactions` with a `CHECK (kind IN ('transaction', 'self_transfer'))`, and a nullable `to_account_id uuid REFERENCES accounts(id)`.
-- [ ] 1.2 Add `CHECK ((kind = 'self_transfer') = (to_account_id IS NOT NULL))` and `CHECK (to_account_id IS NULL OR to_account_id != account_id)`, copying `entries`' own two constraints from migration 0030.
-- [ ] 1.3 Drop `category_id`'s `NOT NULL` and replace it with `CHECK ((kind = 'transaction' AND category_id IS NOT NULL) OR kind = 'self_transfer')`, mirroring `entries_check`.
-- [ ] 1.4 Add `recurring_transactions_to_account_idx ON recurring_transactions (to_account_id) WHERE to_account_id IS NOT NULL`.
-- [ ] 1.5 Create the `recurring_transaction_legs` view: the stored row with `true AS native`, `UNION ALL` the `self_transfer`-only projection with `account_id`/`to_account_id` swapped, `-amount`, and `false AS native`. Document it with the same comment `entry_legs` carries, pointing at design.md.
-- [ ] 1.6 Drop the `DEFAULT 'transaction'` once existing rows are backfilled, so `kind` is always written explicitly from here on (matching how every other required column behaves).
+- [x] 1.1 Add a migration under `backend/internal/storage/postgres/migrations/` adding `kind text NOT NULL DEFAULT 'transaction'` to `recurring_transactions` with a `CHECK (kind IN ('transaction', 'self_transfer'))`, and a nullable `to_account_id uuid REFERENCES accounts(id)`.
+- [x] 1.2 Add `CHECK ((kind = 'self_transfer') = (to_account_id IS NOT NULL))` and `CHECK (to_account_id IS NULL OR to_account_id != account_id)`, copying `entries`' own two constraints from migration 0030.
+- [x] 1.3 Drop `category_id`'s `NOT NULL` and replace it with `CHECK ((kind = 'transaction' AND category_id IS NOT NULL) OR kind = 'self_transfer')`, mirroring `entries_check`.
+- [x] 1.4 Add `recurring_transactions_to_account_idx ON recurring_transactions (to_account_id) WHERE to_account_id IS NOT NULL`.
+- [x] 1.5 Create the `recurring_transaction_legs` view: the stored row with `true AS native`, `UNION ALL` the `self_transfer`-only projection with `account_id`/`to_account_id` swapped, `-amount`, and `false AS native`. Document it with the same comment `entry_legs` carries, pointing at design.md.
+- [x] 1.6 Drop the `DEFAULT 'transaction'` once existing rows are backfilled, so `kind` is always written explicitly from here on (matching how every other required column behaves).
 
 ## 2. Backend domain model (`internal/recurringtransaction`)
 
-- [ ] 2.1 Add a `Kind` type with `KindTransaction`/`KindSelfTransfer` and a `valid()` method, and a package-doc note on why `balance_adjustment` is still absent (design.md's Context).
-- [ ] 2.2 Add `Kind` and `ToAccountID *string` to `RecurringTransaction` and `New`; add `ToAccountName`/`ToAccountCurrency` (omitempty), resolved server-side like `AccountCurrency`. Add a `Native bool` field for which leg a listed row is, following `entry.Cursor.Native`'s precedent.
-- [ ] 2.3 Deliberately add neither `Kind` nor `ToAccountID` to `Update` — both immutable — and confirm the handler's request struct has no field for either, so `DisallowUnknownFields` rejects an attempt.
-- [ ] 2.4 Update `validateNew`: `to_account_id` required and non-empty exactly for `self_transfer` and rejected otherwise; `account_id != to_account_id`; the category requirement narrows to `KindTransaction`; `counterparty`/`location` rejected for `self_transfer`. Mirror the counterparty/location half in `validateUpdate` against the stored kind.
-- [ ] 2.5 Add `SelfTransfers` to `Filter` (and `PreviewFilter` keeps none — preview is always both legs), as a small three-valued type covering exclude / native only / both legs, so `Store` sees one resolved mode rather than two booleans.
+- [x] 2.1 Add a `Kind` type with `KindTransaction`/`KindSelfTransfer` and a `valid()` method, and a package-doc note on why `balance_adjustment` is still absent (design.md's Context).
+- [x] 2.2 Add `Kind` and `ToAccountID *string` to `RecurringTransaction` and `New`; add `ToAccountName`/`ToAccountCurrency` (omitempty), resolved server-side like `AccountCurrency`. Add a `Native bool` field for which leg a listed row is, following `entry.Cursor.Native`'s precedent.
+- [x] 2.3 Deliberately add neither `Kind` nor `ToAccountID` to `Update` — both immutable — and confirm the handler's request struct has no field for either, so `DisallowUnknownFields` rejects an attempt.
+- [x] 2.4 Update `validateNew`: `to_account_id` required and non-empty exactly for `self_transfer` and rejected otherwise; `account_id != to_account_id`; the category requirement narrows to `KindTransaction`; `counterparty`/`location` rejected for `self_transfer`. Mirror the counterparty/location half in `validateUpdate` against the stored kind.
+- [x] 2.5 Add `SelfTransfers` to `Filter` (and `PreviewFilter` keeps none — preview is always both legs), as a small three-valued type covering exclude / native only / both legs, so `Store` sees one resolved mode rather than two booleans.
 
 ## 3. Backend service layer (`internal/recurringtransaction/service.go`)
 
-- [ ] 3.1 `Create` with `kind: self_transfer`: run the existing `checkAccount` against `ToAccountID` as well, and reject a currency mismatch between the two accounts with `ErrInvalidValue`.
-- [ ] 3.2 `Update` of a `self_transfer`: require the caller to currently hold `append`+ on both stored accounts before permitting any field change, returning `ErrForbidden` when either fails — on top of the existing tier/created-by rule.
-- [ ] 3.3 `Get`/`authorizeWrite`: accept `view`+ on either account for reading a `self_transfer`; leave `Delete`'s rule evaluated against `AccountID` alone.
-- [ ] 3.4 `decorate`: resolve `ToAccountName`/`ToAccountCurrency` for a `self_transfer` unconditionally, the way `AccountCurrency` already resolves.
-- [ ] 3.5 `List`/`Summary`: pass the caller's resolved self-transfer mode through to `Store`; leave `PerYearAmount` untouched, since the view already negates the receiving leg's `amount`.
-- [ ] 3.6 `Preview`: query with both legs unconditionally, and carry `Kind`/`ToAccountID`/`ToAccountName` onto `PreviewItem`.
-- [ ] 3.7 Add a `HasSelfTransferTemplate(ctx, accountID) (bool, error)` method for `internal/account`'s currency lock (task 6), checking both sides, excluding soft-deleted rows.
+- [x] 3.1 `Create` with `kind: self_transfer`: run the existing `checkAccount` against `ToAccountID` as well, and reject a currency mismatch between the two accounts with `ErrInvalidValue`.
+- [x] 3.2 `Update` of a `self_transfer`: require the caller to currently hold `append`+ on both stored accounts before permitting any field change, returning `ErrForbidden` when either fails — on top of the existing tier/created-by rule.
+- [x] 3.3 `Get`/`authorizeWrite`: accept `view`+ on either account for reading a `self_transfer`; leave `Delete`'s rule evaluated against `AccountID` alone.
+- [x] 3.4 `decorate`: resolve `ToAccountName`/`ToAccountCurrency` for a `self_transfer` unconditionally, the way `AccountCurrency` already resolves.
+- [x] 3.5 `List`/`Summary`: pass the caller's resolved self-transfer mode through to `Store`; leave `PerYearAmount` untouched, since the view already negates the receiving leg's `amount`.
+- [x] 3.6 `Preview`: query with both legs unconditionally, and carry `Kind`/`ToAccountID`/`ToAccountName` onto `PreviewItem`.
+- [x] 3.7 Add a `HasSelfTransferTemplate(ctx, accountID) (bool, error)` method for `internal/account`'s currency lock (task 6), checking both sides, excluding soft-deleted rows.
 
 ## 4. Backend storage layer
 
-- [ ] 4.1 `storage/postgres/recurringtransaction.go`: point `List` at `recurring_transaction_legs`, selecting `native`, and build the mode's `WHERE` per design.md (`native AND kind = 'transaction'` / `native` / no extra clause), keeping `account_id = ANY(...)` in every mode.
-- [ ] 4.2 Order by `created_at, id, native DESC` so a template's outgoing leg sorts immediately before its incoming one.
-- [ ] 4.3 `Create`/`Update`/`Get` keep reading `recurring_transactions` directly, never the view — `GET /api/recurring-transactions/{id}` is always the stored orientation (design.md's materialization decision).
-- [ ] 4.4 Implement `HasSelfTransferTemplate` in both stores.
-- [ ] 4.5 Mirror all of the above in `storage/memory`, including the leg expansion and the three modes.
+- [x] 4.1 `storage/postgres/recurringtransaction.go`: point `List` at `recurring_transaction_legs`, selecting `native`, and build the mode's `WHERE` per design.md (`native AND kind = 'transaction'` / `native` / no extra clause), keeping `account_id = ANY(...)` in every mode.
+- [x] 4.2 Order by `created_at, id, native DESC` so a template's outgoing leg sorts immediately before its incoming one.
+- [x] 4.3 `Create`/`Update`/`Get` keep reading `recurring_transactions` directly, never the view — `GET /api/recurring-transactions/{id}` is always the stored orientation (design.md's materialization decision).
+- [x] 4.4 Implement `HasSelfTransferTemplate` in both stores.
+- [x] 4.5 Mirror all of the above in `storage/memory`, including the leg expansion and the three modes.
 
 ## 5. Backend handler and API contract
 
-- [ ] 5.1 Accept and validate `include_self_transfer` and `self_transfer_both_legs` on `GET /api/recurring-transactions` and `GET /api/recurring-transactions/summary`, resolving them to the domain's three-valued mode and ignoring the second when the first is false.
-- [ ] 5.2 Accept `kind`/`to_account_id` on `POST /api/recurring-transactions`; reject both on `PATCH`.
-- [ ] 5.3 Update `openapi/openapi.yaml`: the `RecurringTransaction` schema's `kind`/`to_account_id`/`to_account_name`/`to_account_currency`, the create body, the two query parameters and their three modes, the non-unique `id` within a both-legs response, the preview item's new fields, and preview's deliberate lack of the parameters.
-- [ ] 5.4 Regenerate both committed artifacts: `cd backend && go generate ./...` and `cd frontend && pnpm generate:api`.
+- [x] 5.1 Accept and validate `include_self_transfer` and `self_transfer_both_legs` on `GET /api/recurring-transactions` and `GET /api/recurring-transactions/summary`, resolving them to the domain's three-valued mode and ignoring the second when the first is false.
+- [x] 5.2 Accept `kind`/`to_account_id` on `POST /api/recurring-transactions`; reject both on `PATCH`.
+- [x] 5.3 Update `openapi/openapi.yaml`: the `RecurringTransaction` schema's `kind`/`to_account_id`/`to_account_name`/`to_account_currency`, the create body, the two query parameters and their three modes, the non-unique `id` within a both-legs response, the preview item's new fields, and preview's deliberate lack of the parameters.
+- [x] 5.4 Regenerate both committed artifacts: `cd backend && go generate ./...` and `cd frontend && pnpm generate:api`.
 
 ## 6. Backend `internal/account`: currency immutability
 
-- [ ] 6.1 Declare a second narrow lookup interface in `internal/account` for "is this account named by a self-transfer recurring transaction", satisfied structurally by `*recurringtransaction.Service`, with a `WithXxx` option mirroring `WithEntryLookup`.
-- [ ] 6.2 Wire it in `main.go` after both services exist.
-- [ ] 6.3 Extend `Service.Update`'s currency check to reject when either lookup reports true.
+- [x] 6.1 Declare a second narrow lookup interface in `internal/account` for "is this account named by a self-transfer recurring transaction", satisfied structurally by `*recurringtransaction.Service`, with a `WithXxx` option mirroring `WithEntryLookup`.
+- [x] 6.2 Wire it in `main.go` after both services exist.
+- [x] 6.3 Extend `Service.Update`'s currency check to reject when either lookup reports true.
 
 ## 7. Frontend: the `/recurring` filter
 

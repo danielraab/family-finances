@@ -38,6 +38,21 @@ type EntryLookup interface {
 	HasEntries(ctx context.Context, accountID string) (bool, error)
 }
 
+// RecurringTransactionLookup is the second half of the same
+// currency-immutability rule: whether an account is named on either side of
+// any non-deleted self_transfer recurring transaction.
+// *recurringtransaction.Service satisfies this structurally, wired in after
+// both services exist for the same reason EntryLookup is.
+//
+// A self_transfer template requires its two accounts to share a currency
+// when it is written, and pairs them long before either necessarily has an
+// entry — so without this half, a later currency change on an account with
+// no entries would silently invalidate every future booking from that
+// template. See design.md of add-recurring-self-transfers.
+type RecurringTransactionLookup interface {
+	HasSelfTransferAccount(ctx context.Context, accountID string) (bool, error)
+}
+
 // Store is the persistence contract account declares. internal/storage/memory
 // and internal/storage/postgres implement it; package main injects one.
 type Store interface {

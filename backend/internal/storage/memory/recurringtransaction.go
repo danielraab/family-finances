@@ -37,6 +37,9 @@ func (s *RecurringTransactionStore) Create(_ context.Context, createdBy string, 
 		ID:            strconv.FormatInt(s.seq, 10),
 		CreatedBy:     createdBy,
 		AccountID:     in.AccountID,
+		ToAccountID:   in.ToAccountID,
+		Kind:          in.Kind,
+		Native:        true,
 		Title:         in.Title,
 		Description:   in.Description,
 		CategoryID:    in.CategoryID,
@@ -129,6 +132,11 @@ func (s *RecurringTransactionStore) SoftDelete(_ context.Context, id string) err
 	return nil
 }
 
+// List mirrors the Postgres store's recurring_transaction_legs query: each
+// template is considered once as stored and, for a self_transfer, once
+// more from the receiving side with its two account ids swapped and Amount
+// negated, each leg kept only when its own account_id is in scope. The
+// three self-transfer modes select which legs are considered at all.
 func (s *RecurringTransactionStore) List(_ context.Context, f rt.Filter) ([]rt.RecurringTransaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -136,16 +144,54 @@ func (s *RecurringTransactionStore) List(_ context.Context, f rt.Filter) ([]rt.R
 	accountSet := toSet(f.AccountIDs)
 	var out []rt.RecurringTransaction
 	for _, row := range s.rows {
-		if row.DeletedAt != nil || !accountSet[row.AccountID] {
+		if row.DeletedAt != nil {
 			continue
 		}
-		out = append(out, row)
+		if row.Kind == rt.KindSelfTransfer && f.SelfTransfers == rt.SelfTransferExclude {
+			continue
+		}
+		if accountSet[row.AccountID] {
+			out = append(out, row)
+		}
+		if row.Kind != rt.KindSelfTransfer || f.SelfTransfers != rt.SelfTransferBothLegs {
+			continue
+		}
+		if row.ToAccountID == nil || !accountSet[*row.ToAccountID] {
+			continue
+		}
+		flipped := row
+		flipped.AccountID = *row.ToAccountID
+		from := row.AccountID
+		flipped.ToAccountID = &from
+		flipped.Amount = -row.Amount
+		flipped.AccountCurrency, flipped.ToAccountCurrency = row.ToAccountCurrency, row.AccountCurrency
+		flipped.ToAccountName = ""
+		flipped.Native = false
+		out = append(out, flipped)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			if out[i].ID == out[j].ID {
+				return out[i].Native && !out[j].Native
+			}
 			return out[i].ID < out[j].ID
 		}
 		return out[i].CreatedAt.Before(out[j].CreatedAt)
 	})
 	return out, nil
+}
+
+// HasSelfTransferAccount mirrors the Postgres store's existence check.
+func (s *RecurringTransactionStore) HasSelfTransferAccount(_ context.Context, accountID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, row := range s.rows {
+		if row.DeletedAt != nil || row.Kind != rt.KindSelfTransfer {
+			continue
+		}
+		if row.AccountID == accountID || (row.ToAccountID != nil && *row.ToAccountID == accountID) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
