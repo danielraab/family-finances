@@ -64,24 +64,30 @@
 
 ## 5. Frontend
 
-- [x] 5.1 New `frontend/src/components/SidebarVersion.tsx`: calls
-      `api.GET("/api/version")` once on mount, renders nothing while
-      pending/on error, otherwise the version (or first 7 chars of the
-      commit, full hash in `title`) as a small muted line, taking the
-      sidebar's `collapsed` prop like `SidebarUser`/`ThemeSwitch`.
-- [x] 5.2 Render `<SidebarVersion collapsed={effectiveCollapsed} />`
-      in `Sidebar.tsx`'s footer, below `SidebarUser`.
-- [x] 5.3 Add the line's translation key(s) (e.g. `sidebar.buildVersion`
-      title text) to `frontend/src/i18n/locales/en.json` and the
-      matching German string to `de.json`.
+- [x] 5.1 ~~New `frontend/src/components/SidebarVersion.tsx`~~ /
+      ~~render it in `Sidebar.tsx`'s footer~~ — **shipped, then moved**:
+      Daniel asked for the sidebar footer line removed and the display
+      put on the Settings Profile tab instead. `SidebarVersion.tsx` is
+      deleted; `Sidebar.tsx` no longer imports or renders it.
+- [x] 5.2 In `frontend/src/routes/settings.index.tsx`
+      (`ProfileSettingsTab`): fetch `api.GET("/api/version")` once on
+      mount (same shape as the deleted component — nothing rendered
+      while pending/on error/when both fields are empty), and render a
+      "Version" row (label + value, full commit in `title`) after the
+      existing fields, separated by a `border-t` divider.
+- [x] 5.3 i18n: removed `sidebar.buildVersion` (no longer used); added
+      `settings.profile.version` ("Version") to
+      `frontend/src/i18n/locales/en.json` and the matching German
+      string to `de.json`.
 
 ## 6. Verification
 
 - [x] 6.1 `cd backend && go build ./... && go vet ./... && go test ./...`.
 - [x] 6.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build`.
-- [x] 6.3 Manually verify in a browser (stubbed `/api/version`) that the
-      line renders in both expanded and collapsed sidebar states and
-      disappears when the endpoint returns empty strings.
+- [x] 6.3 Manually verify in a browser (stubbed `/api/auth/me`,
+      `/api/settings`, `/api/version`) that the Version row renders on
+      the Settings Profile tab with a tagged response, and that the
+      sidebar footer no longer shows any version text anywhere.
 - [x] 6.4 Verify the Dockerfile's git-derivation shell logic directly
       (no image build, since a full `docker build` could not be run in
       the environment this change was authored in — its egress policy

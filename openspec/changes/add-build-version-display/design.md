@@ -119,14 +119,32 @@ place. Lesson applied here, not just stated: prefer a mount source that
 cannot fail to resolve, and treat anything conditional on repository
 contents as untrusted until a real build says otherwise.
 
+### The display moved from the sidebar to the Settings Profile tab
+
+Shipped first in the sidebar footer (visible on every route, expanded
+and collapsed alike, including to an anonymous visitor). Daniel asked
+for it moved to the Settings page's Profile tab instead — chrome that's
+always on screen was more than he wanted for something he'd check
+rarely, and Settings already has a natural home for it: a static field
+alongside the other things stated for the visitor rather than editable
+by them. Same fetch-once-on-mount behavior and the same rendering rule
+(nothing shown while pending, on error, or when both fields are empty),
+just triggered by mounting the Profile tab instead of the root layout,
+and with a border-top divider and a label ("Version") rather than the
+sidebar's bare unlabeled line — Settings' own visual language (see
+`SettingField`) expects a label next to a value, where the sidebar's
+compact footer didn't have room for one.
+
 ### Unauthenticated, like the other meta endpoints
 
-`/api/healthz` and `/api/openapi.yaml` are already `security: []`. The
-sidebar renders for anonymous visitors too (it is on `/login`), so
-gating `/api/version` behind a session would blank the line exactly
-where a first-time visitor might want it. The repository is public and
-every published image tag is public, so neither the tag nor the commit
-is a secret in this deployment.
+`/api/healthz` and `/api/openapi.yaml` are already `security: []`.
+`/settings` itself requires authentication (see `web-client-settings`),
+so nothing forces `/api/version` to be reachable by an anonymous
+visitor anymore — but there's equally no reason to gate it: the
+repository is public and every published image tag is public, so
+neither the tag nor the commit is a secret in this deployment, and
+matching the other two meta endpoints keeps one rule ("meta info is
+public") instead of a one-off exception.
 
 ### Both fields are required, and may be empty
 
@@ -141,15 +159,14 @@ A tagged release is the answer a human wants (`v0.4.2`); the commit is
 the fallback for anything built off a tag. Showing both would double the
 line's width for no gain, so only one renders, with the full commit in
 the `title` attribute for when someone needs to paste it into an issue.
-Seven hex characters is the git default abbreviation and fits the
-collapsed sidebar's 4rem column.
+Seven hex characters is the git default abbreviation.
 
 ## Risks / Trade-offs
 
 - **One more request on load.** A tiny unauthenticated GET, fired once
-  from a component that mounts once (the sidebar lives in the root
-  route). It is not on any critical path: the line simply does not
-  render until it resolves.
+  from a component that mounts once (the Profile tab, entered whenever
+  a visitor opens `/settings`). It is not on any critical path: the
+  line simply does not render until it resolves.
 - **A `-X` flag references a package path as a string.** A rename of
   `internal/buildinfo` silently stops the stamping rather than failing
   the build. Mitigated by a handler test asserting the endpoint's shape

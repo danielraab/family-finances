@@ -10,8 +10,7 @@
   },
   "sidebar": {
     "closeSidebar": "Close sidebar",
-    "githubRepo": "View source on GitHub",
-    "buildVersion": "Build {{commit}}"
+    "githubRepo": "View source on GitHub"
   },
   "topbar": {
     "expandSidebar": "Expand sidebar",
@@ -168,7 +167,8 @@
         "endOfNextMonth": "End of next month",
         "endOfThisYear": "End of this year"
       },
-      "saveError": "Couldn't save — please try again."
+      "saveError": "Couldn't save — please try again.",
+      "version": "Version"
     },
     "invite": {
       "invitedBy": "Invited by {{name}}",
