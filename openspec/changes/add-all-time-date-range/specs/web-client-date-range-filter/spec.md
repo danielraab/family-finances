@@ -1,0 +1,153 @@
+## MODIFIED Requirements
+
+### Requirement: A shared date-range filter offers named presets and a Custom mode
+
+The client SHALL offer one shared date-range filter control, used
+identically wherever a page filters by a `from`/`to` date range, presenting
+a dropdown of named presets — `Today`, `Last 7 days`, `Last 14 days`,
+`Last 30 days`, `This week`, `Last week`, `Last 2 weeks`, `This month`,
+`Last month`, `This year`, `All time` — plus a `Custom` entry. `All time`
+SHALL be listed last among the named presets, immediately before `Custom`.
+Selecting a named preset SHALL resolve it to a concrete `from`/`to` date
+pair as of the current moment, except `All time`, which SHALL resolve to
+neither bound; selecting `Custom` SHALL let the visitor set `from` and/or
+`to` directly, each independently optional.
+
+Preset date math SHALL be: `Today` is the current date for both bounds;
+`Last 7/14/30 days` end on the current date and start 6/13/29 days earlier;
+`This week` spans the configured week-start day through 6 days later;
+`Last week` spans the 7 days immediately before the current week; `Last 2
+weeks` is `Last week` and `This week` concatenated (14 days, starting 7 days
+before the current week-start day and ending 6 days after it); `This month`
+and `Last month` span the full current/previous calendar month; `This year`
+spans the full current calendar year; `All time` resolves to no `from` and
+no `to`, applying no date restriction at all. A preset whose resolved range
+includes today or later (`This week`, `Last 2 weeks`, `This month`, `This
+year`) SHALL be allowed to resolve an `end` date later than today — this is
+expected, not an error condition, since a matching entry dated in the future
+is valid.
+
+#### Scenario: Selecting a preset resolves concrete dates
+
+- **WHEN** an authenticated visitor selects "Last 30 days" from the filter
+- **THEN** the filter's `from` resolves to 29 days before today and `to`
+  resolves to today
+
+#### Scenario: Selecting All time removes both bounds
+
+- **WHEN** an authenticated visitor selects "All time" from the filter
+- **THEN** the URL carries `range=all_time`, any previous `from`/`to`
+  parameters are removed, and the page fetches its data with no date
+  restriction
+
+#### Scenario: All time survives a reload on a page with a narrower default
+
+- **WHEN** an authenticated visitor opens a page whose default is "Last 2
+  weeks" at a URL carrying `range=all_time`
+- **THEN** "All time" is shown selected and no date filter is applied, the
+  page's own default having no effect
+
+#### Scenario: This week's range can include future dates
+
+- **WHEN** an authenticated visitor selects "This week" on a day other than
+  the last day of the configured week
+- **THEN** the resolved `to` date is later than today
+
+#### Scenario: Last 2 weeks spans last week and this week
+
+- **WHEN** an authenticated visitor selects "Last 2 weeks"
+- **THEN** the resolved range starts on the day the previous configured
+  week began and ends on the last day of the current configured week
+
+#### Scenario: Custom mode accepts either bound alone
+
+- **WHEN** an authenticated visitor selects "Custom" and sets only a `from`
+  date, leaving `to` empty
+- **THEN** the filter applies an open-ended range starting at that date,
+  the same as today's unfiltered `to` behavior
+
+### Requirement: The date inputs stay visible and reflect the resolved range under every mode
+
+Within the opened panel, the filter SHALL always show two date inputs,
+labeled From and To, regardless of whether a named preset or Custom is
+active. When a named preset is active, both inputs SHALL display that
+preset's resolved dates and SHALL be disabled — under `All time`, which
+resolves to no bounds, both inputs SHALL be empty and disabled. When Custom
+is active, both inputs SHALL be enabled and editable, reflecting (and
+driving) the `from`/`to` values directly.
+
+#### Scenario: A preset's resolved dates are visible
+
+- **WHEN** an authenticated visitor opens the panel with "Last month"
+  active
+- **THEN** the From and To inputs display the first and last day of the
+  previous calendar month, and neither input can be edited
+
+#### Scenario: All time shows two empty, disabled inputs
+
+- **WHEN** an authenticated visitor opens the panel with "All time" active
+- **THEN** both the From and To inputs are empty and neither can be edited
+
+#### Scenario: Custom inputs are editable
+
+- **WHEN** an authenticated visitor opens the panel and selects "Custom"
+- **THEN** the From and To inputs become editable
+
+### Requirement: A consuming page supplies its own default effective range
+
+A page embedding the filter SHALL supply its own default: either a preset
+key to use as the effective range when neither `range` nor `from`/`to` is
+present in the URL, or no default at all (no date filter applied). This
+default SHALL NOT be written into the URL merely by being in effect — it
+SHALL apply only to the effective range used for fetching data and to which
+option the dropdown displays as selected on load. The dropdown's displayed
+selection SHALL always be computed by matching the current effective
+`from`/`to` against every preset's resolved bounds; when no preset matches,
+`Custom` SHALL be shown. A page with no default SHALL therefore show
+`All time` selected, that preset being the one whose resolved bounds match
+the unrestricted range it applies. The first explicit change the visitor
+makes SHALL write a concrete `range` or `from`/`to` value into the URL.
+
+#### Scenario: A page with a default preset shows it selected without a URL parameter
+
+- **WHEN** an authenticated visitor opens a page whose default is "Last 2
+  weeks" with no `range`/`from`/`to` parameter in the URL
+- **THEN** "Last 2 weeks" is shown selected, its resolved dates are shown in
+  the disabled From/To inputs, and the URL is not modified
+
+#### Scenario: A page with no default shows All time
+
+- **WHEN** an authenticated visitor opens a page whose default is "no date
+  filter" with no `range`/`from`/`to` parameter in the URL
+- **THEN** "All time" is shown selected with both From and To inputs empty
+  and disabled, no date filter is applied to the fetched data, and the URL
+  is not modified
+
+## ADDED Requirements
+
+### Requirement: Clearing the last remaining bound under Custom selects All time
+
+When `Custom` is active and the visitor clears a date input such that
+neither `from` nor `to` holds a value any more, the filter SHALL switch to
+the `All time` preset, writing `range=all_time` into the URL and removing
+`from`/`to`, rather than leaving the URL with no date-range parameter at
+all. This keeps the unbounded range representable on a page whose default
+is narrower, where an absent parameter would instead re-apply that default.
+
+Clearing one of two set bounds SHALL NOT trigger this — the filter stays in
+`Custom` with the remaining bound applied as an open-ended range.
+
+#### Scenario: Clearing the second date switches to All time
+
+- **WHEN** an authenticated visitor on a page defaulting to "Last 2 weeks"
+  has Custom active with only a `from` date set, and clears it
+- **THEN** the filter shows "All time" selected, the URL carries
+  `range=all_time` with no `from`/`to`, and the list is not restricted by
+  date
+
+#### Scenario: Clearing one of two bounds stays in Custom
+
+- **WHEN** an authenticated visitor has Custom active with both `from` and
+  `to` set, and clears the `to` date
+- **THEN** the filter stays in Custom with the `from` bound applied, and
+  the URL carries `from` with no `range`
