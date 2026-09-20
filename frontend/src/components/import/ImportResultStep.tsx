@@ -65,10 +65,10 @@ export function ImportResultStep({
               <thead>
                 <tr className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   <th className="pr-4 py-1">
-                    {t("entries.import.steps.mapping.rowColumn")}
+                    {t("entries.import.steps.dryRun.rowColumn")}
                   </th>
                   <th className="py-1">
-                    {t("entries.import.steps.mapping.reasonColumn")}
+                    {t("entries.import.steps.dryRun.reasonColumn")}
                   </th>
                 </tr>
               </thead>

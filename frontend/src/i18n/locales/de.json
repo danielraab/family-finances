@@ -617,7 +617,21 @@
           "remapHeading": "Dieses Feld korrigieren",
           "remapNote": "Wähle eine andere Spalte nur für diese Zeile — die Zuordnung aller anderen Zeilen bleibt unverändert.",
           "hideSuccessful": "Erfolgreiche Zeilen ausblenden",
-          "startImport": "Import starten"
+          "selectAll": "Alle angezeigten Zeilen auswählen",
+          "selectRow": "Zeile {{row}} auswählen",
+          "selectedCount_one": "{{count}} Zeile ausgewählt",
+          "selectedCount_other": "{{count}} Zeilen ausgewählt",
+          "clearSelection": "Auswahl aufheben",
+          "bulkRemapHeading": "Ausgewählte Zeilen neu zuordnen",
+          "bulkRemapKeep": "— Unverändert lassen —",
+          "bulkRemapNote_one": "Wähle eine andere Spalte für die ausgewählte Zeile. Felder auf „Unverändert lassen“ bleiben, wie sie sind, und keine andere Zeile wird verändert.",
+          "bulkRemapNote_other": "Wähle eine andere Spalte für die {{count}} ausgewählten Zeilen. Felder auf „Unverändert lassen“ bleiben, wie sie sind, und keine andere Zeile wird verändert.",
+          "bulkRemapApply_one": "Auf {{count}} Zeile anwenden",
+          "bulkRemapApply_other": "Auf {{count}} Zeilen anwenden",
+          "importAll_one": "Alle importieren ({{count}} Eintrag)",
+          "importAll_other": "Alle importieren ({{count}} Einträge)",
+          "importSelected_one": "Auswahl importieren ({{count}} Eintrag)",
+          "importSelected_other": "Auswahl importieren ({{count}} Einträge)"
         }
       }
     }
