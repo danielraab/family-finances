@@ -43,6 +43,15 @@
       `build-args: | VERSION=${{ github.ref_name }}` and
       `REVISION=${{ github.sha }}` to the `docker/build-push-action`
       step.
+- [x] 4.3 Make the two args self-deriving for a caller that doesn't
+      supply them (Dokploy, building the `Dockerfile` directly with no
+      build-arg wiring): in the same `RUN`, `--mount=type=bind,
+      source=.git,target=/tmp/.git,ro` and, when `VERSION`/`REVISION`
+      is empty, `git describe --tags --exact-match` /
+      `git rev-parse HEAD` against it (installing `git` in that `RUN`
+      only when needed) before the `go build`. An explicit build arg
+      still wins. See design.md for why, and for the accepted
+      constraint that the build context must contain `.git`.
 
 ## 5. Frontend
 
@@ -64,3 +73,13 @@
 - [x] 6.3 Manually verify in a browser (stubbed `/api/version`) that the
       line renders in both expanded and collapsed sidebar states and
       disappears when the endpoint returns empty strings.
+- [x] 6.4 Verify the Dockerfile's git-derivation shell logic directly
+      against this repo's real `.git` (no image build): confirms empty
+      `VERSION`/full-hash `REVISION` on an untagged commit, and the
+      exact tag when `HEAD` is tagged. A full `docker build` of the
+      image could not be run in the environment this change was
+      authored in — its egress policy blocks pulling Docker Hub base
+      images (confirmed by running a real `dockerd` there and hitting
+      the same policy denial) — so the `RUN` instruction's exact syntax
+      should be confirmed with one real build (Dokploy's own next
+      deploy, or a local `docker build .`) before relying on it.
