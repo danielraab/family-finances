@@ -48,30 +48,30 @@
 
 ## 7. Frontend: the `/recurring` filter
 
-- [ ] 7.1 Add the two flags to `/recurring`'s route search params with `false` defaults, and thread them through both the list and summary fetches.
-- [ ] 7.2 Render the filter control above the table: "Show self-transfers", and the second checkbox only while the first is checked. Unchecking the first clears the second from the URL.
-- [ ] 7.3 Key rows by `${id}-${native}` rather than `id`, since both legs share an id.
+- [x] 7.1 Add the two flags to `/recurring`'s route search params with `false` defaults, and thread them through both the list and summary fetches.
+- [x] 7.2 Render the filter control above the table: "Show self-transfers", and the second checkbox only while the first is checked. Unchecking the first clears the second from the URL.
+- [x] 7.3 Key rows by `${id}-${native}` rather than `id`, since both legs share an id.
 
 ## 8. Frontend: the recurring form
 
-- [ ] 8.1 Add a kind selector to `RecurringTransactionForm`, mirroring `/entries/new`'s: selecting "Self-transfer" reveals a "To account" picker, hides counterparty and location, and drops the category requirement.
-- [ ] 8.2 Filter the "To account" options to `append`+, non-disabled, same-currency, excluding the selected source account — the same predicate the entry form already applies.
-- [ ] 8.3 On the edit page, render the kind and the to-account as immutable, and make the whole form read-only with an explanation when the visitor lacks `append`+ on both accounts.
+- [x] 8.1 Add a kind selector to `RecurringTransactionForm`, mirroring `/entries/new`'s: selecting "Self-transfer" reveals a "To account" picker, hides counterparty and location, and drops the category requirement.
+- [x] 8.2 Filter the "To account" options to `append`+, non-disabled, same-currency, excluding the selected source account — the same predicate the entry form already applies.
+- [x] 8.3 On the edit page, render the kind and the to-account as immutable, and make the whole form read-only with an explanation when the visitor lacks `append`+ on both accounts.
 
 ## 9. Frontend: rows, summary modal, and materialization
 
-- [ ] 9.1 Show the other account and the row's direction on a listed `self_transfer`, reusing `SelfTransferBadge`/`SelfTransferIcon`; render an empty category cell cleanly.
-- [ ] 9.2 Add the to-account to the recurring summary modal.
-- [ ] 9.3 Extend `entries.new.tsx`'s recurring prefill to carry `kind` and `to_account_id` from the fetched template, and confirm the existing fetch-by-id keeps a receiving-side row booking against the template's sending account.
-- [ ] 9.4 Render a previewed `self_transfer` occurrence in `UpcomingBlock` the way a self-transfer entry renders in the ledger.
+- [x] 9.1 Show the other account and the row's direction on a listed `self_transfer`, reusing `SelfTransferBadge`/`SelfTransferIcon`; render an empty category cell cleanly.
+- [x] 9.2 Add the to-account to the recurring summary modal.
+- [x] 9.3 Extend `entries.new.tsx`'s recurring prefill to carry `kind` and `to_account_id` from the fetched template, and confirm the existing fetch-by-id keeps a receiving-side row booking against the template's sending account.
+- [x] 9.4 Render a previewed `self_transfer` occurrence in `UpcomingBlock` the way a self-transfer entry renders in the ledger.
 
 ## 10. Translations
 
-- [ ] 10.1 Add the new keys (kind selector labels, "To account", the two filter labels, the row's direction wording) to both locales, keeping the i18n coverage job at 100%.
+- [x] 10.1 Add the new keys (kind selector labels, "To account", the two filter labels, the row's direction wording) to both locales, keeping the i18n coverage job at 100%.
 
 ## 11. Verification
 
-- [ ] 11.1 `cd backend && go vet ./... && go test ./...`, including new tests for each of the three list modes, the both-accounts create/edit rule, the currency mismatch, the per-kind field rules, the summary's cancellation, and the currency lock.
-- [ ] 11.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build` — run `tsc` locally, since CI's `frontend` job runs only `pnpm lint` and `pnpm build`.
-- [ ] 11.3 Drive the app in Chromium against a stubbed `/api`: toggle both flags and confirm the list, the second checkbox's reveal, the URL, and the total all follow; create a self-transfer template and book from both its sides; check `/recurring` at 390px and 1280px in both themes.
-- [ ] 11.4 Confirm the `contract` job passes — the spec and both generated artifacts in sync.
+- [x] 11.1 `cd backend && go vet ./... && go test ./...`, including new tests for each of the three list modes, the both-accounts create/edit rule, the currency mismatch, the per-kind field rules, the summary's cancellation, and the currency lock.
+- [x] 11.2 `cd frontend && pnpm lint && pnpm exec tsc && pnpm build` — run `tsc` locally, since CI's `frontend` job runs only `pnpm lint` and `pnpm build`.
+- [x] 11.3 Drive the app in Chromium against a stubbed `/api`: toggle both flags and confirm the list, the second checkbox's reveal, the URL, and the total all follow; create a self-transfer template and book from both its sides; check `/recurring` at 390px and 1280px in both themes.
+- [x] 11.4 Confirm the `contract` job passes — the spec and both generated artifacts in sync.

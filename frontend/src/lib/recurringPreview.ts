@@ -139,9 +139,11 @@ export function fetchRecurringPreview(input: PreviewFilterInput) {
 }
 
 /** A stable React key for a virtual preview row — never a real entity id,
- * since a projected occurrence is never persisted. */
+ * since a projected occurrence is never persisted. The account is part of
+ * the key because a self-transfer projects one row per account it touches,
+ * and those rows share both the template id and the date. */
 export function previewItemKey(item: RecurringTransactionPreviewItem): string {
-  return `${item.recurring_transaction_id}-${item.booking_timestamp}`;
+  return `${item.recurring_transaction_id}-${item.account_id}-${item.booking_timestamp}`;
 }
 
 /**

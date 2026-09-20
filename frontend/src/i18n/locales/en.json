@@ -663,7 +663,8 @@
       "endsOnBeforeStarts": "End date can't be before the start date.",
       "create": "Create recurring transaction",
       "save": "Save changes",
-      "saveError": "Couldn't save — please check the form and try again."
+      "saveError": "Couldn't save — please check the form and try again.",
+      "selfTransferReadOnly": "You can no longer edit this transfer — it needs permission to add entries on both of its accounts."
     },
     "new": {
       "title": "New recurring transaction"
@@ -682,7 +683,13 @@
         "empty": "No entries are linked to this recurring transaction yet.",
         "loadMore": "Load more"
       }
-    }
+    },
+    "filters": {
+      "includeSelfTransfer": "Show self-transfers",
+      "selfTransferBothLegs": "Show both sides (income and outcome)"
+    },
+    "selfTransferTo": "to {{account}}",
+    "selfTransferFrom": "from {{account}}"
   },
   "recurringPreview": {
     "toggleLabel": "Show upcoming",
