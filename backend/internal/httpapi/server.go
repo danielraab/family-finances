@@ -91,6 +91,7 @@ func Routes(deps Deps) *http.ServeMux {
 	if deps.OpenAPISpec != nil {
 		mux.HandleFunc("GET /api/openapi.yaml", openAPIHandler(deps.OpenAPISpec))
 	}
+	mux.HandleFunc("GET /api/version", versionHandler)
 	if deps.AuthHandler != nil {
 		// More specific than the "/api/" fallback below, so ServeMux routes
 		// every /api/auth/... path here.

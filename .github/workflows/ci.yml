@@ -281,6 +281,9 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            REVISION=${{ github.sha }}
           tags: |
             ${{ steps.version.outputs.image }}:${{ github.ref_name }}
             ${{ steps.version.outputs.image }}:latest

@@ -20,7 +20,14 @@ COPY backend/ ./
 COPY openapi/openapi.yaml ./openapi.yaml
 RUN rm -rf static/out && mkdir -p static/out
 COPY --from=frontend /src/frontend/out/. static/out/
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/server .
+# This stage never has a .git directory (only backend/ and openapi/openapi.yaml
+# are copied in above), so internal/buildinfo's own VCS fallback comes up
+# empty — the release version and commit have to be stamped in explicitly.
+# Empty defaults keep a plain `docker build` (no --build-arg) working exactly
+# as before, just unstamped.
+ARG VERSION=""
+ARG REVISION=""
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X at.draab/familyfinances/internal/buildinfo.version=${VERSION} -X at.draab/familyfinances/internal/buildinfo.commit=${REVISION}" -o /out/server .
 
 # ---- final: minimal non-root runtime ----
 FROM gcr.io/distroless/static-debian12:nonroot AS final
