@@ -18,9 +18,11 @@ export const Route = createFileRoute("/settings/")({
 type UserSettings = components["schemas"]["UserSettings"];
 type Language = UserSettings["language"];
 type WeekStart = UserSettings["week_start"];
+type BuildInfo = components["schemas"]["BuildInfo"];
 
 const LANGUAGES: Language[] = ["en", "de"];
 const WEEK_STARTS: WeekStart[] = ["monday", "sunday"];
+const SHORT_COMMIT_LENGTH = 7;
 
 /** Feature-detects Intl.supportedValuesOf, absent from older engines. */
 function listTimezones(): string[] {
@@ -81,6 +83,19 @@ function ProfileSettingsTab() {
   const savedName = user?.display_name ?? "";
   const [nameDraft, setNameDraft] = useState(savedName);
   const [nameError, setNameError] = useState(false);
+  const [build, setBuild] = useState<BuildInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.GET("/api/version").then(({ data }) => {
+      if (!cancelled && data) {
+        setBuild(data);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Keep the field in step with the shared user record (initial resolve, or a
   // successful save pushing a new value back through the context).
@@ -300,6 +315,20 @@ function ProfileSettingsTab() {
           ))}
         </select>
       </SettingField>
+
+      {build && (build.version || build.commit) && (
+        <div className="flex flex-col gap-1.5 border-t border-black/10 pt-6 text-sm font-medium dark:border-white/10">
+          <span className="text-zinc-500 dark:text-zinc-400">
+            {t("settings.profile.version")}
+          </span>
+          <span
+            className="font-normal text-zinc-500 dark:text-zinc-400"
+            title={build.commit || undefined}
+          >
+            {build.version || build.commit.slice(0, SHORT_COMMIT_LENGTH)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

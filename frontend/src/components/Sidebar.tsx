@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { Icon } from "./Icon";
 import { SidebarUser } from "./SidebarUser";
-import { SidebarVersion } from "./SidebarVersion";
 import { ThemeSwitch } from "./ThemeSwitch";
 
 const NAV = [
@@ -313,7 +312,6 @@ export function Sidebar({
             </a>
           </div>
           <SidebarUser collapsed={effectiveCollapsed} />
-          <SidebarVersion collapsed={effectiveCollapsed} />
         </div>
       </aside>
     </>

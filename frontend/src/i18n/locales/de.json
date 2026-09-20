@@ -10,8 +10,7 @@
   },
   "sidebar": {
     "closeSidebar": "Seitenleiste schließen",
-    "githubRepo": "Quellcode auf GitHub ansehen",
-    "buildVersion": "Build {{commit}}"
+    "githubRepo": "Quellcode auf GitHub ansehen"
   },
   "topbar": {
     "expandSidebar": "Seitenleiste ausklappen",
@@ -168,7 +167,8 @@
         "endOfNextMonth": "Ende nächsten Monats",
         "endOfThisYear": "Ende dieses Jahres"
       },
-      "saveError": "Speichern fehlgeschlagen — bitte versuche es erneut."
+      "saveError": "Speichern fehlgeschlagen — bitte versuche es erneut.",
+      "version": "Version"
     },
     "invite": {
       "invitedBy": "Eingeladen von {{name}}",

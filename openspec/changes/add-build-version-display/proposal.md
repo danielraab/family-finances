@@ -39,10 +39,11 @@ which already holds the tag as `github.ref_name`.
   Dokploy specifically this still reports nothing, same as before the
   fallback existed; it isn't a broken build, just not a solved problem
   for that one platform.
-- The sidebar footer renders the result as one small, muted line below
-  the user control: the release tag when there is one, otherwise the
-  short commit hash, and nothing at all when the backend reports
-  neither. It stays visible when the sidebar is collapsed.
+- The Settings page's Profile tab renders the result as one small,
+  muted, read-only line below the existing fields: the release tag when
+  there is one, otherwise the short commit hash, and nothing at all when
+  the backend reports neither. (First shipped in the sidebar footer;
+  Daniel asked for it moved to Settings instead — see design.md.)
 
 ## Non-goals
 
@@ -51,8 +52,8 @@ which already holds the tag as `github.ref_name`.
   reports what it is, nothing more.
 - **No build timestamp, Go version, or dependency list.** Two fields,
   both about identity.
-- **No new page or dialog.** There is no About screen; the sidebar line
-  is the whole surface.
+- **No new page or dialog.** There is no About screen; the Profile tab's
+  version line is the whole surface.
 - **No version in the frontend bundle.** See design.md — the value stays
   a runtime read, so the hashed assets do not churn per commit.
 
@@ -66,22 +67,24 @@ which already holds the tag as `github.ref_name`.
 
 ### Modified Capabilities
 
-- `web-client-shell`: the sidebar footer shows the running build's
-  version (or short commit) as a small, plain line, in both the
-  expanded and collapsed states.
+- `web-client-settings`: the Profile tab shows the running build's
+  version (or short commit) as a small, read-only line below its
+  existing fields.
 - `release-pipeline`: the published image is stamped with the git tag
   and commit that produced it.
 
 ## Impact
 
 - `backend/internal/buildinfo/buildinfo.go` — new.
-- `backend/internal/httpapi/{server.go,version.go}` — `Deps.Build` and
-  the `GET /api/version` route.
+- `backend/internal/httpapi/{server.go,version.go}` — the
+  `GET /api/version` route.
 - `openapi/openapi.yaml` (+ the two committed generated artifacts) — the
   new operation and its `BuildInfo` schema.
 - `Dockerfile` — `VERSION`/`REVISION` args, `-ldflags` on `go build`,
   and a `.git` bind-mount fallback for when they're unset.
 - `.github/workflows/ci.yml` — `build-args` on the publish step.
-- `frontend/src/components/{Sidebar,SidebarVersion}.tsx` — the footer
-  line.
-- `frontend/src/i18n/locales/{en,de}.json` — its `title` label.
+- `frontend/src/routes/settings.index.tsx` — the Profile tab's version
+  line (moved here from an earlier `Sidebar`/`SidebarVersion.tsx` cut,
+  removed).
+- `frontend/src/i18n/locales/{en,de}.json` — its `settings.profile.version`
+  label.
