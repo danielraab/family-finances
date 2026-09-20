@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-20
+
+### Added
+
+- Recurring self-transfers. A standing move between two of the
+  household's own accounts can now be templated: the recurring form has a
+  kind selector, and picking Self-transfer reveals a "To account" picker
+  offering only the accounts that could actually receive the money
+  (appendable, not disabled, same currency, not the source), hides
+  counterparty and location, and stops requiring a category. Backed by a
+  `kind` and `to_account_id` on the recurring transaction and a
+  `recurring_transaction_legs` table mirroring `entry_legs`, so a
+  transfer lists and sums once per account of its two that is in scope,
+  and a template can never describe a movement that could not be booked.
+  `/recurring` gains "Show self-transfers" and, once that is checked,
+  "Show both sides (income and outcome)"; both live in the URL and are
+  sent with the per-currency total below the table, so it always totals
+  the rows above it. Kind and receiving account are read-only when
+  editing, since the backend rejects changing either.
+- Account, Category and Tag filters on `/recurring`, beside the
+  self-transfer checkboxes, all in the URL and all sent on the summary
+  request so the totals stay the totals of the rows shown.
+  `GET /api/recurring-transactions` and its `/summary` sibling now take
+  the same `category_id`, `category_mode` and `tag_id` the preview
+  endpoint has always taken, resolved by one shared filter. A category or
+  tag the caller holds a share on never widens the account scope here,
+  and filtering by a category the caller cannot see returns none of their
+  templates rather than all of them.
+- An "All time" preset in the date-range filter. The unbounded range
+  already existed behind Custom with both dates cleared, but it took more
+  than one click and, on `/entries`, an empty Custom range wrote no URL
+  parameter, which the ledger read as "use the Last 2 weeks default" — so
+  an explicit choice was indistinguishable from an absent one.
+
+### Changed
+
+- `/entries` and `/recurring` now render one shared `FilterPanel` rather
+  than two copies of it: the phone collapse, the applied-filter count and
+  "Clear all filters" moved into the shared component, and its strings
+  into a top-level `filters` namespace.
+- An account's currency is locked once a self-transfer template names
+  either of its sides, not only once the account has entries. A template
+  pairs two accounts before either necessarily has one, and without this
+  a later currency change would quietly invalidate every future booking.
+
+### Fixed
+
+- Selecting Custom while the date range was "All time" cleared every
+  date-range parameter and bounced `/entries` back to its default range,
+  because there were no bounds to carry in. A bare `range=custom` now
+  marks that mode, and any date-range parameter suppresses the page
+  default; the marker is dropped the moment a bound is set, so a preset
+  key and explicit bounds still never coexist.
+
 ## [0.4.1] - 2026-09-19
 
 ### Added
@@ -256,7 +310,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/danielraab/family-finances/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/danielraab/family-finances/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/danielraab/family-finances/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/danielraab/family-finances/compare/v0.3.1...v0.3.2
