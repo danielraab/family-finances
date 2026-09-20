@@ -30,11 +30,11 @@ default", and an absent `from`/`to` pair cannot carry that difference.
   URL as `?range=all_time` exactly like every other preset, so it is
   bookmarkable and survives a reload on a page that defaults to something
   narrower.
-- **`resolvePreset` starts returning optional bounds.** Every preset so
+- **`resolvePreset` starts returning nullable bounds.** Every preset so
   far resolves to two concrete dates; `all_time` is the first that
   resolves to neither, so the return type widens to
-  `{ from?: string; to?: string }`. Nothing outside `dateRangePresets.ts`
-  calls it.
+  `{ from: string | undefined; to: string | undefined }`. Nothing outside
+  `dateRangePresets.ts` calls it.
 - **A page with no default shows "All time" selected** instead of
   "Custom" with two empty fields. That is what is actually in effect on
   `/reports`, and the trigger already says so.
@@ -44,6 +44,13 @@ default", and an absent `from`/`to` pair cannot carry that difference.
   it removes the `/entries` snap-back described in Why.
 - **Under All time both date inputs are empty and disabled**, the way they
   are disabled under every other preset.
+- **Selecting Custom with no bounds to carry writes `range=custom`.**
+  Coming from All time there are no dates to carry into Custom, and a URL
+  with no date-range parameter means "use the page default" — so without a
+  marker, picking Custom on `/entries` would bounce back to Last 2 weeks.
+  Any `range` value that is not a known preset key reads as Custom, and
+  editing either date clears the marker, so a preset key and explicit
+  bounds still never coexist.
 
 ## Non-goals
 
@@ -65,9 +72,10 @@ default", and an absent `from`/`to` pair cannot carry that difference.
 ### Modified Capabilities
 
 - `web-client-date-range-filter`: the preset list gains `All time`, a
-  preset resolves to optional rather than required bounds, a page with no
-  default shows All time selected, and clearing the last bound under
-  Custom selects All time.
+  preset resolves to nullable rather than required bounds, a page with no
+  default shows All time selected, clearing the last bound under Custom
+  selects All time, and a bounds-less Custom selection is marked in the
+  URL as `range=custom`.
 - `web-client-reports`: opening `/reports` with no date-range parameter
   shows "All time" selected rather than "Custom" with both fields empty.
   The applied filter is unchanged.
@@ -78,7 +86,9 @@ default", and an absent `from`/`to` pair cannot carry that difference.
   in `DATE_RANGE_PRESET_KEYS` and `PRESET_I18N_KEYS`, `resolvePreset`'s
   widened return type, and `resolveEffectiveRange`'s no-default branch.
 - `frontend/src/components/DateRangeFilter.tsx` — `changeFrom`/`changeTo`
-  select `all_time` when the last bound is cleared.
+  select `all_time` when the last bound is cleared and drop the `custom`
+  marker when a bound is set; `selectPreset` writes that marker when
+  Custom has nothing to carry in.
 - `frontend/src/i18n/locales/{en,de}.json` — one new key,
   `dateRangeFilter.presets.allTime`.
 - No backend, OpenAPI, or generated-artifact changes.

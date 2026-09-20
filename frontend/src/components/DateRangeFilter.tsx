@@ -7,6 +7,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
+  ALL_TIME_KEY,
   CUSTOM_RANGE_KEY,
   DATE_RANGE_PRESET_KEYS,
   type DateRangeValue,
@@ -15,6 +16,17 @@ import {
   resolveEffectiveRange,
   type WeekStart,
 } from "../lib/dateRangePresets";
+
+/** The patch for an edit that empties both bounds: `all_time` rather than
+ * a bare pair of cleared parameters. An absent `range`/`from`/`to` is how a
+ * page says "use my default", so leaving it absent would snap a page like
+ * /entries back to its own default instead of showing everything — see the
+ * change's design.md, decision 4. */
+const ALL_TIME_PATCH = {
+  range: ALL_TIME_KEY,
+  from: undefined,
+  to: undefined,
+} satisfies DateRangeValue;
 
 const inputClass =
   "rounded-md border border-black/15 bg-transparent px-2.5 py-1.5 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40 disabled:opacity-60";
@@ -65,7 +77,17 @@ export function DateRangeFilter({
 
   function selectPreset(key: string) {
     if (key === CUSTOM_RANGE_KEY) {
-      onChange({ range: undefined, from: effective.from, to: effective.to });
+      // With bounds to carry in, those bounds are the state. With none —
+      // coming from All time — `range=custom` is what keeps the choice in
+      // the URL at all, since a page with a default reads a parameterless
+      // URL as "use my default".
+      const hasBounds =
+        effective.from !== undefined || effective.to !== undefined;
+      onChange({
+        range: hasBounds ? undefined : CUSTOM_RANGE_KEY,
+        from: effective.from,
+        to: effective.to,
+      });
     } else {
       onChange({ range: key, from: undefined, to: undefined });
     }
@@ -73,7 +95,11 @@ export function DateRangeFilter({
 
   function changeFrom(newValue: string) {
     if (isCustom) {
-      onChange({ from: newValue || undefined });
+      if (!newValue && !effective.to) {
+        onChange(ALL_TIME_PATCH);
+        return;
+      }
+      onChange({ range: undefined, from: newValue || undefined });
     } else {
       onChange({
         range: undefined,
@@ -85,7 +111,11 @@ export function DateRangeFilter({
 
   function changeTo(newValue: string) {
     if (isCustom) {
-      onChange({ to: newValue || undefined });
+      if (!newValue && !effective.from) {
+        onChange(ALL_TIME_PATCH);
+        return;
+      }
+      onChange({ range: undefined, to: newValue || undefined });
     } else {
       onChange({
         range: undefined,
