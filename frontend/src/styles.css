@@ -59,3 +59,30 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+.date-range-calendar {
+  --rdp-accent-color: #4f46e5;
+  --rdp-accent-background-color: #eef2ff;
+  --rdp-day-height: 44px;
+  --rdp-day-width: 44px;
+  --rdp-day_button-height: 42px;
+  --rdp-day_button-width: 42px;
+  --rdp-range_middle-background-color: #eef2ff;
+  --rdp-range_middle-color: #312e81;
+  --rdp-range_start-background: #4f46e5;
+  --rdp-range_end-background: #4f46e5;
+  --rdp-range_start-color: #ffffff;
+  --rdp-range_end-color: #ffffff;
+  --rdp-today-color: #4338ca;
+  font-size: 0.875rem;
+}
+
+.dark .date-range-calendar {
+  --rdp-accent-color: #a5b4fc;
+  --rdp-accent-background-color: rgb(99 102 241 / 0.2);
+  --rdp-range_middle-background-color: rgb(99 102 241 / 0.2);
+  --rdp-range_middle-color: #e0e7ff;
+  --rdp-range_start-background: #6366f1;
+  --rdp-range_end-background: #6366f1;
+  --rdp-today-color: #c7d2fe;
+}
