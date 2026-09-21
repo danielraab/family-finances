@@ -118,11 +118,11 @@ action.
 
 ### 6. Use an accessible calendar primitive, styled locally
 
-Add `react-day-picker` for month grids, keyboard navigation, locale-aware
+Add `@daypicker/react` for month grids, keyboard navigation, locale-aware
 weekday/month labels, and range rendering. The application owns the state
 machine and URL encoding; the dependency is only the accessible calendar view.
-Its default styling is not imported as product styling—the component maps its
-states to the existing Tailwind visual language.
+Its baseline structural stylesheet is imported, then its variables and
+surrounding controls are adapted to the existing Tailwind visual language.
 
 Building the entire calendar grid directly was rejected. Correct roving focus,
 screen-reader labels, outside-month days, week boundaries, and range keyboard

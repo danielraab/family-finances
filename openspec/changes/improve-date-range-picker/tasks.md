@@ -1,73 +1,73 @@
 ## 1. Range draft model and validation
 
-- [ ] 1.1 Add focused date helpers that parse/format local-calendar ISO dates
+- [x] 1.1 Add focused date helpers that parse/format local-calendar ISO dates
       without UTC conversion, compare optional bounds, and expose the
       `from <= to` validity rule.
-- [ ] 1.2 Implement the pure Custom-selection state machine from design.md:
+- [x] 1.2 Implement the pure Custom-selection state machine from design.md:
       first click starts, same/later click completes, an earlier second click
       restarts, and a click after completion begins a new selection.
-- [ ] 1.3 Represent named preset, Custom closed range, start-only, end-only,
+- [x] 1.3 Represent named preset, Custom closed range, start-only, end-only,
       All time, selection phase, and an invalid externally supplied pair in one
       draft type derived from `resolveEffectiveRange`.
-- [ ] 1.4 Convert a valid draft back into one atomic `DateRangeValue` patch:
+- [x] 1.4 Convert a valid draft back into one atomic `DateRangeValue` patch:
       named presets write `range`, Custom writes optional `from`/`to`,
       and each representation clears the other fields.
 
 ## 2. Accessible calendar view
 
-- [ ] 2.1 Add the selected `react-day-picker` version with pnpm and commit the
+- [x] 2.1 Add the latest available `@daypicker/react` version with pnpm and commit the
       lockfile change; verify its current React 19 and TypeScript API from the
       official documentation during implementation.
-- [ ] 2.2 Create the locally styled calendar component with German/English
+- [x] 2.2 Create the locally styled calendar component with German/English
       locale data, localized month/weekday labels, previous/next navigation,
       today/start/end/in-range states, and continuous highlighting across week
       and month boundaries.
-- [ ] 2.3 Wire pointer and keyboard selection through the same pure transition
+- [x] 2.3 Wire pointer and keyboard selection through the same pure transition
       helper, preserving equal-bound ranges and preventing inverted output.
-- [ ] 2.4 Add accessible names and non-color indicators for navigation,
+- [x] 2.4 Add accessible names and non-color indicators for navigation,
       selected endpoints, in-range days, and the current day.
 
 ## 3. Shared picker content and staged Apply
 
-- [ ] 3.1 Refactor `DateRangeFilter` so opening creates a local draft and
+- [x] 3.1 Refactor `DateRangeFilter` so opening creates a local draft and
       closing without Apply discards it; Apply emits one `onChange` patch,
       closes, and restores focus.
-- [ ] 3.2 Replace the preset `select` with ordered quick actions generated
+- [x] 3.2 Replace the preset `select` with ordered quick actions generated
       from `DATE_RANGE_PRESET_KEYS`; selecting one updates the draft and
       calendar preview but does not call `onChange` before Apply.
-- [ ] 3.3 Add the Custom section, localized range summary, selection guidance,
+- [x] 3.3 Add the Custom section, localized range summary, selection guidance,
       Reset/All-time behavior, "Use start only", and "Use end only" actions.
-- [ ] 3.4 Detect an externally supplied `from > to` pair, display the
+- [x] 3.4 Detect an externally supplied `from > to` pair, display the
       localized validation message, and disable Apply until the draft becomes
       valid. Do not rewrite the value merely by opening the picker.
-- [ ] 3.5 Keep trigger summaries localized while retaining ISO strings in URL
+- [x] 3.5 Keep trigger summaries localized while retaining ISO strings in URL
       and dashboard-card values.
 
 ## 4. Responsive presentation
 
-- [ ] 4.1 Render the shared picker content in a collision-aware anchored
+- [x] 4.1 Render the shared picker content in a collision-aware anchored
       popover at `sm` and above, normally displaying two consecutive months
       and falling back to one when available width requires it.
-- [ ] 4.2 Render it below `sm` in a Headless UI Dialog bottom sheet with
+- [x] 4.2 Render it below `sm` in a Headless UI Dialog bottom sheet with
       backdrop, close button, focus trap, one visible month, scrollable body,
       sticky Apply footer, and safe-area padding.
-- [ ] 4.3 Make mobile preset actions horizontally scrollable, keep every
+- [x] 4.3 Make mobile preset actions horizontally scrollable, keep every
       interactive target at least 44 CSS pixels, and verify the sheet remains
       usable in short/landscape viewports.
-- [ ] 4.4 Preserve the existing `fullWidth` trigger behavior and verify the
+- [x] 4.4 Preserve the existing `fullWidth` trigger behavior and verify the
       filter still fits the entries grid, reports row, and dashboard form.
 
 ## 5. Translations
 
-- [ ] 5.1 Add English source strings for Apply, Reset, Custom, selection
+- [x] 5.1 Add English source strings for Apply, Reset, Custom, selection
       guidance, open-bound actions, invalid-order validation, month navigation,
       and screen-reader selection descriptions.
-- [ ] 5.2 Add complete German translations for the same keys and verify no
+- [x] 5.2 Add complete German translations for the same keys and verify no
       user-facing calendar or responsive-shell text is hardcoded.
 
 ## 6. Verification
 
-- [ ] 6.1 From `frontend/`, run `pnpm lint`, `pnpm exec tsc --noEmit`,
+- [x] 6.1 From `frontend/`, run `pnpm lint`, `pnpm exec tsc --noEmit`,
       and `pnpm build`.
 - [ ] 6.2 Browser-check desktop at representative widths: presets preview
       without applying, Apply writes one URL update, dismissal discards edits,
