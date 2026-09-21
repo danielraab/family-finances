@@ -75,6 +75,18 @@ export function EntrySummaryModal({
             )}
           </span>
         </SummaryField>
+        <SummaryField label={t("summary.entry.afterBalance")}>
+          <span
+            className={`font-mono tabular-nums ${amountColorClass(entry.after_balance)}`}
+          >
+            {formatAmount(
+              entry.after_balance,
+              entry.account_currency ?? "",
+              lookups.displayedDecimalPlaces,
+              locale,
+            )}
+          </span>
+        </SummaryField>
         {entry.balance !== null && entry.balance !== undefined && (
           <SummaryField label={t("summary.entry.balance")}>
             <span className="font-mono tabular-nums">

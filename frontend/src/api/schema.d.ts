@@ -1378,6 +1378,11 @@ export interface components {
             account_id: string;
             /**
              * Format: int64
+             * @description The account's running balance immediately after this entry has been applied, in integer minor units at the same fixed 4-decimal- place scale as amount. For a self-transfer occurrence this is the balance of the occurrence's account_id, matching that occurrence's account-facing amount.
+             */
+            after_balance: number;
+            /**
+             * Format: int64
              * @description Integer minor units at a fixed 4 decimal places (e.g. 105000 represents 10.5000 in the account's currency). Not configurable — see account-entries. Always a signed delta applied to the account's running balance: for a transaction or self_transfer, exactly what was submitted (a self_transfer's amount is signed from account_id's perspective — the receiving account, to_account_id, effectively sees -amount); for a balance_adjustment, computed automatically as the change from the balance immediately before it — never client-supplied for that kind. When a self_transfer is listed once per account it touches (see GET /api/entries), the amount returned for the to_account_id-side occurrence is that negated value, and its account_id/to_account_id are swapped accordingly.
              */
             amount: number;

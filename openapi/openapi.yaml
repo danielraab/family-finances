@@ -3551,6 +3551,7 @@ components:
         - account_id
         - kind
         - amount
+        - after_balance
         - booking_timestamp
         - title
         - tag_ids
@@ -3614,6 +3615,15 @@ components:
             touches (see GET /api/entries), the amount returned for the
             to_account_id-side occurrence is that negated value, and its
             account_id/to_account_id are swapped accordingly.
+        after_balance:
+          type: integer
+          format: int64
+          description: >-
+            The account's running balance immediately after this entry has
+            been applied, in integer minor units at the same fixed 4-decimal-
+            place scale as amount. For a self-transfer occurrence this is the
+            balance of the occurrence's account_id, matching that occurrence's
+            account-facing amount.
         balance:
           type: integer
           format: int64
