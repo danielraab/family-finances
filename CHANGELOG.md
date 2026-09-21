@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-09-21
+
+### Added
+
+- Entry summaries now show the account's running balance immediately after
+  the entry. The value is returned directly with each entry, including the
+  account-facing balance for either side of a self-transfer, so displaying it
+  does not require another request.
+
+### Changed
+
+- Reports can now be sorted by date or amount from their column headings.
+  Changing the sort order updates an already generated report immediately,
+  without requiring the report to be generated again.
+- Report totals now break out income and outcome per currency alongside the
+  existing net sum.
+
 ## [0.4.4] - 2026-09-20
 
 ### Changed
@@ -357,7 +374,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/danielraab/family-finances/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/danielraab/family-finances/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/danielraab/family-finances/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/danielraab/family-finances/compare/v0.4.1...v0.4.2
