@@ -1708,8 +1708,10 @@ paths:
         reading, not a categorized delta. A self_transfer contributes to
         the sum once per account, exactly like GET /api/entries lists it —
         twice when both its accounts are within scope, netting to zero for
-        that currency. Computed directly rather than by paging through
-        results, so it is accurate however many entries match.
+        that currency in sums — though its two legs still contribute
+        separately to income (the incoming leg) and outcome (the outgoing
+        leg). Computed directly rather than by paging through results, so
+        it is accurate however many entries match.
       tags: [entries]
       parameters:
         - name: account_id
@@ -2302,7 +2304,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EntrySummary"
+                $ref: "#/components/schemas/RecurringTransactionSummary"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -3855,7 +3857,43 @@ components:
 
     EntrySummary:
       type: object
+      required: [sums, income, outcome, count]
+      properties:
+        sums:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrencySum"
+        income:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrencySum"
+          description: >-
+            Per currency, the sum of the matching entries' positive
+            amounts — the same split GET /api/entries/flow-summary's
+            FlowBucket.income computes per bucket, here totalled once for
+            the whole filtered result. A currency with no positive
+            amounts among the matching entries is omitted.
+        outcome:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrencySum"
+          description: >-
+            Per currency, the sum of the absolute value of the matching
+            entries' negative amounts — mirrors income above. A currency
+            with no negative amounts among the matching entries is
+            omitted.
+        count:
+          type: integer
+          format: int64
+
+    RecurringTransactionSummary:
+      type: object
       required: [sums, count]
+      description: >-
+        See GET /api/recurring-transactions/summary. Structurally identical
+        to EntrySummary's own sums/count pair, but a distinct schema since
+        it sums recurring transactions' per_year_amount, not entries'
+        amount — it carries no income/outcome split.
       properties:
         sums:
           type: array

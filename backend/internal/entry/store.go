@@ -163,11 +163,12 @@ type Store interface {
 
 	// Sum computes, for entries matching filter (already resolved by
 	// Service exactly as List's is) and restricted to Kind ==
-	// KindTransaction regardless of filter.Kind, the total amount per
-	// account id, plus the total number of matching entries across every
-	// account. Service.Sum groups the per-account totals by currency —
-	// Store has no notion of an account's currency.
-	Sum(ctx context.Context, filter Filter) (perAccount map[string]int64, count int, err error)
+	// KindTransaction regardless of filter.Kind, the net amount, income
+	// (sum of positive amounts), and outcome (sum of the absolute value of
+	// negative amounts) per account id, plus the total number of matching
+	// entries across every account. Service.Sum groups the per-account
+	// totals by currency — Store has no notion of an account's currency.
+	Sum(ctx context.Context, filter Filter) (perAccount map[string]AccountSum, count int, err error)
 
 	// FlowSummary buckets entries matching filter (already resolved by
 	// Service — AccountIDs is the effective set to filter by, Timezone is

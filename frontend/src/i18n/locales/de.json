@@ -912,6 +912,8 @@
     "loading": "Lädt…",
     "emptyFiltered": "Keine Buchungen entsprechen den Filtern dieser Auswertung.",
     "sumsTitle": "Summe",
+    "income": "Einnahmen",
+    "outcome": "Ausgaben",
     "columns": {
       "date": "Datum",
       "title": "Titel",

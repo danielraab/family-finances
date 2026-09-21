@@ -610,21 +610,30 @@ func (s *EntryStore) Balance(_ context.Context, accountID string, asOf time.Time
 // Sum implements entry.Store's Sum: f's matching entry legs, restricted to
 // kind: transaction or self_transfer regardless of f.Kind, summed per
 // (leg) account id — a self_transfer contributes twice, once per account,
-// when both are within f.AccountIDs, mirroring List.
-func (s *EntryStore) Sum(_ context.Context, f entry.Filter) (map[string]int64, int, error) {
+// when both are within f.AccountIDs, mirroring List. Income/Outcome split
+// each account's matching amounts by sign, mirroring the Postgres store's
+// FILTER-based split.
+func (s *EntryStore) Sum(_ context.Context, f entry.Filter) (map[string]entry.AccountSum, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	f.Kind = nil
 	rows := s.matchingRows(f)
 
-	perAccount := make(map[string]int64, len(rows))
+	perAccount := make(map[string]entry.AccountSum, len(rows))
 	count := 0
 	for _, row := range rows {
 		if row.e.Kind != entry.KindTransaction && row.e.Kind != entry.KindSelfTransfer {
 			continue
 		}
-		perAccount[row.e.AccountID] += row.e.Amount
+		sum := perAccount[row.e.AccountID]
+		sum.Amount += row.e.Amount
+		if row.e.Amount > 0 {
+			sum.Income += row.e.Amount
+		} else if row.e.Amount < 0 {
+			sum.Outcome += -row.e.Amount
+		}
+		perAccount[row.e.AccountID] = sum
 		count++
 	}
 	return perAccount, count, nil

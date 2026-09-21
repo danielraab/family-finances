@@ -912,6 +912,8 @@
     "loading": "Loading…",
     "emptyFiltered": "No entries match this report's filters.",
     "sumsTitle": "Total",
+    "income": "Income",
+    "outcome": "Outcome",
     "columns": {
       "date": "Date",
       "title": "Title",

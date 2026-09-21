@@ -62,6 +62,17 @@ EntrySummary {
 Purely additive — no existing client (the dashboard `query_stat` card, any
 other `sums` reader) needs to change.
 
+**Discovered during implementation:** `EntrySummary` was also, coincidentally,
+the response schema for `GET /api/recurring-transactions/summary` (an
+unrelated domain that happens to return the same `{ sums, count }` shape).
+Widening it in place would have forced `income`/`outcome` — a concept that
+doesn't apply to recurring-transaction templates — onto that endpoint too.
+Split instead: `GET /api/recurring-transactions/summary` now returns its own
+`RecurringTransactionSummary` schema (identical `{ sums, count }` shape,
+unchanged behavior), and `EntrySummary` is entries-only, free to grow
+`income`/`outcome`. No Go code changes outside `openapi/openapi.yaml` and the
+two generated artifacts — no Go type is bound to a schema name.
+
 ### `Store.Sum` widens to carry income/outcome per account
 
 `Sum` today returns `perAccount map[string]int64` (net only) plus a count;
