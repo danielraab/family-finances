@@ -811,7 +811,7 @@ export interface paths {
         };
         /**
          * Sum the caller's matching entries per currency, without paging
-         * @description Accepts the same account_id, category_id/category_mode, tag_id, from/to, and q filters as GET /api/entries (no sort, dir, after, or limit — this is an aggregate, not a page). Always additionally restricted to kind=transaction or kind=self_transfer, regardless of the caller's other filters — a balance_adjustment is an absolute reading, not a categorized delta. A self_transfer contributes to the sum once per account, exactly like GET /api/entries lists it — twice when both its accounts are within scope, netting to zero for that currency. Computed directly rather than by paging through results, so it is accurate however many entries match.
+         * @description Accepts the same account_id, category_id/category_mode, tag_id, from/to, and q filters as GET /api/entries (no sort, dir, after, or limit — this is an aggregate, not a page). Always additionally restricted to kind=transaction or kind=self_transfer, regardless of the caller's other filters — a balance_adjustment is an absolute reading, not a categorized delta. A self_transfer contributes to the sum once per account, exactly like GET /api/entries lists it — twice when both its accounts are within scope, netting to zero for that currency in sums — though its two legs still contribute separately to income (the incoming leg) and outcome (the outgoing leg). Computed directly rather than by paging through results, so it is accurate however many entries match.
          */
         get: operations["getEntriesSummary"];
         put?: never;
@@ -1464,6 +1464,10 @@ export interface components {
         EntrySummary: {
             /** Format: int64 */
             count: number;
+            /** @description Per currency, the sum of the matching entries' positive amounts — the same split GET /api/entries/flow-summary's FlowBucket.income computes per bucket, here totalled once for the whole filtered result. A currency with no positive amounts among the matching entries is omitted. */
+            income: components["schemas"]["CurrencySum"][];
+            /** @description Per currency, the sum of the absolute value of the matching entries' negative amounts — mirrors income above. A currency with no negative amounts among the matching entries is omitted. */
+            outcome: components["schemas"]["CurrencySum"][];
             sums: components["schemas"]["CurrencySum"][];
         };
         /** @description No kind field — it is immutable after creation; no to_account_id field either — a self_transfer's two accounts are fixed at creation. account_id may be set to move the entry to a different account the caller owns (see account-entries); it must not be disabled, the same rule creation applies — rejected outright (422) when the entry's kind is self_transfer. No currency conversion or validation is performed. amount is only settable when the entry's kind is transaction or self_transfer, balance only when it is balance_adjustment — supplying the other one is rejected (400). counterparty and location are likewise only settable when the entry's kind is transaction (400 otherwise); an empty string clears either field. Editing a self_transfer additionally requires the caller to currently hold append+ permission on both its accounts (403 otherwise), regardless of which fields are being changed — see account-entries. */
@@ -1654,6 +1658,12 @@ export interface components {
             /** @description The other account of a self_transfer occurrence — present only when kind is self_transfer. */
             to_account_id?: string | null;
             to_account_name?: string;
+        };
+        /** @description See GET /api/recurring-transactions/summary. Structurally identical to EntrySummary's own sums/count pair, but a distinct schema since it sums recurring transactions' per_year_amount, not entries' amount — it carries no income/outcome split. */
+        RecurringTransactionSummary: {
+            /** Format: int64 */
+            count: number;
+            sums: components["schemas"]["CurrencySum"][];
         };
         /** @description No kind field — it is immutable after creation; no to_account_id field either, since a self_transfer template's two accounts are fixed when it is written. account_id may move a transaction template to another account the caller can append to, and is rejected outright (400) on a self_transfer. counterparty and location remain rejected on a self_transfer. Editing a self_transfer additionally requires the caller to currently hold append+ permission on both of its accounts (403 otherwise), whatever field is being changed. */
         RecurringTransactionUpdate: {
@@ -3609,7 +3619,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EntrySummary"];
+                    "application/json": components["schemas"]["RecurringTransactionSummary"];
                 };
             };
             400: components["responses"]["BadRequest"];

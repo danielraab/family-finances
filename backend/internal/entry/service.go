@@ -526,13 +526,17 @@ func (s *Service) Sum(ctx context.Context, callerID string, f Filter) (Summary, 
 		return Summary{}, err
 	}
 
-	totals := make(map[string]int64, len(perAccount))
-	for accountID, amount := range perAccount {
+	totals := make(map[string]AccountSum, len(perAccount))
+	for accountID, sum := range perAccount {
 		currency, _, _, err := s.accounts.Access(ctx, accountID, callerID)
 		if err != nil {
 			return Summary{}, err
 		}
-		totals[currency] += amount
+		t := totals[currency]
+		t.Amount += sum.Amount
+		t.Income += sum.Income
+		t.Outcome += sum.Outcome
+		totals[currency] = t
 	}
 
 	currencies := make([]string, 0, len(totals))
@@ -542,11 +546,20 @@ func (s *Service) Sum(ctx context.Context, callerID string, f Filter) (Summary, 
 	sort.Strings(currencies)
 
 	sums := make([]CurrencySum, 0, len(currencies))
+	income := make([]CurrencySum, 0, len(currencies))
+	outcome := make([]CurrencySum, 0, len(currencies))
 	for _, currency := range currencies {
-		sums = append(sums, CurrencySum{Currency: currency, Amount: totals[currency]})
+		t := totals[currency]
+		sums = append(sums, CurrencySum{Currency: currency, Amount: t.Amount})
+		if t.Income != 0 {
+			income = append(income, CurrencySum{Currency: currency, Amount: t.Income})
+		}
+		if t.Outcome != 0 {
+			outcome = append(outcome, CurrencySum{Currency: currency, Amount: t.Outcome})
+		}
 	}
 
-	return Summary{Sums: sums, Count: count}, nil
+	return Summary{Sums: sums, Income: income, Outcome: outcome, Count: count}, nil
 }
 
 // FlowSummary resolves f's caller-supplied AccountIDs the same way List/Sum

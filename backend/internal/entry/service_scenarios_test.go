@@ -790,6 +790,118 @@ func TestSumExactCategoryModeExcludesDescendants(t *testing.T) {
 	}
 }
 
+func TestSumSplitsIncomeAndOutcomeBySign(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 200, "2024-01-01T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -50, "2024-01-02T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -30, "2024-01-03T00:00:00Z", ptr("cat1"))
+
+	summary, err := svc.Sum(context.Background(), "u1", entry.Filter{CategoryID: ptr("cat1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.Sums) != 1 || summary.Sums[0].Amount != 120 {
+		t.Fatalf("Sums = %+v, want net 120", summary.Sums)
+	}
+	if len(summary.Income) != 1 || summary.Income[0].Currency != "EUR" || summary.Income[0].Amount != 200 {
+		t.Fatalf("Income = %+v, want EUR 200", summary.Income)
+	}
+	if len(summary.Outcome) != 1 || summary.Outcome[0].Currency != "EUR" || summary.Outcome[0].Amount != 80 {
+		t.Fatalf("Outcome = %+v, want EUR 80", summary.Outcome)
+	}
+}
+
+func TestSumSplitsIncomeAndOutcomeAcrossCurrencies(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "USD")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, 100, "2024-01-01T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -40, "2024-01-02T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc2", entry.KindTransaction, -20, "2024-01-03T00:00:00Z", ptr("cat1"))
+
+	summary, err := svc.Sum(context.Background(), "u1", entry.Filter{CategoryID: ptr("cat1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	income := map[string]int64{}
+	for _, s := range summary.Income {
+		income[s.Currency] = s.Amount
+	}
+	outcome := map[string]int64{}
+	for _, s := range summary.Outcome {
+		outcome[s.Currency] = s.Amount
+	}
+	if len(income) != 1 || income["EUR"] != 100 {
+		t.Fatalf("Income = %+v, want only EUR 100", summary.Income)
+	}
+	if len(outcome) != 2 || outcome["EUR"] != 40 || outcome["USD"] != 20 {
+		t.Fatalf("Outcome = %+v, want EUR 40 and USD 20", summary.Outcome)
+	}
+}
+
+func TestSumSelfTransferBothLegsContributeToIncomeAndOutcomeButNetToZero(t *testing.T) {
+	svc, accounts, _, _ := newFixture()
+	accounts.add("a", "u1", "EUR")
+	accounts.add("b", "u1", "EUR")
+
+	if _, err := svc.Create(context.Background(), "u1", newSelfTransfer("a", "b", -1000)); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	summary, err := svc.Sum(context.Background(), "u1", entry.Filter{AccountIDs: []string{"a", "b"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.Sums) != 1 || summary.Sums[0].Amount != 0 {
+		t.Fatalf("Sums = %+v, want EUR 0 (both legs in scope net to zero)", summary.Sums)
+	}
+	if len(summary.Income) != 1 || summary.Income[0].Amount != 1000 {
+		t.Fatalf("Income = %+v, want EUR 1000 (the receiving leg)", summary.Income)
+	}
+	if len(summary.Outcome) != 1 || summary.Outcome[0].Amount != 1000 {
+		t.Fatalf("Outcome = %+v, want EUR 1000 (the sending leg)", summary.Outcome)
+	}
+}
+
+func TestSumBalanceAdjustmentsExcludedFromIncomeAndOutcomeToo(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	mustCreate(t, svc, "u1", "acc1", entry.KindTransaction, -10, "2024-01-01T00:00:00Z", ptr("cat1"))
+	mustCreate(t, svc, "u1", "acc1", entry.KindBalanceAdjustment, 99999, "2024-01-01T00:00:00Z", nil)
+
+	summary, err := svc.Sum(context.Background(), "u1", entry.Filter{CategoryID: ptr("cat1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.Income) != 0 {
+		t.Fatalf("Income = %+v, want empty (only the balance adjustment could contribute, and it's excluded)", summary.Income)
+	}
+	if len(summary.Outcome) != 1 || summary.Outcome[0].Amount != 10 {
+		t.Fatalf("Outcome = %+v, want only the transaction's EUR 10", summary.Outcome)
+	}
+}
+
+func TestSumWithNoMatchesReturnsEmptyIncomeAndOutcome(t *testing.T) {
+	svc, accounts, categories, _ := newFixture()
+	accounts.add("acc1", "u1", "EUR")
+	categories.add("cat1")
+
+	summary, err := svc.Sum(context.Background(), "u1", entry.Filter{CategoryID: ptr("cat1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.Sums) != 0 || len(summary.Income) != 0 || len(summary.Outcome) != 0 {
+		t.Fatalf("summary = %+v, want sums/income/outcome all empty", summary)
+	}
+}
+
 // mustCreate creates an entry of kind with amount as its Amount (for
 // KindTransaction) or Balance reading (for KindBalanceAdjustment) — a
 // single numeric parameter covers both, since callers already pick the

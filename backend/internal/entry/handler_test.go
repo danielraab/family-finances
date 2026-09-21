@@ -259,6 +259,16 @@ func TestHandlerSummary(t *testing.T) {
 	if len(byCurrency) != 2 || byCurrency["EUR"] != -100 || byCurrency["USD"] != -20 {
 		t.Fatalf("Sums = %+v, want EUR -100 and USD -20", got.Sums)
 	}
+	if len(got.Income) != 0 {
+		t.Fatalf("Income = %+v, want empty (every matching transaction is negative)", got.Income)
+	}
+	outcomeByCurrency := map[string]int64{}
+	for _, s := range got.Outcome {
+		outcomeByCurrency[s.Currency] = s.Amount
+	}
+	if len(outcomeByCurrency) != 2 || outcomeByCurrency["EUR"] != 100 || outcomeByCurrency["USD"] != 20 {
+		t.Fatalf("Outcome = %+v, want EUR 100 and USD 20", got.Outcome)
+	}
 }
 
 func TestHandlerSummaryRequiresAuth(t *testing.T) {

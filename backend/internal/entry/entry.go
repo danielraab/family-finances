@@ -349,10 +349,25 @@ type CurrencySum struct {
 }
 
 // Summary is the result of summing a Filter's matching transaction entries,
-// grouped by their account's currency — see Service.Sum.
+// grouped by their account's currency — see Service.Sum. Income and Outcome
+// split Sums by sign per currency: Income is the sum of positive amounts,
+// Outcome the sum of the absolute value of negative amounts. A self-transfer
+// entry counted on both its accounts contributes to both Income and Outcome
+// even though its two legs cancel out in Sums.
 type Summary struct {
-	Sums  []CurrencySum `json:"sums"`
-	Count int           `json:"count"`
+	Sums    []CurrencySum `json:"sums"`
+	Income  []CurrencySum `json:"income"`
+	Outcome []CurrencySum `json:"outcome"`
+	Count   int           `json:"count"`
+}
+
+// AccountSum is one account's totals within a Sum call — the net amount
+// (Sums' contribution) plus its income/outcome split, before Service.Sum
+// groups accounts by currency.
+type AccountSum struct {
+	Amount  int64
+	Income  int64
+	Outcome int64
 }
 
 // FlowUnit is the bucket granularity FlowSummary groups entries by.

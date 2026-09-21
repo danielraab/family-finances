@@ -29,6 +29,8 @@ type Category = components["schemas"]["Category"];
 type Tag = components["schemas"]["Tag"];
 type Entry = components["schemas"]["Entry"];
 type CurrencySum = components["schemas"]["CurrencySum"];
+type Sort = "booking_timestamp" | "amount";
+type Dir = "asc" | "desc";
 
 type ReportsSearch = {
   category_id?: string | undefined;
@@ -39,6 +41,8 @@ type ReportsSearch = {
   from?: string | undefined;
   to?: string | undefined;
   show_recurring?: boolean | undefined;
+  sort?: Sort | undefined;
+  dir?: Dir | undefined;
 };
 
 /** The filters "Generate report" was last activated with — a snapshot,
@@ -82,6 +86,8 @@ export const Route = createFileRoute("/reports")({
       typeof search["show_recurring"] === "boolean"
         ? search["show_recurring"]
         : undefined,
+    sort: search["sort"] === "amount" ? "amount" : undefined,
+    dir: search["dir"] === "asc" ? "asc" : undefined,
   }),
   component: ReportsPage,
 });
@@ -93,7 +99,12 @@ function toRangeEnd(date: string): string {
   return new Date(`${date}T23:59:59.999Z`).toISOString();
 }
 
-function buildEntriesQuery(gf: GeneratedFilter, after?: string) {
+function buildEntriesQuery(
+  gf: GeneratedFilter,
+  sort: Sort,
+  dir: Dir,
+  after?: string,
+) {
   return compact({
     account_id: gf.accountId ? [gf.accountId] : undefined,
     category_id: gf.categoryId,
@@ -104,8 +115,8 @@ function buildEntriesQuery(gf: GeneratedFilter, after?: string) {
     tag_id: gf.tagId,
     from: gf.from ? toRangeStart(gf.from) : undefined,
     to: gf.to ? toRangeEnd(gf.to) : undefined,
-    sort: "booking_timestamp" as const,
-    dir: "desc" as const,
+    sort,
+    dir,
     after,
     limit: PAGE_SIZE,
   });
@@ -173,6 +184,8 @@ function ReportsPage() {
   const [items, setItems] = useState<Entry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [sums, setSums] = useState<CurrencySum[]>([]);
+  const [income, setIncome] = useState<CurrencySum[]>([]);
+  const [outcome, setOutcome] = useState<CurrencySum[]>([]);
   const [count, setCount] = useState(0);
   const [previewItems, setPreviewItems] = useState<
     RecurringTransactionPreviewItem[] | null
@@ -180,22 +193,36 @@ function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // Coordinates the entries page fetch between this effect and toggleSort's
+  // own, independent re-fetch below, so a slow response from one can't
+  // clobber state a faster, later request already settled.
+  const entriesRequestRef = useRef(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: search.sort/dir are read fresh at generation time only — sort changes re-fetch independently via toggleSort, without re-running this effect or its summary/preview requests.
   useEffect(() => {
     if (!generatedFilter) return;
+    const requestId = ++entriesRequestRef.current;
     setLoading(true);
     setItems([]);
     setNextCursor(null);
     setSums([]);
+    setIncome([]);
+    setOutcome([]);
     setCount(0);
     setPreviewItems(null);
     let cancelled = false;
     api
       .GET("/api/entries", {
-        params: { query: buildEntriesQuery(generatedFilter) },
+        params: {
+          query: buildEntriesQuery(
+            generatedFilter,
+            search.sort ?? "booking_timestamp",
+            search.dir ?? "desc",
+          ),
+        },
       })
       .then(({ data }) => {
-        if (cancelled) return;
+        if (cancelled || entriesRequestRef.current !== requestId) return;
         setItems(data?.items ?? []);
         setNextCursor(data?.next_cursor ?? null);
         setLoading(false);
@@ -207,6 +234,8 @@ function ReportsPage() {
       .then(({ data }) => {
         if (cancelled) return;
         setSums(data?.sums ?? []);
+        setIncome(data?.income ?? []);
+        setOutcome(data?.outcome ?? []);
         setCount(data?.count ?? 0);
       });
     // The Upcoming preview is fetched alongside the entries/summary
@@ -251,7 +280,14 @@ function ReportsPage() {
     if (loadingMore || !nextCursor || !generatedFilter) return;
     setLoadingMore(true);
     const { data } = await api.GET("/api/entries", {
-      params: { query: buildEntriesQuery(generatedFilter, nextCursor) },
+      params: {
+        query: buildEntriesQuery(
+          generatedFilter,
+          search.sort ?? "booking_timestamp",
+          search.dir ?? "desc",
+          nextCursor,
+        ),
+      },
     });
     setItems((prev) => [...prev, ...(data?.items ?? [])]);
     setNextCursor(data?.next_cursor ?? null);
@@ -260,6 +296,37 @@ function ReportsPage() {
 
   function patchSearch(patch: Partial<ReportsSearch>) {
     routeNavigate({ search: (prev) => ({ ...prev, ...patch }) });
+  }
+
+  /** Sorts the results table immediately, independent of the "Generate
+   * report" gate — see web-client-reports' "The report result table is
+   * sortable by date or amount": it reorders the already-generated result
+   * set rather than changing which entries are included, so it never marks
+   * the report stale and never waits for "Generate report" again. */
+  function toggleSort(column: Sort) {
+    const currentSort = search.sort ?? "booking_timestamp";
+    const currentDir = search.dir ?? "desc";
+    const nextDir: Dir =
+      currentSort === column ? (currentDir === "asc" ? "desc" : "asc") : "desc";
+    patchSearch({ sort: column, dir: nextDir });
+
+    if (!generatedFilter) return;
+    const requestId = ++entriesRequestRef.current;
+    setLoading(true);
+    setItems([]);
+    setNextCursor(null);
+    api
+      .GET("/api/entries", {
+        params: {
+          query: buildEntriesQuery(generatedFilter, column, nextDir),
+        },
+      })
+      .then(({ data }) => {
+        if (entriesRequestRef.current !== requestId) return;
+        setItems(data?.items ?? []);
+        setNextCursor(data?.next_cursor ?? null);
+        setLoading(false);
+      });
   }
 
   function selectCategory(id: string) {
@@ -456,19 +523,58 @@ function ReportsPage() {
           <span className="text-xs font-medium uppercase text-zinc-500 dark:text-zinc-400">
             {t("reports.sumsTitle")}
           </span>
-          {sums.map((s) => (
-            <span
-              key={s.currency}
-              className={`font-mono text-lg tabular-nums ${amountColorClass(s.amount)}`}
-            >
-              {formatAmount(
-                s.amount,
-                s.currency,
-                displayedDecimalPlaces,
-                i18n.resolvedLanguage ?? "en",
-              )}
-            </span>
-          ))}
+          {sums.map((s) => {
+            const currencyIncome = income.find(
+              (i) => i.currency === s.currency,
+            );
+            const currencyOutcome = outcome.find(
+              (o) => o.currency === s.currency,
+            );
+            return (
+              <span key={s.currency} className="flex items-baseline gap-3">
+                <span
+                  className={`font-mono text-lg tabular-nums ${amountColorClass(s.amount)}`}
+                >
+                  {formatAmount(
+                    s.amount,
+                    s.currency,
+                    displayedDecimalPlaces,
+                    i18n.resolvedLanguage ?? "en",
+                  )}
+                </span>
+                {currencyIncome && (
+                  <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                    {t("reports.income")}{" "}
+                    <span
+                      className={`font-mono tabular-nums ${amountColorClass(currencyIncome.amount)}`}
+                    >
+                      {formatAmount(
+                        currencyIncome.amount,
+                        s.currency,
+                        displayedDecimalPlaces,
+                        i18n.resolvedLanguage ?? "en",
+                      )}
+                    </span>
+                  </span>
+                )}
+                {currencyOutcome && (
+                  <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                    {t("reports.outcome")}{" "}
+                    <span
+                      className={`font-mono tabular-nums ${amountColorClass(-currencyOutcome.amount)}`}
+                    >
+                      {formatAmount(
+                        -currencyOutcome.amount,
+                        s.currency,
+                        displayedDecimalPlaces,
+                        i18n.resolvedLanguage ?? "en",
+                      )}
+                    </span>
+                  </span>
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -489,7 +595,19 @@ function ReportsPage() {
               <thead className="border-b border-black/10 text-xs uppercase text-zinc-500 dark:border-white/10 dark:text-zinc-400">
                 <tr>
                   <th className="px-3 py-2 font-medium">
-                    {t("reports.columns.date")}
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("booking_timestamp")}
+                      className="flex items-center gap-1"
+                    >
+                      {t("reports.columns.date")}
+                      {(search.sort ?? "booking_timestamp") ===
+                        "booking_timestamp" && (
+                        <span>
+                          {(search.dir ?? "desc") === "asc" ? "↑" : "↓"}
+                        </span>
+                      )}
+                    </button>
                   </th>
                   <th className="px-3 py-2 font-medium">
                     {t("reports.columns.title")}
@@ -498,7 +616,18 @@ function ReportsPage() {
                     {t("reports.columns.account")}
                   </th>
                   <th className="px-3 py-2 text-right font-medium">
-                    {t("reports.columns.amount")}
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("amount")}
+                      className="flex items-center gap-1"
+                    >
+                      {t("reports.columns.amount")}
+                      {search.sort === "amount" && (
+                        <span>
+                          {(search.dir ?? "desc") === "asc" ? "↑" : "↓"}
+                        </span>
+                      )}
+                    </button>
                   </th>
                 </tr>
               </thead>

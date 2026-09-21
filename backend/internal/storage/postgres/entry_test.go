@@ -442,7 +442,7 @@ func TestPGEntryListAllAccountsIgnoresAccountIDsRestriction(t *testing.T) {
 	if count != 2 {
 		t.Fatalf("AllAccounts Sum count = %d, want 2", count)
 	}
-	if perAccount[f.accID] != -100 || perAccount[otherAcc.ID] != -25 {
+	if perAccount[f.accID].Amount != -100 || perAccount[otherAcc.ID].Amount != -25 {
 		t.Fatalf("AllAccounts Sum perAccount = %v, want -100/-25", perAccount)
 	}
 }
@@ -493,11 +493,17 @@ func TestPGEntrySumGroupsByAccountAndExcludesBalanceAdjustments(t *testing.T) {
 	if count != 3 {
 		t.Fatalf("count = %d, want 3 (balance adjustment excluded)", count)
 	}
-	if perAccount[f.accID] != -150 {
-		t.Fatalf("perAccount[accID] = %d, want -150", perAccount[f.accID])
+	if perAccount[f.accID].Amount != -150 {
+		t.Fatalf("perAccount[accID].Amount = %d, want -150", perAccount[f.accID].Amount)
 	}
-	if perAccount[acc2.ID] != -20 {
-		t.Fatalf("perAccount[acc2.ID] = %d, want -20", perAccount[acc2.ID])
+	if perAccount[acc2.ID].Amount != -20 {
+		t.Fatalf("perAccount[acc2.ID].Amount = %d, want -20", perAccount[acc2.ID].Amount)
+	}
+	if perAccount[f.accID].Outcome != 150 || perAccount[f.accID].Income != 0 {
+		t.Fatalf("perAccount[accID] income/outcome = %+v, want income=0 outcome=150", perAccount[f.accID])
+	}
+	if perAccount[acc2.ID].Outcome != 20 || perAccount[acc2.ID].Income != 0 {
+		t.Fatalf("perAccount[acc2.ID] income/outcome = %+v, want income=0 outcome=20", perAccount[acc2.ID])
 	}
 }
 
@@ -529,7 +535,7 @@ func TestPGEntrySumExactModeExcludesDescendants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 || perAccount[f.accID] != -10 {
+	if count != 1 || perAccount[f.accID].Amount != -10 {
 		t.Fatalf("perAccount = %v, count = %d, want {accID: -10}, 1 (exact category only)", perAccount, count)
 	}
 }

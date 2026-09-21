@@ -157,8 +157,16 @@ func TestPGSelfTransferSumNetsToZeroAcrossBothAccounts(t *testing.T) {
 	if count != 2 {
 		t.Fatalf("count = %d, want 2", count)
 	}
-	if perAccount[f.accID] != -1000 || perAccount[acc2] != 1000 {
+	if perAccount[f.accID].Amount != -1000 || perAccount[acc2].Amount != 1000 {
 		t.Fatalf("perAccount = %v", perAccount)
+	}
+	// Each leg still contributes to its own side's income/outcome even
+	// though the net (above) cancels out across the two accounts.
+	if perAccount[f.accID].Outcome != 1000 || perAccount[f.accID].Income != 0 {
+		t.Fatalf("perAccount[accID] income/outcome = %+v, want income=0 outcome=1000", perAccount[f.accID])
+	}
+	if perAccount[acc2].Income != 1000 || perAccount[acc2].Outcome != 0 {
+		t.Fatalf("perAccount[acc2] income/outcome = %+v, want income=1000 outcome=0", perAccount[acc2])
 	}
 }
 

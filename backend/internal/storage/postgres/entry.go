@@ -679,12 +679,14 @@ func recomputeFrom(ctx context.Context, tx pgx.Tx, accountID string, ts time.Tim
 
 // Sum implements entry.Store's Sum: the same WHERE clauses List uses, forced
 // to kind = 'transaction' regardless of f.Kind, aggregated per account id in
-// SQL. It returns no currency — Service.Sum resolves each account's currency
-// via AccountLookup and groups by it there, since this package has no
-// business joining into a currency concept that belongs to internal/account.
-func (s *EntryStore) Sum(ctx context.Context, f entry.Filter) (map[string]int64, int, error) {
+// SQL — net amount plus an income/outcome split via FILTER, the same
+// technique FlowSummary uses for its own per-bucket split. It returns no
+// currency — Service.Sum resolves each account's currency via AccountLookup
+// and groups by it there, since this package has no business joining into a
+// currency concept that belongs to internal/account.
+func (s *EntryStore) Sum(ctx context.Context, f entry.Filter) (map[string]entry.AccountSum, int, error) {
 	if !f.AllAccounts && len(f.AccountIDs) == 0 {
-		return map[string]int64{}, 0, nil
+		return map[string]entry.AccountSum{}, 0, nil
 	}
 
 	// Clear f.Kind before buildWhere so it never contributes its own kind
@@ -698,7 +700,11 @@ func (s *EntryStore) Sum(ctx context.Context, f entry.Filter) (map[string]int64,
 	where, args := buildWhere("entry_legs", f)
 	where = append(where, "entry_legs.kind IN ('transaction', 'self_transfer')")
 
-	query := `SELECT entry_legs.account_id::text, SUM(entry_legs.amount), COUNT(*)
+	query := `SELECT entry_legs.account_id::text,
+			SUM(entry_legs.amount),
+			COALESCE(SUM(entry_legs.amount) FILTER (WHERE entry_legs.amount > 0), 0),
+			COALESCE(-SUM(entry_legs.amount) FILTER (WHERE entry_legs.amount < 0), 0),
+			COUNT(*)
 		FROM entry_legs WHERE ` + strings.Join(where, " AND ") + ` GROUP BY entry_legs.account_id`
 
 	rows, err := s.pool.Query(ctx, query, args...)
@@ -707,13 +713,13 @@ func (s *EntryStore) Sum(ctx context.Context, f entry.Filter) (map[string]int64,
 	}
 	defer rows.Close()
 
-	perAccount := make(map[string]int64)
+	perAccount := make(map[string]entry.AccountSum)
 	var total int
 	for rows.Next() {
 		var accountID string
-		var sum int64
+		var sum entry.AccountSum
 		var count int
-		if err := rows.Scan(&accountID, &sum, &count); err != nil {
+		if err := rows.Scan(&accountID, &sum.Amount, &sum.Income, &sum.Outcome, &count); err != nil {
 			return nil, 0, err
 		}
 		perAccount[accountID] = sum
