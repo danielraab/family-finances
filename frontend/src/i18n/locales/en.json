@@ -947,7 +947,8 @@
     "entry": {
       "bookedAt": "Booked",
       "amount": "Amount",
-      "balance": "Balance after",
+      "afterBalance": "Balance after entry",
+      "balance": "Balance reading",
       "account": "Account",
       "toAccount": "To account",
       "description": "Description",

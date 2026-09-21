@@ -41,7 +41,11 @@ func NewEntryStore(pool *pgxpool.Pool) *EntryStore { return &EntryStore{pool: po
 // account) — see design.md's "Entry gains account_currency" decision,
 // extended by add-self-transfer's design.md to the receiving side.
 func entryColsFor(table string) string {
-	return `id::text, created_by::text, account_id::text, to_account_id::text, kind, amount, balance_reading, booking_timestamp, title,
+	return `id::text, created_by::text, account_id::text, to_account_id::text, kind, amount,
+	COALESCE((SELECT SUM(previous.amount) FROM entry_legs AS previous
+		WHERE previous.account_id = ` + table + `.account_id
+		AND (previous.booking_timestamp, previous.id) <= (` + table + `.booking_timestamp, ` + table + `.id)), 0),
+	balance_reading, booking_timestamp, title,
 	COALESCE(description, ''), category_id::text, COALESCE(counterparty, ''), COALESCE(location, ''), created_at, updated_at,
 	COALESCE((SELECT array_agg(tag_id::text) FROM entry_tags WHERE entry_id = ` + table + `.id), '{}'),
 	COALESCE((SELECT COALESCE(display_name, email) FROM users WHERE users.id = ` + table + `.created_by), ''),
@@ -63,7 +67,7 @@ var entryCols = entryColsFor("entries")
 func scanEntryRow(row pgx.Row, extra ...any) (entry.Entry, error) {
 	var e entry.Entry
 	var kind string
-	dest := []any{&e.ID, &e.CreatedBy, &e.AccountID, &e.ToAccountID, &kind, &e.Amount, &e.Balance, &e.BookingTimestamp, &e.Title,
+	dest := []any{&e.ID, &e.CreatedBy, &e.AccountID, &e.ToAccountID, &kind, &e.Amount, &e.AfterBalance, &e.Balance, &e.BookingTimestamp, &e.Title,
 		&e.Description, &e.CategoryID, &e.Counterparty, &e.Location, &e.CreatedAt, &e.UpdatedAt, &e.TagIDs, &e.CreatedByName,
 		&e.AccountCurrency, &e.ToAccountName, &e.ToAccountCurrency, &e.RecurringTransactionID}
 	err := row.Scan(append(dest, extra...)...)

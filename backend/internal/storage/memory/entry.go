@@ -53,6 +53,23 @@ func (s *EntryStore) legsLocked() []entryRow {
 	return legs
 }
 
+// withAfterBalanceLocked returns row with the running balance immediately
+// after its account-facing leg. seq is the memory store's equivalent of the
+// production entries.id tie-break for equal booking timestamps.
+func (s *EntryStore) withAfterBalanceLocked(row entryRow) entry.Entry {
+	var balance int64
+	for _, candidate := range s.legsLocked() {
+		if candidate.e.AccountID != row.e.AccountID ||
+			candidate.e.BookingTimestamp.After(row.e.BookingTimestamp) ||
+			(candidate.e.BookingTimestamp.Equal(row.e.BookingTimestamp) && candidate.seq > row.seq) {
+			continue
+		}
+		balance += candidate.e.Amount
+	}
+	row.e.AfterBalance = balance
+	return row.e
+}
+
 // EntryStore is the in-memory implementation of entry.Store — the default
 // for domain and handler tests and for local runs without a database. Safe
 // for concurrent use.
@@ -107,7 +124,7 @@ func (s *EntryStore) Create(_ context.Context, createdBy string, in entry.New) (
 	if e.Kind == entry.KindSelfTransfer {
 		s.recomputeFromLocked(*e.ToAccountID, e.BookingTimestamp, s.seq, 0)
 	}
-	return s.rows[e.ID].e, nil
+	return s.withAfterBalanceLocked(s.rows[e.ID]), nil
 }
 
 func (s *EntryStore) Get(_ context.Context, id string) (entry.Entry, error) {
@@ -117,7 +134,7 @@ func (s *EntryStore) Get(_ context.Context, id string) (entry.Entry, error) {
 	if !ok || row.e.DeletedAt != nil {
 		return entry.Entry{}, entry.ErrNotFound
 	}
-	return row.e, nil
+	return s.withAfterBalanceLocked(row), nil
 }
 
 func (s *EntryStore) Update(_ context.Context, id string, upd entry.Update) (entry.Entry, error) {
@@ -201,7 +218,7 @@ func (s *EntryStore) Update(_ context.Context, id string, upd entry.Update) (ent
 		}
 	}
 
-	return s.rows[id].e, nil
+	return s.withAfterBalanceLocked(s.rows[id]), nil
 }
 
 func (s *EntryStore) SoftDelete(_ context.Context, id string) error {
@@ -288,7 +305,7 @@ func (s *EntryStore) ConvertToSelfTransfer(_ context.Context, id, toAccountID st
 	s.recomputeFromLocked(newAccountID, oldTS, newSeq, 0)
 	s.recomputeFromLocked(newToAccountID, oldTS, newSeq, 0)
 
-	return s.rows[newEntry.ID].e, nil
+	return s.withAfterBalanceLocked(s.rows[newEntry.ID]), nil
 }
 
 // comparePos orders two (booking_timestamp, seq) positions: -1 if the first
@@ -501,7 +518,7 @@ func (s *EntryStore) List(_ context.Context, f entry.Filter) ([]entry.Entry, *en
 
 	out := make([]entry.Entry, len(rows))
 	for i, row := range rows {
-		out[i] = row.e
+		out[i] = s.withAfterBalanceLocked(row)
 	}
 	return out, next, nil
 }

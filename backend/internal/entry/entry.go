@@ -151,26 +151,30 @@ func (r OriginalAccountRole) valid() bool {
 // CreatedByName already follow — a caller who can only see AccountID still
 // needs to know where the money went and in what currency.
 type Entry struct {
-	ID                string    `json:"id"`
-	AccountID         string    `json:"account_id"`
-	AccountCurrency   string    `json:"account_currency,omitempty"`
-	ToAccountID       *string   `json:"to_account_id,omitempty"`
-	ToAccountName     string    `json:"to_account_name,omitempty"`
-	ToAccountCurrency string    `json:"to_account_currency,omitempty"`
-	Kind              Kind      `json:"kind"`
-	Amount            int64     `json:"amount"`
-	Balance           *int64    `json:"balance,omitempty"`
-	BookingTimestamp  time.Time `json:"booking_timestamp"`
-	Title             string    `json:"title"`
-	Description       string    `json:"description,omitempty"`
-	CategoryID        *string   `json:"category_id,omitempty"`
-	Counterparty      string    `json:"counterparty,omitempty"`
-	Location          string    `json:"location,omitempty"`
-	TagIDs            []string  `json:"tag_ids"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
-	CreatedBy         string    `json:"created_by"`
-	CreatedByName     string    `json:"created_by_name,omitempty"`
+	ID                string  `json:"id"`
+	AccountID         string  `json:"account_id"`
+	AccountCurrency   string  `json:"account_currency,omitempty"`
+	ToAccountID       *string `json:"to_account_id,omitempty"`
+	ToAccountName     string  `json:"to_account_name,omitempty"`
+	ToAccountCurrency string  `json:"to_account_currency,omitempty"`
+	Kind              Kind    `json:"kind"`
+	Amount            int64   `json:"amount"`
+	// AfterBalance is the account's running balance immediately after this
+	// entry's leg has been applied. For a self-transfer it is expressed from
+	// the listed AccountID's perspective, just like Amount.
+	AfterBalance     int64     `json:"after_balance"`
+	Balance          *int64    `json:"balance,omitempty"`
+	BookingTimestamp time.Time `json:"booking_timestamp"`
+	Title            string    `json:"title"`
+	Description      string    `json:"description,omitempty"`
+	CategoryID       *string   `json:"category_id,omitempty"`
+	Counterparty     string    `json:"counterparty,omitempty"`
+	Location         string    `json:"location,omitempty"`
+	TagIDs           []string  `json:"tag_ids"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	CreatedBy        string    `json:"created_by"`
+	CreatedByName    string    `json:"created_by_name,omitempty"`
 	// RecurringTransactionID is the recurring transaction this entry was
 	// created from or has been linked to, or nil. See design.md of
 	// add-recurring-transactions: settable at creation or via update

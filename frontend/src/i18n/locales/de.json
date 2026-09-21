@@ -947,7 +947,8 @@
     "entry": {
       "bookedAt": "Gebucht",
       "amount": "Betrag",
-      "balance": "Saldo danach",
+      "afterBalance": "Kontostand nach Buchung",
+      "balance": "Kontostandserfassung",
       "account": "Konto",
       "toAccount": "Zielkonto",
       "description": "Beschreibung",
