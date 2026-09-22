@@ -185,7 +185,11 @@ function EntriesListPage() {
     });
   }, []);
 
-  usePersistedListFilters(LAST_FILTERS_KEY, search, navigate);
+  const { restoring } = usePersistedListFilters(
+    LAST_FILTERS_KEY,
+    search,
+    navigate,
+  );
 
   const searchKey = JSON.stringify({ ...search, weekStart });
 
@@ -207,6 +211,7 @@ function EntriesListPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: searchKey is the stable dependency; search itself is a new object each render.
   useEffect(() => {
+    if (restoring) return;
     setQDraft(search.q ?? "");
     setSelectedIds(new Set());
     setLoading(true);
@@ -222,7 +227,7 @@ function EntriesListPage() {
     return () => {
       cancelled = true;
     };
-  }, [searchKey]);
+  }, [searchKey, restoring]);
 
   const previewKey = JSON.stringify({
     accountId: search.account_id,
@@ -234,6 +239,7 @@ function EntriesListPage() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: previewKey is the stable dependency for the values it embeds.
   useEffect(() => {
+    if (restoring) return;
     if (!showUpcoming) {
       setPreviewItems(null);
       return;
@@ -251,7 +257,7 @@ function EntriesListPage() {
     return () => {
       cancelled = true;
     };
-  }, [previewKey]);
+  }, [previewKey, restoring]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: loadMore is re-created each render and closes over current state; re-subscribing on it would just re-run this identically.
   useEffect(() => {

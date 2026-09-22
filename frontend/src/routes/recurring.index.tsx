@@ -86,7 +86,11 @@ function RecurringTransactionsList() {
   const { t, i18n } = useTranslation();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: "/recurring" });
-  usePersistedListFilters(LAST_FILTERS_KEY, search, navigate);
+  const { restoring } = usePersistedListFilters(
+    LAST_FILTERS_KEY,
+    search,
+    navigate,
+  );
   const includeSelfTransfer = search.include_self_transfer === true;
   const bothLegs =
     includeSelfTransfer && search.self_transfer_both_legs === true;
@@ -107,6 +111,7 @@ function RecurringTransactionsList() {
   } = search;
 
   useEffect(() => {
+    if (restoring) return;
     // The list and the summary always go out with the same filters, so the
     // totals below the table are always the totals of the rows in it.
     // account_id is repeatable on the wire; this page sends at most one.
@@ -137,7 +142,7 @@ function RecurringTransactionsList() {
     return () => {
       cancelled = true;
     };
-  }, [accountID, categoryID, tagID, includeSelfTransfer, bothLegs]);
+  }, [accountID, categoryID, tagID, includeSelfTransfer, bothLegs, restoring]);
 
   // Every control patches the search rather than replacing it, so setting
   // one filter never silently drops another.
