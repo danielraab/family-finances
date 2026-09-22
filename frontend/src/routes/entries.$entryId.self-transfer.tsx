@@ -83,7 +83,7 @@ function ConvertToSelfTransfer() {
       setError(t("entries.convertSelfTransfer.saveError"));
       return;
     }
-    navigate({ to: "/entries", search: { last: true } });
+    navigate({ to: "/entries" });
   }
 
   if (entry === undefined) {

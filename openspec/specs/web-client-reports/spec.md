@@ -92,33 +92,39 @@ up), since reports are read-only.
 
 ### Requirement: The report has no default date range
 
-When `/reports` is opened with no date-range parameter (`range`, `from`, or
-`to`) present in the URL, the report SHALL apply no date filter — the
-date-range filter's dropdown SHALL show "Custom" selected with both bounds
-empty, matching its behavior before the shared date-range filter existed.
+The report SHALL apply no date filter when `/reports` is opened with no
+date-range parameter (`range`, `from`, or `to`) present in the URL and no
+filter state is restored from browser-local storage (see "Returning to the
+report restores the last-applied filters") — the date-range filter's
+dropdown SHALL show "All time" selected with both bounds empty and
+disabled, naming the unrestricted range that is in effect.
 
-#### Scenario: Opening reports with no filters applies no date restriction
+#### Scenario: Opening reports with no filters and nothing persisted applies no date restriction
 
-- **WHEN** an authenticated visitor opens `/reports` with no `range`,
-  `from`, or `to` parameter and generates a report
+- **WHEN** an authenticated visitor with no previously persisted filter
+  state opens `/reports` with no `range`, `from`, or `to` parameter and
+  generates a report
 - **THEN** the results are not restricted by date, and the date-range
-  filter shows "Custom" selected with both fields empty
+  filter shows "All time" selected with both fields empty
 
 ### Requirement: The report's filter state lives in the URL
 
 `/reports` SHALL represent its category-or-tag selection (including the
 subcategories checkbox), account, and date-range filters as typed URL
 search parameters, readable and writable through TanStack Router's
-search-param APIs. Changing a control SHALL update the URL immediately.
-Reloading a URL with search parameters SHALL restore the same filter
-selections without generating a report.
+search-param APIs. Changing a control SHALL update the URL immediately, and
+SHALL also write the same state to browser-local storage, keyed per
+visitor's browser (not synced to the account or the backend) — see
+"Returning to the report restores the last-applied filters" for when that
+stored state is read back. Reloading a URL with search parameters SHALL
+restore the same filter selections without generating a report.
 
 #### Scenario: Changing a filter updates the URL without generating a report
 
 - **WHEN** an authenticated visitor changes the category, tag, account, or
   date-range control
-- **THEN** the corresponding URL search parameter changes to match, and no
-  request is sent
+- **THEN** the corresponding URL search parameter changes to match, the
+  same state is written to browser-local storage, and no request is sent
 
 #### Scenario: A filtered view's controls survive a reload
 
@@ -126,6 +132,44 @@ selections without generating a report.
   reloads the page
 - **THEN** the same filter selections are shown in the controls, but the
   report is not automatically regenerated
+
+### Requirement: Returning to the report restores the last-applied filters
+
+`/reports` SHALL restore the visitor's most recently persisted filter state
+into its draft controls when it is arrived at with a completely bare URL —
+no `category_id`, `include_subcategories`, `tag_id`, `account_id`, `range`,
+`from`, `to`, `show_recurring`, `sort`, or `dir` parameter present at all —
+replacing the URL rather than leaving the bare arrival in browser history,
+if any state has been persisted. This applies to any ordinary navigation to
+bare `/reports` (a sidebar link, a link from elsewhere in the app).
+Arriving with any explicit parameter already present SHALL NOT be
+overridden by persisted state. Restoring persisted filters SHALL NOT itself
+generate a report — "A report is only generated on explicit action"
+applies exactly as it does to a bookmarked or reloaded URL. When nothing
+has been persisted yet, a bare arrival SHALL fall back to the default view
+(see "The report has no default date range").
+
+#### Scenario: A sidebar click restores the last-applied filters
+
+- **WHEN** an authenticated visitor sets a category filter and a date range
+  on `/reports`, navigates elsewhere in the app, then clicks "Reports" in
+  the sidebar
+- **THEN** they land on `/reports` with the same category filter and date
+  range shown in the controls, but no report is automatically generated
+
+#### Scenario: No persisted state falls back to the default view
+
+- **WHEN** an authenticated visitor with nothing yet persisted opens a bare
+  `/reports`
+- **THEN** the default view applies, as described in "The report has no
+  default date range"
+
+#### Scenario: An explicit link is not overridden by persisted state
+
+- **WHEN** an authenticated visitor with a persisted account filter follows
+  a link to `/reports?category_id={id}`
+- **THEN** the report's controls are filtered only by that category, not
+  also by the previously persisted account
 
 ### Requirement: A report is only generated on explicit action
 
@@ -199,6 +243,10 @@ display the sum for each currency present among the results, from
 no entries, the page SHALL show text indicating that, distinct from the
 pre-generation empty state.
 
+Each result row's entry title SHALL open that entry's read-only summary
+modal (per `web-client-entries`) when activated, rather than being
+inert text.
+
 #### Scenario: A single-currency report shows one sum
 
 - **WHEN** a generated report's matching entries all belong to
@@ -219,16 +267,75 @@ pre-generation empty state.
   filters, distinct from the pre-generation prompt shown before "Generate
   report" has ever been activated
 
+#### Scenario: A result row's title opens the entry summary
+
+- **WHEN** the visitor activates an entry's title in the results table
+- **THEN** that entry's read-only summary modal opens and the report's
+  results are not navigated away from
+
 ### Requirement: A linked entry shows the same recurring-transaction badge in report results
 
 The `/reports` results table SHALL show the same recurring-transaction
 badge `web-client-entries` defines for the ledger, on any result entry
-whose `recurring_transaction_id` is set, navigating to that recurring
-transaction's edit page when activated.
+whose `recurring_transaction_id` is set, opening that recurring
+transaction's read-only summary modal when activated.
 
 #### Scenario: Report result shows the badge
 
 - **WHEN** a generated report's results include an entry with a non-null
   `recurring_transaction_id`
 - **THEN** its row in the results table shows the recurring-transaction
-  badge, linking to that recurring transaction's edit page
+  badge
+
+#### Scenario: The badge opens the recurring summary
+
+- **WHEN** the visitor activates that badge
+- **THEN** the recurring transaction's read-only summary modal opens and
+  the browser does not navigate
+
+### Requirement: An overdue previewed occurrence is visually distinguished but stays in chronological order
+
+A row in the report's Upcoming block whose `overdue` is `true` SHALL
+render with a distinct, muted background tint from a non-overdue row, and
+SHALL carry the same legible, never-truncated overdue marker
+`web-client-entries` defines for its own Upcoming block. It SHALL NOT be
+moved out of its normal position in the block's date-ascending order.
+
+#### Scenario: An overdue row is tinted, not reordered
+
+- **WHEN** the report's Upcoming block includes one overdue row among
+  several non-overdue rows
+- **THEN** the overdue row renders with the distinct background tint and
+  its overdue marker in full, in its correct chronological position, not
+  pulled to the top or bottom
+
+### Requirement: Each Upcoming row offers the existing Create transaction action, prefilled to that occurrence's date
+
+Each row in the report's Upcoming block SHALL offer a "Create transaction"
+action, navigating to `/entries/new?recurring_transaction_id={id}
+&booking_timestamp={that row's booking_timestamp}` (see
+`web-client-recurring-transactions`'s date-override requirement), and
+rendering as a plus glyph alone below the `sm` breakpoint exactly as
+`web-client-entries`' Upcoming block does.
+
+#### Scenario: Activating Create transaction on a report's Upcoming row
+
+- **WHEN** an authenticated visitor activates "Create transaction" on a
+  report's Upcoming block row
+- **THEN** the client navigates to `/entries/new` with that row's
+  `recurring_transaction_id` and `booking_timestamp`, and the form
+  prefills accordingly
+
+### Requirement: A report's Upcoming row title opens the recurring summary
+
+Each row in the report's Upcoming block SHALL render its title as an
+activatable control opening that row's recurring transaction in the
+read-only recurring summary modal — the same summary the recurring badge
+in the report's results table already opens.
+
+#### Scenario: Activating the title of a report's Upcoming row
+
+- **WHEN** an authenticated visitor activates the title of a report's
+  Upcoming block row
+- **THEN** that recurring transaction's read-only summary modal opens,
+  with no navigation away from the report

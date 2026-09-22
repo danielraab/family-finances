@@ -174,6 +174,11 @@ each row showing at least its date, title, account (per
 sign-colored amount. The card SHALL show explanatory empty text when no
 entry matches.
 
+Each row's entry title SHALL open that entry's read-only summary modal
+(per `web-client-entries`) when activated, rather than being inert text.
+Activating it SHALL NOT enter the dashboard's edit mode or trigger the
+card's own controls.
+
 #### Scenario: An entry list card shows recent matching entries
 
 - **WHEN** an `entry_list` card's filter matches 15 entries
@@ -184,6 +189,78 @@ entry matches.
 - **WHEN** an `entry_list` card's filter matches no entries
 - **THEN** the card shows explanatory empty-state text instead of an empty
   list
+
+#### Scenario: A card row's title opens the entry summary
+
+- **WHEN** the visitor activates an entry's title in an `entry_list` card
+- **THEN** that entry's read-only summary modal opens, and the dashboard
+  is not navigated away from
+
+### Requirement: An overdue previewed occurrence on an entry_list card is visually distinguished but stays in order
+
+An `entry_list` card's Upcoming block SHALL render an `overdue` row with
+the same distinct, muted background tint and the same never-truncated
+overdue marker `web-client-entries` defines for its own Upcoming block,
+in its normal date-ascending position.
+
+#### Scenario: An overdue row is tinted, not reordered
+
+- **WHEN** an `entry_list` card's Upcoming block includes an overdue row
+- **THEN** it renders tinted, with its overdue marker shown in full, in
+  its correct chronological position
+
+### Requirement: Each entry_list card's Upcoming row offers the existing Create transaction action
+
+Each row in an `entry_list` card's Upcoming block SHALL offer the same
+"Create transaction" action `web-client-entries`'s Upcoming block offers,
+navigating to `/entries/new` with that row's `recurring_transaction_id`
+and `booking_timestamp`, and rendering as a plus glyph alone below the
+`sm` breakpoint exactly as that block does.
+
+#### Scenario: Activating Create transaction on a card's Upcoming row
+
+- **WHEN** a visitor activates "Create transaction" on an `entry_list`
+  card's Upcoming block row
+- **THEN** the client navigates to `/entries/new` with that row's
+  `recurring_transaction_id` and `booking_timestamp`
+
+#### Scenario: The action is icon-only on a phone
+
+- **WHEN** an `entry_list` card's Upcoming block is rendered below the
+  `sm` breakpoint
+- **THEN** each row's Create transaction action shows the plus glyph
+  without its label, and its accessible name is still the translated
+  label
+
+### Requirement: An entry_list card's Upcoming row title opens the recurring summary
+
+Each row in an `entry_list` card's Upcoming block SHALL render its title
+as an activatable control opening that row's recurring transaction in the
+read-only recurring summary modal, the same summary the card's real entry
+rows already reach through an entry's own summary.
+
+#### Scenario: Activating the title of a card's Upcoming row
+
+- **WHEN** a visitor activates the title of an `entry_list` card's
+  Upcoming block row
+- **THEN** that recurring transaction's read-only summary modal opens,
+  with no navigation away from the dashboard
+
+### Requirement: An entry_list card's Upcoming block is not drawn as a box inside the card
+
+The Upcoming block rendered inside an `entry_list` card SHALL NOT draw
+its own border, rounding or padding inside the card's. It SHALL keep its
+heading and SHALL be separated from the card's real entry list by a rule.
+The same block rendered on `/entries` and `/reports`, where it stands on
+its own, SHALL keep its bordered box.
+
+#### Scenario: The block renders without a nested box on the dashboard
+
+- **WHEN** an `entry_list` card with the preview enabled renders its
+  Upcoming block
+- **THEN** the block renders with its heading and a rule separating it
+  from the card's entry list, and with no border of its own inside the
+  card's border
 
 ### Requirement: Bar chart card shows an income/outcome chart for an account or filter
 
@@ -220,21 +297,82 @@ previous all-accounts chart did.
   reloads `/home`
 - **THEN** the card again opens on the current year
 
-### Requirement: A query stat, entry list, or bar chart card's heading is a customizable link through to /reports
+### Requirement: Line chart card shows a running-balance chart for an account or all accounts
 
-`query_stat`, `entry_list`, and `bar_chart` cards SHALL accept an
-optional `title` in their config. The card's heading SHALL show that
-`title` when set, falling back to the same generated filter summary shown
-today (e.g. the category/tag/account name, or "All accounts") when unset.
-This heading SHALL always be a link to `/reports`, prefilling its
+A `line_chart` card SHALL show a running-balance line chart via
+`GET /api/entries/balance-series`, scoped to its configured `account_id`
+(optional — omitted means every account the visitor owns, summed per
+currency) sampled per day over a selected month, with a previous/next-
+month pager. The displayed month SHALL default to the current one and is
+not persisted across reloads. One chart SHALL render per currency present
+in the response, each headed by its currency code when more than one is
+present, mirroring how a `bar_chart` card renders one chart per currency.
+
+When the card's `config.show_recurring_preview` is `true`, each currency's
+chart additionally overlays a projected balance line, computed and
+rendered the same way the account details page's own balance chart does
+(see `web-client-accounts`): fetch `GET /api/recurring-transactions/
+preview` scoped to the card's `account_id` (or every account the visitor
+owns, matching the card's own unscoped case), bounded by the visitor's
+`recurring_preview_horizon` setting, excluding overdue occurrences, and
+draw the resulting cumulative projection as a dashed continuation of the
+real line from today onward.
+
+#### Scenario: A line chart card defaults to the current month
+
+- **WHEN** a `line_chart` card is rendered
+- **THEN** it shows the running balance for each day of the current
+  calendar month
+
+#### Scenario: A line chart card can be scoped to one account
+
+- **WHEN** a `line_chart` card's config sets `account_id` to a single
+  account
+- **THEN** its line reflects only that account's running balance
+
+#### Scenario: An unscoped line chart card sums every account per currency
+
+- **WHEN** a `line_chart` card's config has no `account_id`
+- **THEN** its line reflects every account the visitor owns, summed per
+  currency, with one chart rendered per currency present
+
+#### Scenario: Switching months does not persist across reloads
+
+- **WHEN** a visitor pages a `line_chart` card to a previous month and
+  then reloads `/home`
+- **THEN** the card again opens on the current month
+
+#### Scenario: A line chart card with recurring preview enabled shows a projected overlay
+
+- **WHEN** a `line_chart` card has `config.show_recurring_preview: true`
+  and its account has an upcoming, non-overdue recurring transaction
+- **THEN** the card's chart draws a dashed projected line from today's
+  balance forward, reflecting that occurrence's amount once its date
+  passes
+
+#### Scenario: A line chart card without recurring preview shows only the real line
+
+- **WHEN** a `line_chart` card has no `show_recurring_preview` set (the
+  default)
+- **THEN** the card's chart shows only the real balance line, with no
+  projected overlay or extra legend entry
+
+### Requirement: A query stat, entry list, bar chart, or line chart card's heading is a customizable link through to /reports
+
+`query_stat`, `entry_list`, `bar_chart`, and `line_chart` cards SHALL
+accept an optional `title` in their config. The card's heading SHALL show
+that `title` when set, falling back to the same generated filter summary
+shown today (e.g. the category/tag/account name, or "All accounts") when
+unset. This heading SHALL always be a link to `/reports`, prefilling its
 account/category/include-subcategories/tag/date-range controls from the
 card's own filter (a `bar_chart` card's `unit`/`columns` have no
-equivalent on `/reports` and are not carried over). Activating it SHALL
-NOT itself run the report — `/reports` still requires its own explicit
-"Generate report" activation, exactly as it does today for a visitor who
-arrives there directly. `account_stat` cards are unaffected — their
-heading remains the account's own name, linking to that account's details
-page as before, with no `title` option.
+equivalent on `/reports` and are not carried over; a `line_chart` card
+carries over only its `account_id`, having no category/tag/range/unit of
+its own). Activating it SHALL NOT itself run the report — `/reports`
+still requires its own explicit "Generate report" activation, exactly as
+it does today for a visitor who arrives there directly. `account_stat`
+cards are unaffected — their heading remains the account's own name,
+linking to that account's details page, with no `title` option.
 
 #### Scenario: A custom title renders in place of the generated summary
 
@@ -244,8 +382,8 @@ page as before, with no `title` option.
 
 #### Scenario: An unset title falls back to the generated filter summary
 
-- **WHEN** a `query_stat`, `entry_list`, or `bar_chart` card has no
-  `config.title`
+- **WHEN** a `query_stat`, `entry_list`, `bar_chart`, or `line_chart` card
+  has no `config.title`
 - **THEN** the card's heading shows the same generated filter summary it
   showed before `title` existed
 
@@ -262,21 +400,28 @@ page as before, with no `title` option.
 - **THEN** its heading is still the account's own name, linking to that
   account's details page, with no `title` config option offered
 
-### Requirement: Dashboard cards lay out as a grid, with bar chart cards always full width and entry list width configurable
+### Requirement: Dashboard cards lay out as a grid, with bar chart and line chart cards always full width and entry list width configurable
 
-`bar_chart` cards SHALL each render alone, full width, one per row.
-Every other card type (`account_stat`, `query_stat`, `entry_list`) SHALL
-flow in a responsive grid of up to 4 cards per row depending on viewport
-width, matching the breakpoint pattern the account-cards grid already
-used. `account_stat` and `query_stat` cards always occupy exactly one
-column of that grid. An `entry_list` card's width is configurable via its
-`columns` config (`2`-`4`, default `2`) — how many of the grid's columns
-it spans; every other card type's width is fixed by its type, and only
-position among same-row cards is affected by reordering.
+`bar_chart` and `line_chart` cards SHALL each render alone, full width,
+one per row. Every other card type (`account_stat`, `query_stat`,
+`entry_list`) SHALL flow in a responsive grid of up to 4 cards per row
+depending on viewport width, matching the breakpoint pattern the
+account-cards grid already used. `account_stat` and `query_stat` cards
+always occupy exactly one column of that grid. An `entry_list` card's
+width is configurable via its `columns` config (`2`-`4`, default `2`) —
+how many of the grid's columns it spans; every other card type's width is
+fixed by its type, and only position among same-row cards is affected by
+reordering.
 
 #### Scenario: A bar chart card spans the full row
 
 - **WHEN** `/home` renders a `bar_chart` card
+- **THEN** it occupies its own full-width row, with no other card beside
+  it
+
+#### Scenario: A line chart card spans the full row
+
+- **WHEN** `/home` renders a `line_chart` card
 - **THEN** it occupies its own full-width row, with no other card beside
   it
 
@@ -323,16 +468,20 @@ the no-accounts empty state.
 
 `/home` SHALL offer an edit-mode toggle. While active, an "Add card"
 control SHALL open a type picker (`account_stat`/`query_stat`/
-`entry_list`/`bar_chart`), followed by that type's config form — reusing
-`/reports`' existing account/category/tag `<select>`s and
+`entry_list`/`bar_chart`/`line_chart`), followed by that type's config
+form — reusing `/reports`' existing account/category/tag `<select>`s and
 `DateRangeFilter` for the filter-bearing types. For `query_stat`/
-`entry_list`/`bar_chart`, the form additionally offers an optional
-free-text title field (absent for `account_stat`, which has none). The
-`entry_list` form additionally offers a named width choice (e.g.
-"Narrow"/"Wide"/"Full width", mapping to `columns` `2`/`3`/`4`)
-defaulting to the narrowest option. Submitting the form SHALL create the
-card (`POST /api/dashboard/cards`) at the end of the visitor's list and
-render it immediately.
+`entry_list`/`bar_chart`/`line_chart`, the form additionally offers an
+optional free-text title field (absent for `account_stat`, which has
+none); `line_chart`'s form offers only the account picker, title field,
+and the recurring-preview toggle below, with no category/tag/date-range/
+unit controls, since its config accepts none of them. The `entry_list`
+form additionally offers a named width choice (e.g. "Narrow"/"Wide"/"Full
+width", mapping to `columns` `2`/`3`/`4`) defaulting to the narrowest
+option. `entry_list`/`bar_chart`/`line_chart` additionally offer the
+`show_recurring_preview` toggle (see the next requirement). Submitting the
+form SHALL create the card (`POST /api/dashboard/cards`) at the end of the
+visitor's list and render it immediately.
 
 #### Scenario: Adding an account stat card
 
@@ -355,6 +504,14 @@ render it immediately.
 - **THEN** a new `query_stat` card with that filter appears at the end of
   the dashboard
 
+#### Scenario: Adding a line chart card scoped to one account
+
+- **WHEN** a visitor in edit mode picks `line_chart`, selects an account,
+  and submits
+- **THEN** a new `line_chart` card scoped to that account appears at the
+  end of the dashboard, with no category/tag/date-range fields ever
+  offered for it
+
 #### Scenario: Adding a card with a custom title
 
 - **WHEN** a visitor in edit mode picks `entry_list`, enters a custom
@@ -367,6 +524,13 @@ render it immediately.
 - **WHEN** a visitor in edit mode picks `account_stat` and submits without
   selecting an account
 - **THEN** the form shows an inline error and no card is created
+
+#### Scenario: Adding a line chart card with recurring assumptions enabled
+
+- **WHEN** a visitor in edit mode picks `line_chart`, enables the
+  recurring-preview toggle, and submits
+- **THEN** the new card is created with `config.show_recurring_preview:
+  true` and immediately renders its projected balance overlay
 
 ### Requirement: Edit mode lets the visitor remove a card
 

@@ -17,12 +17,15 @@ for the category tree, `entry-tags` for per-user tags, and
 Every entry SHALL carry a required `account_id`, and a required, immutable
 `created_by` set to the authenticated caller at creation — the user who
 logged it, which is not necessarily the account's real owner once
-`account-sharing` is in effect. Reading an entry (directly, in a listing, or
-in balance/summary computation) SHALL be permitted for any caller who holds
-at least `view` permission on the entry's parent account, per
-`account-sharing`; an entry on an account the caller has no permission on,
-or whose parent account is soft-deleted, SHALL behave as if it does not
-exist (`404`).
+`account-sharing` is in effect. A `self_transfer` entry additionally carries
+a required `to_account_id`, a second parent account (see "A self-transfer
+entry moves money between two accounts"); every other kind's `to_account_id`
+is null. Reading an entry (directly, in a listing, or in balance/summary
+computation) SHALL be permitted for any caller who holds at least `view`
+permission on the entry's parent account — for a `self_transfer`, either
+parent account SHALL be sufficient. An entry none of whose parent accounts
+the caller has any permission on, or whose only parent account(s) are
+soft-deleted, SHALL behave as if it does not exist (`404`).
 
 #### Scenario: Creating an entry against an account the caller has append+ permission on
 
@@ -66,6 +69,12 @@ exist (`404`).
 - **THEN** the response is `200` with an empty `items` list — the account's
   entries are no longer reachable through it
 
+#### Scenario: A self-transfer is visible via either of its two accounts
+
+- **WHEN** a caller has permission on only one of a `self_transfer` entry's
+  `account_id`/`to_account_id` pair and requests that account's entries
+- **THEN** the entry is included in the response
+
 ### Requirement: Editing or deleting an entry is gated by permission tier and, for append, by who created it
 
 `PATCH /api/entries/{id}` and `DELETE /api/entries/{id}` SHALL require the
@@ -103,6 +112,49 @@ account, regardless of who created it.
   `PATCH /api/entries/{id}` or `DELETE /api/entries/{id}` on any entry on
   the account
 - **THEN** the request is rejected (`403`) and the entry is unchanged
+
+### Requirement: Editing a self-transfer requires current permission on both accounts; deleting requires it on either
+
+`PATCH /api/entries/{id}` on a `self_transfer` entry SHALL require the
+caller to currently hold at least `append` permission on both `account_id`
+and `to_account_id` — stricter than a `transaction`'s edit rule, since any
+edit to a self-transfer's shared amount necessarily moves balance on both
+accounts at once. A caller who has lost permission on either side (a
+revoked share, or the account since disabled or soft-deleted) SHALL be
+unable to edit the entry at all (`403`), even for fields unrelated to the
+amount or accounts, and even if they still hold `entry_admin`/`owner` on
+the side they do have access to. `DELETE /api/entries/{id}` on a
+`self_transfer` SHALL instead use the same rule as any other entry —
+`entry_admin`/`owner` may delete it, or `append` may delete it if
+`created_by` matches them — evaluated against whichever of the two
+accounts the caller currently holds permission on; it SHALL NOT require
+permission on the other account.
+
+#### Scenario: Editing a self-transfer with append+ on both accounts
+
+- **WHEN** a caller with `append`+ permission on both of a `self_transfer`
+  entry's accounts calls `PATCH /api/entries/{id}`
+- **THEN** the update succeeds
+
+#### Scenario: Editing a self-transfer after losing access to one side is rejected
+
+- **WHEN** a caller's share on one of a `self_transfer` entry's two
+  accounts is revoked, and they then call `PATCH /api/entries/{id}` on it
+  (including a change unrelated to `amount` or either account id)
+- **THEN** the request is rejected (`403`) and the entry is unchanged
+
+#### Scenario: Deleting a self-transfer needs only the accessible side's permission
+
+- **WHEN** a caller holds `entry_admin`/`owner` permission on one of a
+  `self_transfer` entry's two accounts, and no permission at all on the
+  other (revoked or never granted)
+- **THEN** `DELETE /api/entries/{id}` succeeds
+
+#### Scenario: Deleting a self-transfer still respects the append-created-by rule
+
+- **WHEN** a caller with only `append` permission on their accessible side
+  of a `self_transfer` did not create it
+- **THEN** `DELETE /api/entries/{id}` is rejected (`403`)
 
 ### Requirement: A revoked or departed user loses all access to entries they created, immediately
 
@@ -148,23 +200,31 @@ show who logged an entry without a separate lookup.
 - **THEN** `created_by` and `created_by_name` identify the caller,
   consistent with every other entry's shape
 
-### Requirement: An entry is a transaction or a balance adjustment
+### Requirement: An entry is a transaction, a balance adjustment, or a self-transfer
 
 Every entry SHALL carry a required, immutable `kind`, one of `transaction`
-(a relative amount applied to the account's running balance) or
+(a relative amount applied to the account's running balance),
 `balance_adjustment` (a point in time the account's balance is set to a
-known reading). `kind` SHALL NOT be changeable after creation. `account_id`
-MAY be changed after creation — see "An entry can be moved to a different
-account of the same owner".
+known reading), or `self_transfer` (a relative amount moved from one
+account to another — see "A self-transfer entry moves money between two
+accounts"). `kind` SHALL NOT be changeable after creation. `account_id` MAY
+be changed after creation for a `transaction` or `balance_adjustment` — see
+"An entry can be moved to a different account of the same owner" — but not
+for a `self_transfer`, whose two accounts are set at creation and never
+individually reassigned thereafter.
 
-For a `transaction`, `amount` SHALL be the signed value supplied by the
-caller, unchanged from today. For a `balance_adjustment`, the caller SHALL
-supply the absolute reading as `balance`, not `amount`; the entry's `amount`
-SHALL instead be computed automatically as the change from the account's
-balance immediately before that entry (see "A balance adjustment's amount
-is a computed delta from the balance immediately before it"). Supplying
-`amount` for a `balance_adjustment`, or `balance` for a `transaction`, on
-create or update SHALL be rejected.
+For a `transaction` or `self_transfer`, `amount` SHALL be the signed value
+supplied by the caller, unchanged from today; for a `self_transfer`,
+`amount` is signed from `account_id`'s perspective (negative leaves
+`account_id` and arrives at `to_account_id` as the positive equivalent).
+For a `balance_adjustment`, the caller SHALL supply the absolute reading as
+`balance`, not `amount`; the entry's `amount` SHALL instead be computed
+automatically as the change from the account's balance immediately before
+that entry (see "A balance adjustment's amount is a computed delta from
+the balance immediately before it"). Supplying `amount` for a
+`balance_adjustment`, `balance` for a `transaction` or `self_transfer`, or
+`to_account_id` for a `transaction` or `balance_adjustment`, on create or
+update SHALL be rejected.
 
 #### Scenario: Kind is immutable
 
@@ -191,6 +251,74 @@ create or update SHALL be rejected.
   `balance` for an entry whose `kind` is `transaction`
 - **THEN** the request is rejected (`400`) and no entry is created or
   changed
+
+#### Scenario: Supplying to_account_id for a transaction is rejected
+
+- **WHEN** `POST /api/entries` supplies `to_account_id` for a `kind:
+  transaction` or `kind: balance_adjustment` entry
+- **THEN** the request is rejected (`400`) and no entry is created
+
+#### Scenario: A self-transfer's amount is signed from the sending account's perspective
+
+- **WHEN** a `kind: self_transfer` entry is created with `account_id: A`,
+  `to_account_id: B`, and `amount: -10000`
+- **THEN** the response is `201`, `A`'s balance reflects `-10000`, and `B`'s
+  balance reflects `+10000`
+
+### Requirement: A self-transfer entry moves money between two accounts the caller can write to
+
+`POST /api/entries` with `kind: self_transfer` SHALL require `account_id`
+(the sending account) and `to_account_id` (the receiving account), SHALL
+require the caller to hold at least `append` permission on both, and SHALL
+require both accounts to share the same `currency` — a mismatch SHALL be
+rejected (`400`) the same way an unusable `account_id` is rejected for any
+other kind. `account_id` and `to_account_id` SHALL differ; a self-transfer
+naming the same account on both sides SHALL be rejected (`400`). Every response
+carrying a `self_transfer` entry SHALL include `to_account_id`'s resolved
+name and currency (`to_account_name`, `to_account_currency`), resolved
+server-side regardless of the caller's own permission on `to_account_id` —
+the same reasoning `account_id`'s own resolved `account_currency` already
+follows — so a caller who can only see the sending side still sees where
+the money went and in what currency.
+
+#### Scenario: Creating a self-transfer with append+ on both accounts
+
+- **WHEN** a caller with `append`+ permission on both `account_id: A` and
+  `to_account_id: B`, sharing the same currency, calls `POST /api/entries`
+  with `kind: self_transfer`
+- **THEN** the response is `201` with the created entry
+
+#### Scenario: Creating a self-transfer without permission on the receiving account is rejected
+
+- **WHEN** a caller with `append`+ permission on `account_id` but no
+  permission at all on `to_account_id` calls `POST /api/entries` with
+  `kind: self_transfer`
+- **THEN** the request is rejected (`400`) and no entry is created
+
+#### Scenario: Creating a self-transfer with only view permission on either account is rejected
+
+- **WHEN** a caller has only `view` permission on `account_id` or on
+  `to_account_id` and calls `POST /api/entries` with `kind: self_transfer`
+  naming it
+- **THEN** the request is rejected (`400`) and no entry is created
+
+#### Scenario: Cross-currency self-transfer is rejected
+
+- **WHEN** a caller calls `POST /api/entries` with `kind: self_transfer`
+  naming two accounts of different `currency`
+- **THEN** the request is rejected (`400`) and no entry is created
+
+#### Scenario: Self-transfer to the same account is rejected
+
+- **WHEN** a caller calls `POST /api/entries` with `kind: self_transfer`,
+  `account_id` and `to_account_id` naming the same account
+- **THEN** the request is rejected (`400`) and no entry is created
+
+#### Scenario: The receiving account's name and currency are always resolved
+
+- **WHEN** a caller with permission only on a `self_transfer`'s
+  `account_id` (none on `to_account_id`) fetches that entry
+- **THEN** the response includes `to_account_name` and `to_account_currency`
 
 ### Requirement: An entry can be moved to a different account of the same owner
 
@@ -246,11 +374,11 @@ alongside other fields is validated the same as any other
 - **THEN** the response is `200`, the entry's `account_id` is updated, and
   its `amount` is left unchanged — no conversion is applied
 
-### Requirement: A category is required for a transaction, optional for a balance adjustment
+### Requirement: A category is required for a transaction, optional for a balance adjustment or self-transfer
 
 Every entry SHALL reference at most one category. A `transaction` entry
-SHALL have a non-null `category_id`. A `balance_adjustment` entry MAY have a
-null `category_id`.
+SHALL have a non-null `category_id`. A `balance_adjustment` or
+`self_transfer` entry MAY have a null `category_id`.
 
 #### Scenario: Transaction without a category rejected
 
@@ -269,6 +397,12 @@ null `category_id`.
 - **WHEN** `POST /api/entries` creates a `kind: balance_adjustment` entry
   that includes a `category_id`
 - **THEN** the response is `201` and the entry has that `category_id`
+
+#### Scenario: Self-transfer without a category accepted
+
+- **WHEN** `POST /api/entries` creates a `kind: self_transfer` entry with no
+  `category_id`
+- **THEN** the response is `201` and the entry has a null `category_id`
 
 ### Requirement: An entry can only be categorized with its owner's own category
 
@@ -509,9 +643,11 @@ entries) remains unexposed.
 ### Requirement: Entry creation is rejected against a disabled account
 
 `POST /api/entries` SHALL reject creating an entry whose `account_id`
-names an account with `disabled = true` (see `accounts`). This applies only
-to creation — an entry that already existed before its account was
-disabled remains fully readable, editable, and deletable.
+names an account with `disabled = true` (see `accounts`); for a
+`self_transfer`, this SHALL be checked for `to_account_id` as well. This
+applies only to creation — an entry that already existed before one of its
+accounts was disabled remains fully readable, and remains editable/
+deletable per its kind's own permission rule.
 
 #### Scenario: Creating an entry against a disabled account is rejected
 
@@ -524,6 +660,12 @@ disabled remains fully readable, editable, and deletable.
 - **WHEN** an account with existing entries is disabled
 - **THEN** those entries remain listable, editable, and deletable, and
   still count toward the account's balance
+
+#### Scenario: Creating a self-transfer to a disabled account is rejected
+
+- **WHEN** an authenticated user calls `POST /api/entries` with `kind:
+  self_transfer` and a `to_account_id` that is disabled
+- **THEN** the request is rejected (`422`) and no entry is created
 
 ### Requirement: An entry lists filters/sum/flow-summary/balance-series default to every account the caller has any permission on
 
@@ -560,10 +702,11 @@ matching nothing, the same as an unknown id.
 (repeatable; omitted means every non-deleted account the caller owns),
 `category_id` with an optional `category_mode` (`subtree`, the default —
 matches that category and every descendant in the category tree — or
-`exact`, matching only that category), `tag_id`, `kind`, `from`/`to` (an
-inclusive `booking_timestamp` range), and `q` (a case-insensitive
-substring match against `title`, `description`, or `counterparty`). It
-SHALL accept `sort` (`booking_timestamp`, the default, or `amount`) and
+`exact`, matching only that category), `tag_id`, `kind`,
+`recurring_transaction_id`, `from`/`to` (an inclusive `booking_timestamp`
+range), and `q` (a case-insensitive substring match against `title`,
+`description`, or `counterparty`). It SHALL accept `sort`
+(`booking_timestamp`, the default, or `amount`) and
 `dir` (`desc`, the default, or `asc`). It SHALL accept `after`, an opaque
 cursor from a previous response's `next_cursor`, and `limit` (a page
 size). The response SHALL be `{ items, next_cursor }`, where `next_cursor`
@@ -571,6 +714,17 @@ is `null` once no further matching entries remain. Every filter applies
 before pagination; results are always scoped to the caller's own,
 non-deleted accounts' non-deleted entries. `category_mode` without
 `category_id` has no effect.
+
+A `self_transfer` entry SHALL appear once per resolved account (from the
+combination of any explicit `account_id` filter and the caller's own
+visible-accounts scoping) it touches: once, amount as stored, when
+`account_id` alone is in scope; once, amount sign flipped, when
+`to_account_id` alone is in scope; and twice — both of the above — when
+both accounts are in scope at once (for example, an unfiltered listing
+covering every account the caller can see, or an explicit `account_id`
+filter naming both). Every other filter (`category_id`, `tag_id`, `kind`,
+`from`/`to`, `q`) applies identically to both occurrences, since they
+represent the same underlying entry.
 
 #### Scenario: Filtering by account
 
@@ -591,6 +745,12 @@ non-deleted accounts' non-deleted entries. `category_mode` without
   rather than `{parent}` itself
 - **THEN** those child-category entries are excluded from the results, and
   only entries carrying `{parent}` itself are returned
+
+#### Scenario: Filtering by recurring transaction
+
+- **WHEN** `GET /api/entries?recurring_transaction_id={id}` is called
+- **THEN** only entries whose `recurring_transaction_id` equals `{id}` are
+  returned, still scoped to the caller's own visible accounts
 
 #### Scenario: Free-text search matches title or description
 
@@ -622,6 +782,21 @@ non-deleted accounts' non-deleted entries. `category_mode` without
 - **WHEN** a page of results is fetched that reaches the end of the
   matching entries
 - **THEN** `next_cursor` is `null`
+
+#### Scenario: A self-transfer between two accounts in scope is listed twice
+
+- **WHEN** `GET /api/entries` (no `account_id` filter) is called by a
+  caller who can see both accounts of a `self_transfer` entry
+- **THEN** the response's `items` includes that entry twice — once with
+  its stored, negative-from-the-sender amount, once with the sign flipped
+  for the receiving account
+
+#### Scenario: A self-transfer with only one account in scope is listed once
+
+- **WHEN** `GET /api/entries?account_id={id}` is called naming only one
+  side of a `self_transfer` entry
+- **THEN** the response's `items` includes that entry once, with the
+  amount signed for the named account
 
 ### Requirement: The caller's distinct in-use counterparty values are listable for autocomplete
 
@@ -661,10 +836,12 @@ entry.
 `GET /api/entries` (no `sort`, `dir`, `after`, or `limit` — this is an
 aggregate, not a page), scoped the same way to the caller's own,
 non-deleted accounts' non-deleted entries. It SHALL always additionally
-restrict to entries whose `kind` is `transaction`, regardless of whether
-`kind` could otherwise be requested — a `balance_adjustment` is an
-absolute reading, not a categorized delta, and including it in a sum would
-misrepresent the total. The response SHALL be `{ sums, count }`, where
+restrict to entries whose `kind` is `transaction` or `self_transfer` —
+excluding `balance_adjustment`, since an absolute reading is not a
+categorized delta and including it in a sum would misrepresent the total.
+A `self_transfer` in scope of both its accounts contributes to the sum
+twice, once per account, mirroring how `GET /api/entries` lists it twice
+in the same circumstance. The response SHALL be `{ sums, count }`, where
 `sums` is a list of `{ currency, amount }` — one entry per distinct
 currency (from the currency of each matching entry's account) present
 among the matching entries, each `amount` being the sum of those entries'
@@ -706,12 +883,22 @@ across every currency. An empty result SHALL return `{ sums: [], count: 0
 - **THEN** entries carrying a descendant category of `{parent}` are
   excluded from the sum, matching `GET /api/entries` with the same filters
 
+#### Scenario: A self-transfer between two same-currency accounts nets to zero
+
+- **WHEN** `GET /api/entries/summary` (no `account_id` filter) is called
+  by a caller who can see both accounts of a `self_transfer` entry, and
+  those accounts share a currency
+- **THEN** that entry's two contributions to `sums` (one per account) sum
+  to zero for that currency
+
 ### Requirement: Account balance is always computed live
 
 An account's balance at a given point in time SHALL be computed on every
 request, never read from a cached or precomputed value, as the sum of every
-non-deleted entry's `amount` at or before that point in time. This
-reproduces the same result as always resetting to the latest
+non-deleted entry's `amount` at or before that point in time — for an
+entry whose `account_id` is this account, `amount` as stored; for a
+`self_transfer` entry whose `to_account_id` is this account, `amount`
+negated. This reproduces the same result as always resetting to the latest
 `balance_adjustment`'s reading and summing only the transactions after it,
 because a `balance_adjustment`'s own `amount` is defined (see "A balance
 adjustment's amount is a computed delta...") to make the running sum land
@@ -736,6 +923,13 @@ exactly on its `balance` reading at that point.
 - **WHEN** an account has entries both before and after a given timestamp,
   and the balance is requested as of that timestamp
 - **THEN** only entries at or before that timestamp are included
+
+#### Scenario: A self-transfer increases the receiving account's balance
+
+- **WHEN** account `B` receives a `self_transfer` of `amount: -10000` from
+  account `A` (i.e. `account_id: A`, `to_account_id: B`)
+- **THEN** `B`'s balance, requested as of at or after the entry, includes
+  `+10000` from it
 
 ### Requirement: A balance adjustment's amount is a computed delta from the balance immediately before it
 
@@ -812,10 +1006,14 @@ SHALL be summed into `income`, and the absolute value of entries whose
 `amount` is negative SHALL be summed into `outcome`, each grouped per
 currency (the currency of the entry's account) the same way
 `GET /api/entries/summary` already groups its sum. This applies uniformly
-to both `transaction` and `balance_adjustment` entries — unlike
-`GET /api/entries/summary`, a `balance_adjustment`'s `amount` (now a
-delta) is included. A bucket with no matching entries SHALL still appear,
-with empty `income` and `outcome` lists.
+to `transaction`, `balance_adjustment`, and `self_transfer` entries —
+unlike `GET /api/entries/summary`, a `balance_adjustment`'s `amount` (now a
+delta) is included. A `self_transfer` in scope of both its accounts
+contributes to each account's own bucket independently — as stored for
+`account_id`, sign flipped for `to_account_id` — mirroring how
+`GET /api/entries` and `GET /api/entries/summary` both treat it. A bucket
+with no matching entries SHALL still appear, with empty `income` and
+`outcome` lists.
 
 #### Scenario: Monthly buckets for a year
 
@@ -894,6 +1092,13 @@ with empty `income` and `outcome` lists.
 - **THEN** each bucket reflects only entries matching all three filters at
   once, the same intersection semantics `GET /api/entries/summary` already
   applies
+
+#### Scenario: A self-transfer contributes to both accounts' buckets
+
+- **WHEN** a `self_transfer` moves money from account `A` to account `B`,
+  both within the caller's resolved account scope
+- **THEN** `A`'s bucket includes the outgoing amount in `outcome` and `B`'s
+  bucket includes the incoming amount in `income`, for the same period
 
 ### Requirement: A running-balance series can be sampled per day over a month
 

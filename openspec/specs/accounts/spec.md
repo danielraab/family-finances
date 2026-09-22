@@ -27,6 +27,21 @@ SHALL NOT be before `opening_date`. `type` SHALL be accepted on
 `POST /api/accounts` and `PATCH /api/accounts/{id}` and SHALL appear on
 every response that carries an `Account`.
 
+`currency` SHALL become immutable once the account has any entry (of any
+`kind`) recorded against it, or is named as either side of any
+non-deleted `self_transfer` recurring transaction, regardless of whether
+the new value would differ from the current one. `PATCH /api/accounts/{id}`
+supplying a `currency` on such an account SHALL be rejected (`400` — the
+same `ErrInvalidValue` mapping as a blank `title`/`type`); every other
+field remains editable. An account with neither entries nor a
+`self_transfer` recurring transaction naming it keeps `currency` freely
+editable, unchanged from before this rule existed. The recurring-transaction
+half of this rule closes the same drift the entry half closes: a
+`self_transfer` recurring transaction requires its two accounts to share a
+currency when it is written, and pairs them long before either necessarily
+has an entry, so without it a later currency change would silently make
+every future booking from that template invalid.
+
 #### Scenario: Creating an account with valid fields
 
 - **WHEN** an authenticated user calls `POST /api/accounts` with a title, a
@@ -53,6 +68,33 @@ every response that carries an `Account`.
 - **WHEN** an account is created or updated with a `currency` that is not
   three uppercase letters
 - **THEN** the request is rejected (`422`)
+
+#### Scenario: Currency locked once the account has entries
+
+- **WHEN** `PATCH /api/accounts/{id}` supplies a `currency` for an account
+  that has at least one entry of any kind
+- **THEN** the request is rejected (`400`) and the account is unchanged
+
+#### Scenario: Currency locked once a self-transfer template names the account
+
+- **WHEN** `PATCH /api/accounts/{id}` supplies a `currency` for an account
+  that has no entries but is the `account_id` or the `to_account_id` of a
+  non-deleted `self_transfer` recurring transaction
+- **THEN** the request is rejected (`400`) and the account is unchanged
+
+#### Scenario: Currency still editable on an untouched account
+
+- **WHEN** `PATCH /api/accounts/{id}` supplies a `currency` for an account
+  with no entries and no `self_transfer` recurring transaction naming
+  either side
+- **THEN** the request succeeds and the account's currency is changed
+
+#### Scenario: Other fields remain editable once currency is locked
+
+- **WHEN** an authenticated user calls `PATCH /api/accounts/{id}` on an
+  account with existing entries, changing `title` (or any field other than
+  `currency`)
+- **THEN** the update succeeds
 
 ### Requirement: An account has exactly one real owner; visibility and lifecycle extend to every permission holder
 

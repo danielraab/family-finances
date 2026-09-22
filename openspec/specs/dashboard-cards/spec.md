@@ -16,13 +16,14 @@ entry-summary/flow-summary endpoints a card's data ultimately draws from.
 ### Requirement: A user's dashboard is an ordered, per-user list of cards
 
 `internal/dashboard` SHALL own a per-user list of dashboard cards, each
-with an id, a `type` (`account_stat`, `query_stat`, `entry_list`, or
-`bar_chart`, immutable after creation), a `config` object, and a position
-among that user's own cards. `GET /api/dashboard/cards` SHALL return only
-the authenticated caller's own cards, ordered by position. A card belongs
-to exactly one user and is never visible to, or affected by, any other
-user, regardless of whether entities it references (an account, category,
-or tag) are shared with others.
+with an id, a `type` (`account_stat`, `query_stat`, `entry_list`,
+`bar_chart`, or `line_chart`, immutable after creation), a `config`
+object, and a position among that user's own cards.
+`GET /api/dashboard/cards` SHALL return only the authenticated caller's
+own cards, ordered by position. A card belongs to exactly one user and is
+never visible to, or affected by, any other user, regardless of whether
+entities it references (an account, category, or tag) are shared with
+others.
 
 #### Scenario: Listing returns only the caller's own cards, in order
 
@@ -47,14 +48,15 @@ or tag) are shared with others.
 
 `POST /api/dashboard/cards` SHALL accept `{ type, config }`, create the
 card at the end of the caller's own list, and return it. `type` SHALL be
-one of `account_stat`, `query_stat`, `entry_list`, `bar_chart`; any other
-value is rejected (`ErrInvalidValue`, `400`). `PATCH
-/api/dashboard/cards/{id}` SHALL accept only `{ config }` — a `type` field
-in the request body, if present, SHALL be ignored rather than applied.
-`DELETE /api/dashboard/cards/{id}` SHALL remove the card; a caller may
-only create, update, or delete their own cards — acting on another user's
-card id SHALL respond `404`, the same not-found-not-forbidden treatment
-`internal/category`/`internal/tag` already give a wrong-owner id.
+one of `account_stat`, `query_stat`, `entry_list`, `bar_chart`,
+`line_chart`; any other value is rejected (`ErrInvalidValue`, `400`).
+`PATCH /api/dashboard/cards/{id}` SHALL accept only `{ config }` — a
+`type` field in the request body, if present, SHALL be ignored rather
+than applied. `DELETE /api/dashboard/cards/{id}` SHALL remove the card; a
+caller may only create, update, or delete their own cards — acting on
+another user's card id SHALL respond `404`, the same not-found-not-
+forbidden treatment `internal/category`/`internal/tag` already give a
+wrong-owner id.
 
 #### Scenario: Creating a card appends it to the end of the caller's list
 
@@ -124,13 +126,17 @@ the last, SHALL succeed (`200`) and leave the order unchanged, mirroring
   foreign to that type is set: `account_stat` requires `account_id` and
   accepts no other field; `bar_chart` requires `unit` (`month` or `day`)
   and accepts only `account_id`/`category_id`/`include_subcategories`/
-  `tag_id`/`title` besides it; `query_stat` accepts
-  `account_id`/`category_id`/`include_subcategories`/`tag_id`/`range`/
-  `title`, all optional, and no other field; `entry_list` accepts the
-  same fields as `query_stat` plus an optional `columns` (`2`-`4`
-  inclusive, default `2` when absent) — no other type may set `columns`,
-  and only `query_stat`/`entry_list`/`bar_chart` may set `title`
-  (free-text, no format constraint).
+  `tag_id`/`title`/`show_recurring_preview` besides it; `query_stat`
+  accepts `account_id`/`category_id`/`include_subcategories`/`tag_id`/
+  `range`/`title`, all optional, and no other field; `entry_list` accepts
+  the same fields as `query_stat` plus an optional `columns` (`2`-`4`
+  inclusive, default `2` when absent) and an optional
+  `show_recurring_preview` (boolean, default `false`); `line_chart`
+  accepts only `account_id`/`title`/`show_recurring_preview`, all
+  optional, and no other field — no category/tag filter or bucketing
+  choice to accept. `columns` is settable only on `entry_list`;
+  `show_recurring_preview` only on `entry_list`/`bar_chart`/`line_chart`;
+  `title` only on `query_stat`/`entry_list`/`bar_chart`/`line_chart`.
 
 A reference the caller cannot see at all, a missing required field, or a
 field foreign to the given type, SHALL be rejected (`ErrInvalidValue`,
@@ -191,20 +197,63 @@ field foreign to the given type, SHALL be rejected (`ErrInvalidValue`,
 
 #### Scenario: columns is rejected on every other type
 
-- **WHEN** a caller creates an `account_stat`, `query_stat`, or
-  `bar_chart` card whose `config` sets `columns`
+- **WHEN** a caller creates an `account_stat`, `query_stat`, `bar_chart`,
+  or `line_chart` card whose `config` sets `columns`
 - **THEN** the request is rejected (`400`)
 
-#### Scenario: title is accepted on query_stat, entry_list, and bar_chart
+#### Scenario: title is accepted on query_stat, entry_list, bar_chart, and line_chart
 
-- **WHEN** a caller creates a `query_stat`, `entry_list`, or `bar_chart`
-  card with a `title` set in `config`
+- **WHEN** a caller creates a `query_stat`, `entry_list`, `bar_chart`, or
+  `line_chart` card with a `title` set in `config`
 - **THEN** the card is created successfully in each case
 
 #### Scenario: title is rejected on account_stat
 
 - **WHEN** a caller creates an `account_stat` card whose `config` also
   sets `title`
+- **THEN** the request is rejected (`400`)
+
+#### Scenario: A line_chart card accepts an empty config
+
+- **WHEN** a caller creates a `line_chart` card with an empty `config`
+- **THEN** the card is created successfully, meaning every account the
+  caller owns
+
+#### Scenario: A line_chart card can be scoped to one account
+
+- **WHEN** a caller creates a `line_chart` card with `config.account_id`
+  set to a single account
+- **THEN** the card is created successfully
+
+#### Scenario: A line_chart card rejects category, tag, range, and unit
+
+- **WHEN** a caller creates a `line_chart` card whose `config` sets any of
+  `category_id`, `tag_id`, `range`, or `unit`
+- **THEN** the request is rejected (`400`) in each case
+
+#### Scenario: show_recurring_preview is accepted on entry_list, bar_chart, and line_chart
+
+- **WHEN** a caller creates an `entry_list`, `bar_chart`, or `line_chart`
+  card with `config.show_recurring_preview: true`
+- **THEN** the card is created successfully in each case
+
+#### Scenario: show_recurring_preview is rejected on account_stat and query_stat
+
+- **WHEN** a caller creates an `account_stat` or `query_stat` card whose
+  `config` sets `show_recurring_preview`
+- **THEN** the request is rejected (`400`)
+
+#### Scenario: show_recurring_preview defaults to false
+
+- **WHEN** a caller creates an `entry_list`, `bar_chart`, or `line_chart`
+  card with no `show_recurring_preview` in `config`
+- **THEN** the card is created successfully and no recurring-assumptions
+  overlay is shown for it until the visitor explicitly enables it
+
+#### Scenario: A line_chart card with show_recurring_preview still rejects category/tag/range/unit/columns
+
+- **WHEN** a caller creates a `line_chart` card with
+  `config.show_recurring_preview: true` and `config.category_id` also set
 - **THEN** the request is rejected (`400`)
 
 #### Scenario: Updating a card re-validates its new config the same way
