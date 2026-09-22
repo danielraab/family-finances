@@ -108,6 +108,12 @@ body {
   font-weight: 600;
 }
 
+.rdp-root.date-range-calendar .rdp-months {
+  flex-wrap: nowrap;
+  justify-content: center;
+  margin-inline: auto;
+}
+
 .rdp-root.date-range-calendar .rdp-selected {
   font-size: inherit;
   font-weight: 600;

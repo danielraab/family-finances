@@ -37,6 +37,7 @@ import {
 
 const triggerClass =
   "rounded-md border border-black/15 bg-transparent px-2.5 py-1.5 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
+const TWO_MONTH_PICKER_QUERY = "(min-width: 960px)";
 
 // @daypicker/react's range-selection hook only reads `selected` as a
 // controlled prop when `onSelect` is also supplied — without it, DayPicker
@@ -77,10 +78,10 @@ function useTwoMonthPicker(): boolean {
   const [twoMonths, setTwoMonths] = useState(
     () =>
       typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 900px)").matches,
+      window.matchMedia(TWO_MONTH_PICKER_QUERY).matches,
   );
   useEffect(() => {
-    const query = window.matchMedia("(min-width: 900px)");
+    const query = window.matchMedia(TWO_MONTH_PICKER_QUERY);
     const update = () => setTwoMonths(query.matches);
     update();
     query.addEventListener("change", update);
