@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Restores a list page's filter/search/sort state from `localStorage` when
@@ -17,24 +17,39 @@ export function usePersistedListFilters<S extends Record<string, unknown>>(
   storageKey: string,
   search: S,
   navigate: (opts: { search: S; replace: true }) => unknown,
-): void {
+): { restoring: boolean } {
+  const [restoring, setRestoring] = useState(() =>
+    shouldRestore(storageKey, search),
+  );
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally mount-only — see this hook's doc comment.
   useEffect(() => {
-    if (!isBareSearch(search)) return;
+    if (!restoring) return;
     const persisted = loadPersisted<S>(storageKey);
     if (persisted && !isBareSearch(persisted)) {
       navigate({ search: persisted, replace: true });
+    } else {
+      setRestoring(false);
     }
   }, []);
 
   useEffect(() => {
+    if (restoring && !isBareSearch(search)) {
+      setRestoring(false);
+    }
+  }, [restoring, search]);
+
+  useEffect(() => {
+    if (restoring) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(search));
     } catch {
       // Unavailable (private browsing, blocked storage, …) — filters
       // simply won't be restored next time; nothing else depends on this.
     }
-  }, [storageKey, search]);
+  }, [restoring, storageKey, search]);
+
+  return { restoring };
 }
 
 function isBareSearch(search: Record<string, unknown>): boolean {
@@ -49,4 +64,13 @@ function loadPersisted<S>(storageKey: string): S | undefined {
   } catch {
     return undefined;
   }
+}
+
+function shouldRestore<S extends Record<string, unknown>>(
+  storageKey: string,
+  search: S,
+): boolean {
+  if (!isBareSearch(search)) return false;
+  const persisted = loadPersisted<S>(storageKey);
+  return persisted !== undefined && !isBareSearch(persisted);
 }
