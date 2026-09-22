@@ -379,10 +379,8 @@
     "emptyFiltered": "No entries match these filters.",
     "columns": {
       "date": "Date",
+      "details": "Details",
       "title": "Title",
-      "category": "Category",
-      "tags": "Tags",
-      "account": "Account",
       "amount": "Amount"
     },
     "filters": {
