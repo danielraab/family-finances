@@ -21,6 +21,7 @@ import {
   todayDateString,
 } from "../lib/recurringPreview";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
+import { usePersistedListFilters } from "../lib/usePersistedListFilters";
 import { useRecurringPreviewHorizon } from "../lib/useRecurringPreviewHorizon";
 import { useWeekStart } from "../lib/useWeekStart";
 
@@ -65,6 +66,15 @@ type GeneratedFilter = {
 };
 
 const PAGE_SIZE = 30;
+
+// The most recently applied filter state, persisted per-browser so
+// arriving at a bare /reports (a sidebar click, or any other ordinary
+// navigation) restores it instead of resetting to the default view. See
+// web-client-reports' "Returning to the report restores the last-applied
+// filters" requirement. Only the draft controls are restored — "Generate
+// report" still requires an explicit click, exactly as for a bookmarked
+// URL today.
+const LAST_FILTERS_KEY = "ff:reports-last-filters";
 
 function asString(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" ? v : undefined;
@@ -144,6 +154,7 @@ function ReportsPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
   const routeNavigate = Route.useNavigate();
+  usePersistedListFilters(LAST_FILTERS_KEY, search, routeNavigate);
   const { t, i18n } = useTranslation();
   const displayedDecimalPlaces = useDisplayedDecimalPlaces();
   const weekStart = useWeekStart();

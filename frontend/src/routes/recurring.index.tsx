@@ -17,6 +17,7 @@ import {
   perMonthAmount,
 } from "../lib/recurrence";
 import { useDisplayedDecimalPlaces } from "../lib/useDisplayedDecimalPlaces";
+import { usePersistedListFilters } from "../lib/usePersistedListFilters";
 
 type Account = components["schemas"]["Account"];
 type Category = components["schemas"]["Category"];
@@ -35,6 +36,13 @@ type RecurringSearch = {
 function asString(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" ? v : undefined;
 }
+
+// The most recently applied filter state, persisted per-browser so
+// arriving at a bare /recurring (a sidebar click, or any other ordinary
+// navigation) restores it instead of resetting to the unfiltered list. See
+// web-client-recurring-transactions' "Returning to the recurring list
+// restores the last-applied filters" requirement.
+const LAST_FILTERS_KEY = "ff:recurring-last-filters";
 
 /**
  * How many filters the visitor has actually applied, for the panel's badge
@@ -78,6 +86,7 @@ function RecurringTransactionsList() {
   const { t, i18n } = useTranslation();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: "/recurring" });
+  usePersistedListFilters(LAST_FILTERS_KEY, search, navigate);
   const includeSelfTransfer = search.include_self_transfer === true;
   const bothLegs =
     includeSelfTransfer && search.self_transfer_both_legs === true;

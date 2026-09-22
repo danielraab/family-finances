@@ -80,17 +80,25 @@ with a way to create one instead of an empty list.
 `/accounts/{id}` SHALL fetch and display the account's full details
 (`GET /api/accounts/{id}`) and its most recent entries
 (`GET /api/entries` filtered to that account, sorted by booking timestamp
-descending, limited to a small fixed page), each linking to that entry's
-edit page. The page SHALL offer a link to `/entries?account_id={id}` for
-the account's complete, filterable entry list. Each recent-entries row
-SHALL show its creator's name (per `web-client-entries`) whenever it
-differs from the visitor.
+descending, limited to a small fixed page). Activating a recent entry's
+title SHALL open that entry's read-only summary modal (per
+`web-client-entries`) rather than navigating to its edit page; the
+summary's own Edit action is the route to the edit page. The page SHALL
+offer a link to `/entries?account_id={id}` for the account's complete,
+filterable entry list. Each recent-entries row SHALL show its creator's
+name (per `web-client-entries`) whenever it differs from the visitor.
 
 #### Scenario: Recent entries link to the full filtered list
 
 - **WHEN** an authenticated visitor opens an account's details page
 - **THEN** they see its most recent entries and a link that navigates to
   `/entries?account_id={id}`
+
+#### Scenario: A recent entry's title opens the entry summary
+
+- **WHEN** an authenticated visitor activates a recent entry's title
+- **THEN** that entry's read-only summary modal opens and the browser
+  stays on the account details page
 
 #### Scenario: A caller with no permission is not found
 
@@ -249,9 +257,23 @@ and redraw the chart for the newly selected month, with no upper or lower
 bound on how far the visitor may navigate. The chart SHALL default to the
 current month.
 
+Alongside the month switcher, the page SHALL offer a "Show recurring
+assumptions" toggle, off by default and not persisted across reloads. When
+on, the page SHALL fetch `GET /api/recurring-transactions/preview` scoped
+to this one account, bounded by the visitor's `recurring_preview_horizon`
+setting (the same cutoff resolution `bar_chart` dashboard cards already
+use — the chart's own displayed month is a display window, not a query
+filter, so it plays no part in the cutoff), and render the resulting
+projection as a second, visually distinct (dashed) line continuing from
+today's real balance through the end of the resolved horizon, using the
+same cumulative-delta computation `line_chart` dashboard cards use. A
+recurring transaction's occurrence already overdue (its next suggested
+date in the past) SHALL NOT be included in the projection, mirroring how
+it's excluded from `bar_chart`'s own projected segment.
+
 The line chart SHALL be a reusable, presentational, hand-rolled SVG
-component (`LineChart`) that takes its data and series definitions as props
-and fetches nothing itself — the same convention as the existing
+component (`LineChart`) that takes its data and series definitions as
+props and fetches nothing itself — the same convention as the existing
 `BarChart` — so it can be reused by a future chart on another page.
 
 #### Scenario: Chart shows the current month by default
@@ -285,6 +307,38 @@ and fetches nothing itself — the same convention as the existing
 - **THEN** the chart draws a zero rule line and plots the line on both
   sides of it
 
+#### Scenario: Enabling the toggle overlays a projected balance line
+
+- **WHEN** a visitor enables "Show recurring assumptions" on an account
+  with an upcoming recurring transaction due before the resolved horizon
+- **THEN** the chart draws a dashed line, starting at today's real balance
+  point, that adds each occurrence's amount onto the running total as its
+  date passes
+
+#### Scenario: The projected line starts exactly where the real line is today
+
+- **WHEN** the toggle is on and the displayed month includes today
+- **THEN** the dashed projected line and the solid real line coincide
+  exactly at today's point, diverging only afterward
+
+#### Scenario: An overdue recurring transaction is not projected
+
+- **WHEN** the toggle is on and a recurring transaction's next occurrence
+  is already overdue
+- **THEN** that occurrence's amount is not added to the projected line
+
+#### Scenario: Disabling the toggle removes the projected line
+
+- **WHEN** a visitor turns "Show recurring assumptions" back off
+- **THEN** the chart reverts to showing only the real balance line, with no
+  legend entry or tooltip row for a projected value
+
+#### Scenario: The toggle does not persist across reloads
+
+- **WHEN** a visitor enables the toggle and then reloads `/accounts/{id}`
+- **THEN** the toggle is off again, mirroring the chart's own month
+  resetting to the current one
+
 ### Requirement: Creating and editing an account
 
 `/accounts/new` SHALL offer a form for `title`, `description`, `type`,
@@ -297,6 +351,12 @@ validate client-side to the same shape the backend enforces (`type`
 non-empty after trimming, currency as three letters, closing date not
 before opening date) and surface the backend's validation error when a
 submission is rejected.
+
+`/accounts/{id}/edit`'s `currency` field SHALL be disabled (rendered, not
+editable) whenever the account has at least one entry — determined from
+the account's entry count, already available to this page — with a short
+inline note explaining why. `/accounts/new`'s `currency` field is
+unaffected, since a new account never has entries yet.
 
 The `type` field SHALL be a required free-text input, and SHALL offer
 suggestions combining a fixed client-side list of default labels
@@ -386,6 +446,25 @@ no suggestion SHALL remain valid and submittable, unchanged from today.
 - **WHEN** an authenticated visitor with no accounts, or none carrying a
   `financial_institute` value, focuses the field
 - **THEN** no suggestion chips are shown
+
+#### Scenario: Currency is disabled once the account has entries
+
+- **WHEN** an authenticated visitor opens `/accounts/{id}/edit` for an
+  account that has at least one entry
+- **THEN** the `currency` field is rendered disabled, with an inline note
+  explaining that it can no longer be changed
+
+#### Scenario: Currency remains editable on an account with no entries
+
+- **WHEN** an authenticated visitor opens `/accounts/{id}/edit` for an
+  account with no entries yet
+- **THEN** the `currency` field is editable, unchanged from before this
+  capability existed
+
+#### Scenario: A new account's currency field is never disabled
+
+- **WHEN** an authenticated visitor opens `/accounts/new`
+- **THEN** the `currency` field is editable
 
 ### Requirement: Disabling, enabling, and soft-deleting an account require confirmation
 

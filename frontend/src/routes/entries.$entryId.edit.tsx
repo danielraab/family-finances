@@ -232,7 +232,7 @@ function EditEntry() {
     if (destination === "recurring-new") {
       navigate({ to: "/recurring/new", search: { from_entry_id: entryId } });
     } else {
-      navigate({ to: "/entries", search: { last: true } });
+      navigate({ to: "/entries" });
     }
   }
 

@@ -65,6 +65,15 @@ calling `PUT /api/settings` with only that field, with no separate save action.
 Changing the language control SHALL also switch the running app's language
 immediately, without a reload.
 
+Below the six controls, separated by a divider, the tab SHALL show the
+running backend build's version as a small, muted, read-only line: the
+release tag (e.g. `v0.4.2`) when the backend's `GET /api/version` reports
+one, otherwise the first seven characters of its commit, with the full
+commit available as the line's `title`. The client SHALL fetch this once,
+on mount of the tab, and SHALL show nothing in its place — no placeholder,
+no error state — while the request is pending, on failure, or when the
+backend reports neither a version nor a commit.
+
 #### Scenario: Changing the name updates the sidebar
 
 - **WHEN** an authenticated visitor on the Profile tab edits the name field to
@@ -108,6 +117,25 @@ immediately, without a reload.
 - **THEN** `PUT /api/settings` is called with `{ "week_start": "sunday" }`,
   and week-anchored date-range presets on `/entries` and `/reports`
   subsequently use Sunday as the start of the week
+
+#### Scenario: Release build shows its tag
+
+- **WHEN** the backend reports `{"version": "v0.4.2", "commit": "abc123…"}`
+  from `GET /api/version`
+- **THEN** the Profile tab shows a "Version" line reading `v0.4.2`
+- **AND** hovering it shows the full commit hash
+
+#### Scenario: Untagged build shows a short commit
+
+- **WHEN** the backend reports `{"version": "", "commit": "abc1234567…"}`
+- **THEN** the Profile tab's version line reads the first seven characters
+  of the commit, e.g. `abc1234`
+
+#### Scenario: Nothing to report shows nothing
+
+- **WHEN** the backend reports `{"version": "", "commit": ""}`, or the
+  request fails
+- **THEN** the Profile tab shows no version line
 
 ### Requirement: Users tab is admin-only
 

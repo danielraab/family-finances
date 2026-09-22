@@ -38,6 +38,15 @@ import {
 const triggerClass =
   "rounded-md border border-black/15 bg-transparent px-2.5 py-1.5 text-sm font-normal outline-none transition-colors focus:border-black/40 dark:border-white/15 dark:focus:border-white/40";
 
+// @daypicker/react's range-selection hook only reads `selected` as a
+// controlled prop when `onSelect` is also supplied — without it, DayPicker
+// seeds its display from `selected` once at mount and then tracks its own
+// internal click state, silently diverging from `draft` (e.g. clicking "Use
+// start only" would update the summary but leave the old full range
+// highlighted). Selection itself is driven entirely through `onDayClick`
+// below, so this callback intentionally does nothing.
+function noopOnSelect() {}
+
 type DateRangeFilterProps = {
   value: DateRangeValue;
   weekStart: WeekStart;
@@ -119,10 +128,11 @@ function PickerContent({
   const toDate = parseLocalDate(draft.to);
   const valid = isValidDateRange(draft.from, draft.to);
   const canApply = valid && draft.phase !== "selecting_end";
+  // `to`/`from` are left genuinely undefined (rather than falling back to
+  // the other bound) so an open-ended draft — e.g. after "Use start only" —
+  // highlights only its one defined bound, not a fake single-day range.
   const selected: DateRange | undefined =
-    valid && (fromDate || toDate)
-      ? { from: fromDate ?? toDate, to: toDate ?? fromDate }
-      : undefined;
+    valid && (fromDate || toDate) ? { from: fromDate, to: toDate } : undefined;
   const defaultMonth = fromDate ?? toDate ?? new Date();
 
   function selectPreset(key: PresetKey) {
@@ -131,41 +141,41 @@ function PickerContent({
   }
 
   return (
-    <div className="flex min-h-0 flex-col bg-white text-zinc-900 dark:bg-neutral-900 dark:text-zinc-100">
-      <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3 dark:border-white/10">
+    <div className="flex min-h-0 flex-1 flex-col bg-white text-zinc-900 dark:bg-neutral-900 dark:text-zinc-100">
+      <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3 sm:px-3 sm:py-2 dark:border-white/10">
         <h2 className="text-base font-semibold sm:text-sm">
           {t("dateRangeFilter.label")}
         </h2>
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="min-h-11 rounded-md px-3 text-sm text-indigo-600 hover:bg-indigo-50 sm:min-h-0 sm:py-1.5 dark:text-indigo-300 dark:hover:bg-indigo-400/10"
+            className="min-h-11 rounded-md px-3 text-sm text-zinc-600 hover:bg-black/[.04] sm:min-h-0 sm:px-2 sm:py-1 sm:text-xs dark:text-zinc-300 dark:hover:bg-white/[.06]"
             onClick={() => selectPreset(ALL_TIME_KEY)}
           >
             {t("dateRangeFilter.reset")}
           </button>
           <button
             type="button"
-            className="grid size-11 place-items-center rounded-md hover:bg-black/[.04] sm:size-8 dark:hover:bg-white/[.06]"
+            className="grid size-11 place-items-center rounded-md hover:bg-black/[.04] sm:size-7 dark:hover:bg-white/[.06]"
             onClick={onClose}
             aria-label={t("dateRangeFilter.close")}
           >
-            <X size={18} aria-hidden="true" />
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-3 sm:py-3">
+        <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-1.5 sm:overflow-visible sm:px-0 sm:pb-0">
           {DATE_RANGE_PRESET_KEYS.map((key) => {
             const active = draft.selectedKey === key;
             return (
               <button
                 key={key}
                 type="button"
-                className={`min-h-11 shrink-0 snap-start rounded-md border px-3 py-2 text-sm transition-colors sm:min-h-0 ${
+                className={`min-h-11 shrink-0 snap-start rounded-md border px-3 py-2 text-sm transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-xs ${
                   active
-                    ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-400/15 dark:text-indigo-200"
+                    ? "border-black/40 bg-black/[.06] text-black dark:border-white/40 dark:bg-white/10 dark:text-white"
                     : "border-black/10 hover:bg-black/[.03] dark:border-white/15 dark:hover:bg-white/[.05]"
                 }`}
                 aria-pressed={active}
@@ -177,17 +187,35 @@ function PickerContent({
           })}
         </div>
 
-        <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
-          <h3 className="text-sm font-semibold">
+        <div className="mt-4 border-t border-black/10 pt-4 sm:mt-3 sm:pt-3 dark:border-white/10">
+          <h3 className="text-sm font-semibold sm:text-xs sm:font-medium sm:uppercase sm:tracking-wide sm:text-zinc-500 sm:dark:text-zinc-400">
             {t("dateRangeFilter.presets.custom")}
           </h3>
-          <div className="mt-2 flex min-h-11 items-center gap-2 rounded-md border border-black/15 px-3 text-sm dark:border-white/15">
+          <div className="mt-2 flex min-h-11 items-center gap-2 rounded-md border border-black/15 px-3 text-sm sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-xs dark:border-white/15">
             <CalendarDays
-              size={16}
-              className="text-zinc-500"
+              size={14}
+              className="shrink-0 text-zinc-500"
               aria-hidden="true"
             />
-            {summaryFor(draft, language, t)}
+            <span className="flex-1 truncate">
+              {summaryFor(draft, language, t)}
+            </span>
+            <button
+              type="button"
+              className="hidden shrink-0 rounded border border-black/15 px-1.5 py-0.5 text-xs text-zinc-600 transition-colors hover:bg-black/[.04] disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex dark:border-white/15 dark:text-zinc-300 dark:hover:bg-white/[.06]"
+              disabled={!draft.from && !draft.to}
+              onClick={() => setDraft(selectStartOnly(draft))}
+            >
+              {t("dateRangeFilter.useStartOnly")}
+            </button>
+            <button
+              type="button"
+              className="hidden shrink-0 rounded border border-black/15 px-1.5 py-0.5 text-xs text-zinc-600 transition-colors hover:bg-black/[.04] disabled:cursor-not-allowed disabled:opacity-40 sm:inline-flex dark:border-white/15 dark:text-zinc-300 dark:hover:bg-white/[.06]"
+              disabled={!draft.from && !draft.to}
+              onClick={() => setDraft(selectEndOnly(draft))}
+            >
+              {t("dateRangeFilter.useEndOnly")}
+            </button>
           </div>
 
           <DayPicker
@@ -201,17 +229,22 @@ function PickerContent({
             weekStartsOn={weekStart === "monday" ? 1 : 0}
             locale={language.startsWith("de") ? de : enUS}
             onDayClick={(day) => setDraft(selectCustomDay(draft, day))}
+            onSelect={noopOnSelect}
             labels={{
               labelPrevious: () => t("dateRangeFilter.previousMonth"),
               labelNext: () => t("dateRangeFilter.nextMonth"),
             }}
-            className="date-range-calendar mx-auto mt-3"
+            className="date-range-calendar mx-auto mt-3 sm:mt-2"
           />
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {/* @daypicker/react's mobile bottom sheet still needs these as
+              full-size 44px touch targets (design.md decision 8); the sm+
+              popover offers them as the inline chips in the summary bar
+              above instead, so this block is mobile-only. */}
+          <div className="mt-3 grid gap-2 sm:hidden">
             <button
               type="button"
-              className="min-h-11 rounded-md border border-black/15 px-3 text-sm text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-indigo-300"
+              className="min-h-11 rounded-md border border-black/15 px-3 text-sm text-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-zinc-300"
               disabled={!draft.from && !draft.to}
               onClick={() => setDraft(selectStartOnly(draft))}
             >
@@ -219,7 +252,7 @@ function PickerContent({
             </button>
             <button
               type="button"
-              className="min-h-11 rounded-md border border-black/15 px-3 text-sm text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-indigo-300"
+              className="min-h-11 rounded-md border border-black/15 px-3 text-sm text-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-zinc-300"
               disabled={!draft.from && !draft.to}
               onClick={() => setDraft(selectEndOnly(draft))}
             >
@@ -228,14 +261,14 @@ function PickerContent({
           </div>
 
           <p
-            className={`mt-3 flex items-start gap-2 text-xs ${
+            className={`mt-3 flex items-start gap-2 text-xs sm:mt-2 ${
               valid
                 ? "text-zinc-500 dark:text-zinc-400"
                 : "text-red-600 dark:text-red-400"
             }`}
             role={valid ? undefined : "alert"}
           >
-            <Info size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
             {valid
               ? t("dateRangeFilter.guidance")
               : t("dateRangeFilter.invalidOrder")}
@@ -243,10 +276,10 @@ function PickerContent({
         </div>
       </div>
 
-      <div className="border-t border-black/10 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-white/10">
+      <div className="border-t border-black/10 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-3 sm:pt-2.5 sm:pb-2.5 dark:border-white/10">
         <button
           type="button"
-          className="min-h-11 w-full rounded-md bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-11 w-full rounded-md bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-0 sm:py-2 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
           disabled={!canApply}
           onClick={onApply}
         >
@@ -325,8 +358,8 @@ export function DateRangeFilter({
           >
             <DialogBackdrop className="fixed inset-0 bg-black/45" />
             <div className="fixed inset-0 flex items-end">
-              <DialogPanel className="max-h-[92dvh] w-full overflow-hidden rounded-t-2xl shadow-2xl">
-                <div className="mx-auto -mb-2 mt-2 h-1.5 w-12 rounded-full bg-zinc-300 dark:bg-zinc-600" />
+              <DialogPanel className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl shadow-2xl">
+                <div className="mx-auto -mb-2 mt-2 h-1.5 w-12 shrink-0 rounded-full bg-zinc-300 dark:bg-zinc-600" />
                 <PickerContent
                   draft={draft}
                   setDraft={setDraft}
@@ -351,7 +384,7 @@ export function DateRangeFilter({
               </PopoverButton>
               <PopoverPanel
                 anchor="bottom start"
-                className="z-[60] mt-1 w-[min(42rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-black/10 shadow-xl dark:border-white/15"
+                className="z-[60] mt-1 w-[min(31rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-black/10 shadow-xl dark:border-white/15"
               >
                 <PickerContent
                   draft={draft}
