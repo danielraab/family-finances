@@ -56,23 +56,22 @@ function activeFilterCount(search: RecurringSearch): number {
     search.account_id !== undefined,
     search.category_id !== undefined,
     search.tag_id !== undefined,
-    search.include_self_transfer === true,
+    search.include_self_transfer === false,
   ].filter(Boolean).length;
 }
 
 export const Route = createFileRoute("/recurring/")({
   // Every filter lives in the URL, the way /entries keeps its own state,
   // so a filtered list can be bookmarked, shared and restored by the back
-  // button. An absent flag means false in both boolean cases.
+  // button. Self-transfers are included unless explicitly disabled.
   validateSearch: (search: Record<string, unknown>): RecurringSearch => ({
     account_id: asString(search["account_id"]),
     category_id: asString(search["category_id"]),
     tag_id: asString(search["tag_id"]),
-    include_self_transfer:
-      search["include_self_transfer"] === true ||
-      search["include_self_transfer"] === "true"
-        ? true
-        : undefined,
+    include_self_transfer: !(
+      search["include_self_transfer"] === false ||
+      search["include_self_transfer"] === "false"
+    ),
     self_transfer_both_legs:
       search["self_transfer_both_legs"] === true ||
       search["self_transfer_both_legs"] === "true"
@@ -251,7 +250,7 @@ function RecurringTransactionsList() {
             checked={includeSelfTransfer}
             onChange={(e) =>
               patchSearch({
-                include_self_transfer: e.target.checked ? true : undefined,
+                include_self_transfer: e.target.checked,
                 // Unchecking the first clears the second, so the two can
                 // never be left in the meaningless "both sides, transfers
                 // hidden" combination.
