@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-09-22
+
+### Added
+
+- A rebuilt date-range picker, shared by `/entries`, `/reports` and the
+  dashboard's card forms. Custom mode is now a single calendar instead of
+  two independent date inputs: the first click starts a range, the second
+  completes it — picking an earlier second date starts a new range rather
+  than an invalid pair, so an inverted range can no longer be created —
+  and presets stay one click away. Open-ended ranges stay explicit
+  choices via "Use start only", "Use end only" and "All time". Edits are
+  staged inside the picker and reach the URL or card form only when Apply
+  is activated; closing the panel discards the draft, so a half-selected
+  range is never observed by the page. On a wide screen the picker is an
+  anchored popover showing two months, on a narrow one a full-width
+  bottom sheet showing one — both with previous/next-month buttons,
+  localized range summaries, keyboard navigation and focus restoration.
+- `/recurring` and `/reports` now restore the last-applied filters when
+  you arrive at them with a bare URL (a sidebar click), the way `/entries`
+  has since 0.4.1. On `/reports` only the draft filter controls are
+  restored — generating a report still requires an explicit click.
+
+### Changed
+
+- The `/entries` ledger's separate Account, Category and Tags columns
+  are now one Details column between Date and Title, stacking the entry's
+  account, category and tag pills vertically (tags wrap within their
+  group, and a missing category or tags are simply left out). Icons,
+  shared-owner indicators and tag tooltips are unchanged; the three
+  columns' worth of width goes back to the entry title.
+
+### Fixed
+
+- `/recurring` now includes self-transfer templates by default. The
+  "Show self-transfers" checkbox was an opt-in, so a standing move
+  between two of the household's own accounts was hidden from the list
+  until you happened to tick it; it is now an opt-out, and unchecking it
+  hides them exactly as before.
+- A bare `/entries` or `/recurring` arrival no longer issues a request
+  built from the page's default filters before persisted filters restore.
+  The fetch now waits for the restoration, so the first query for such an
+  arrival is the restored one — the results you're about to see — instead
+  of one wasted default-filter query first.
+
 ## [0.4.5] - 2026-09-21
 
 ### Added
@@ -374,7 +418,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/danielraab/family-finances/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/danielraab/family-finances/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/danielraab/family-finances/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/danielraab/family-finances/compare/v0.4.2...v0.4.3
