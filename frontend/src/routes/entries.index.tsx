@@ -583,16 +583,10 @@ function EntriesListPage() {
                 </button>
               </th>
               <th className="px-3 py-2 font-medium">
-                {t("entries.columns.account")}
+                {t("entries.columns.details")}
               </th>
               <th className="px-3 py-2 font-medium">
                 {t("entries.columns.title")}
-              </th>
-              <th className="px-3 py-2 font-medium">
-                {t("entries.columns.category")}
-              </th>
-              <th className="px-3 py-2 font-medium">
-                {t("entries.columns.tags")}
               </th>
               <th className="px-3 py-2 text-right font-medium">
                 <button
@@ -652,17 +646,60 @@ function EntriesListPage() {
                     );
                   })()}
                 </td>
-                <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
-                  {(() => {
-                    const account = accounts.find(
-                      (a) => a.id === entry.account_id,
-                    );
-                    return account ? (
-                      <AccountLabel account={account} iconSize={16} />
-                    ) : (
-                      <span className="italic">{t("entries.notShared")}</span>
-                    );
-                  })()}
+                <td className="px-3 py-2 align-top">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-zinc-500 dark:text-zinc-400">
+                      {(() => {
+                        const account = accounts.find(
+                          (a) => a.id === entry.account_id,
+                        );
+                        return account ? (
+                          <AccountLabel account={account} iconSize={16} />
+                        ) : (
+                          <span className="italic">
+                            {t("entries.notShared")}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    {entry.category_id && (
+                      <div className="text-zinc-500 dark:text-zinc-400">
+                        {(() => {
+                          const category = categoryById.get(entry.category_id);
+                          return category ? (
+                            <CategoryLabel category={category} iconSize={16} />
+                          ) : (
+                            <span className="italic">
+                              {t("entries.notShared")}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )}
+                    {entry.tag_ids.length > 0 &&
+                      (() => {
+                        const known = entry.tag_ids
+                          .map((tagId) => tagById.get(tagId))
+                          .filter((tag) => tag !== undefined);
+                        const hasUnknown = known.length < entry.tag_ids.length;
+                        return (
+                          <div className="flex flex-wrap gap-1">
+                            {known.map((tag) => (
+                              <TagLabel
+                                key={tag.id}
+                                tag={tag}
+                                className="rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium dark:bg-white/10"
+                              />
+                            ))}
+                            {hasUnknown && (
+                              <span className="rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium italic text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
+                                {t("entries.notShared")}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                  </div>
                 </td>
                 <td className="px-3 py-2">
                   <button
@@ -707,53 +744,6 @@ function EntriesListPage() {
                       })}
                     </span>
                   )}
-                </td>
-                <td className="px-3 py-2 text-zinc-500 dark:text-zinc-400">
-                  {(() => {
-                    if (!entry.category_id) {
-                      return <span aria-hidden>—</span>;
-                    }
-                    const category = categoryById.get(entry.category_id);
-                    return category ? (
-                      <CategoryLabel category={category} iconSize={16} />
-                    ) : (
-                      <span className="italic">{t("entries.notShared")}</span>
-                    );
-                  })()}
-                </td>
-                <td className="px-3 py-2">
-                  {(() => {
-                    if (entry.tag_ids.length === 0) {
-                      return (
-                        <span
-                          aria-hidden
-                          className="text-zinc-500 dark:text-zinc-400"
-                        >
-                          —
-                        </span>
-                      );
-                    }
-                    const known = entry.tag_ids
-                      .map((tagId) => tagById.get(tagId))
-                      .filter((tag) => tag !== undefined);
-                    const hasUnknown = known.length < entry.tag_ids.length;
-                    return (
-                      <div className="flex flex-wrap gap-1">
-                        {known.map((tag) => (
-                          <TagLabel
-                            key={tag.id}
-                            tag={tag}
-                            className="rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium dark:bg-white/10"
-                          />
-                        ))}
-                        {hasUnknown && (
-                          <span className="rounded-full bg-black/[.06] px-2 py-0.5 text-xs font-medium italic text-zinc-500 dark:bg-white/10 dark:text-zinc-400">
-                            {t("entries.notShared")}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex flex-col items-end gap-0.5">

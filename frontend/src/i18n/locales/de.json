@@ -379,10 +379,8 @@
     "emptyFiltered": "Keine Buchungen entsprechen diesen Filtern.",
     "columns": {
       "date": "Datum",
+      "details": "Details",
       "title": "Titel",
-      "category": "Kategorie",
-      "tags": "Tags",
-      "account": "Konto",
       "amount": "Betrag"
     },
     "filters": {
