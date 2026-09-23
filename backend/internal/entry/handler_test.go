@@ -224,7 +224,7 @@ func TestHandlerListAndPaginate(t *testing.T) {
 	}
 }
 
-func TestHandlerListFiltersBySignedAmount(t *testing.T) {
+func TestHandlerListFiltersByAmountMagnitude(t *testing.T) {
 	h, accounts, categories := newHandlerFixture()
 	accounts.add("acc1", "u1", "EUR")
 	accounts.add("acc2", "u1", "EUR")
@@ -259,11 +259,11 @@ func TestHandlerListFiltersBySignedAmount(t *testing.T) {
 	if items := get("amount_from=300&amount_to=300"); len(items) != 1 || items[0].Title != "adjustment" {
 		t.Fatalf("adjustment range items = %+v, want just adjustment", items)
 	}
-	if items := get("amount_to=-1"); len(items) != 2 {
-		t.Fatalf("negative range items = %+v, want expense and sending transfer leg", items)
+	if items := get("amount_to=25"); len(items) != 2 || items[0].Amount == items[1].Amount {
+		t.Fatalf("magnitude range items = %+v, want both transfer legs", items)
 	}
 
-	for _, query := range []string{"amount_from=not-a-number", "amount_from=1&amount_to=0"} {
+	for _, query := range []string{"amount_from=not-a-number", "amount_from=-1", "amount_to=-1", "amount_from=1&amount_to=0"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries?"+query, nil), user))
 		if rec.Code != http.StatusBadRequest {

@@ -491,10 +491,16 @@ func buildWhere(table string, f entry.Filter) (where []string, args []any) {
 		where = append(where, table+".booking_timestamp <= "+arg(*f.To))
 	}
 	if f.AmountFrom != nil {
-		where = append(where, table+".amount >= "+arg(*f.AmountFrom))
+		if *f.AmountFrom > 0 {
+			amount := arg(*f.AmountFrom)
+			negativeAmount := arg(-*f.AmountFrom)
+			where = append(where, "("+table+".amount <= "+negativeAmount+" OR "+table+".amount >= "+amount+")")
+		}
 	}
 	if f.AmountTo != nil {
-		where = append(where, table+".amount <= "+arg(*f.AmountTo))
+		amount := arg(*f.AmountTo)
+		negativeAmount := arg(-*f.AmountTo)
+		where = append(where, "("+table+".amount >= "+negativeAmount+" AND "+table+".amount <= "+amount+")")
 	}
 	if f.Query != "" {
 		p := arg("%" + f.Query + "%")

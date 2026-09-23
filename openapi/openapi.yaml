@@ -1627,17 +1627,19 @@ paths:
         - name: amount_from
           in: query
           required: false
-          description: Inclusive signed amount lower bound in the fixed stored scale.
+          description: Inclusive non-negative absolute amount lower bound in the fixed stored scale.
           schema:
             type: integer
             format: int64
+            minimum: 0
         - name: amount_to
           in: query
           required: false
-          description: Inclusive signed amount upper bound in the fixed stored scale.
+          description: Inclusive non-negative absolute amount upper bound in the fixed stored scale.
           schema:
             type: integer
             format: int64
+            minimum: 0
         - name: q
           in: query
           required: false

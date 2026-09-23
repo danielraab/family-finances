@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { AccountLabel } from "../components/AccountLabel";
+import { AmountRangeFilter } from "../components/AmountRangeFilter";
 import { useAuth } from "../components/AuthProvider";
 import { CategoryLabel } from "../components/CategoryLabel";
 import { DateRangeFilter } from "../components/DateRangeFilter";
@@ -18,10 +19,8 @@ import { TagLabel } from "../components/TagLabel";
 import { UpcomingBlock } from "../components/UpcomingBlock";
 import {
   amountColorClass,
-  amountToInput,
   formatAmount,
   formatSignedAmount,
-  inputToAmount,
 } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
@@ -103,6 +102,11 @@ function asInteger(v: unknown): number | undefined {
   return typeof v === "number" && Number.isSafeInteger(v) ? v : undefined;
 }
 
+function asNonNegativeInteger(v: unknown): number | undefined {
+  const integer = asInteger(v);
+  return integer !== undefined && integer >= 0 ? integer : undefined;
+}
+
 export const Route = createFileRoute("/entries/")({
   validateSearch: (search: Record<string, unknown>): EntriesSearch => ({
     account_id: asString(search["account_id"]),
@@ -116,8 +120,8 @@ export const Route = createFileRoute("/entries/")({
     range: asString(search["range"]),
     from: asString(search["from"]),
     to: asString(search["to"]),
-    amount_from: asInteger(search["amount_from"]),
-    amount_to: asInteger(search["amount_to"]),
+    amount_from: asNonNegativeInteger(search["amount_from"]),
+    amount_to: asNonNegativeInteger(search["amount_to"]),
     q: asString(search["q"]),
     sort: search["sort"] === "amount" ? "amount" : undefined,
     dir: search["dir"] === "asc" ? "asc" : undefined,
@@ -165,12 +169,6 @@ function EntriesListPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [qDraft, setQDraft] = useState(search.q ?? "");
-  const [amountFromDraft, setAmountFromDraft] = useState(() =>
-    search.amount_from === undefined ? "" : amountToInput(search.amount_from),
-  );
-  const [amountToDraft, setAmountToDraft] = useState(() =>
-    search.amount_to === undefined ? "" : amountToInput(search.amount_to),
-  );
 
   const [items, setItems] = useState<Entry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -508,45 +506,11 @@ function EntriesListPage() {
           fullWidth
         />
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("entries.filters.amountFrom")}
-          <input
-            type="text"
-            inputMode="decimal"
-            className={filterControlClass}
-            value={amountFromDraft}
-            onChange={(e) => {
-              const value = e.target.value;
-              setAmountFromDraft(value);
-              patchSearch({
-                amount_from:
-                  value === ""
-                    ? undefined
-                    : (inputToAmount(value) ?? undefined),
-              });
-            }}
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          {t("entries.filters.amountTo")}
-          <input
-            type="text"
-            inputMode="decimal"
-            className={filterControlClass}
-            value={amountToDraft}
-            onChange={(e) => {
-              const value = e.target.value;
-              setAmountToDraft(value);
-              patchSearch({
-                amount_to:
-                  value === ""
-                    ? undefined
-                    : (inputToAmount(value) ?? undefined),
-              });
-            }}
-          />
-        </label>
+        <AmountRangeFilter
+          amountFrom={search.amount_from}
+          amountTo={search.amount_to}
+          onChange={(range) => patchSearch(range)}
+        />
 
         <label className="flex items-center gap-2 pb-1.5 text-sm">
           <input
