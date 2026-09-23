@@ -38,6 +38,11 @@ jobs:
               - 'openapi/**'
               - 'backend/openapi.yaml'
               - 'frontend/src/api/schema.d.ts'
+              # The generator runs with these dependencies, so a toolchain
+              # update must validate regeneration as well.
+              - 'frontend/package.json'
+              - 'frontend/pnpm-lock.yaml'
+              - 'frontend/scripts/generate-api.mjs'
               - '.github/workflows/ci.yml'
             i18n:
               - 'frontend/src/i18n/**'
