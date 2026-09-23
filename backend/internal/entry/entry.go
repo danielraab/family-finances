@@ -319,7 +319,9 @@ type Cursor struct {
 // CategoryIDs before the Store sees it — Store implementations read only
 // CategoryIDs. Likewise AccountIDs is always resolved by Service.List to the
 // caller's own visible accounts (optionally narrowed further by the
-// caller-supplied AccountIDs) before reaching Store.
+// caller-supplied AccountIDs) before reaching Store. AmountFrom and AmountTo
+// are inclusive signed bounds in AmountScale units, applied to the listed
+// account-oriented amount (including each self-transfer leg).
 type Filter struct {
 	AccountIDs []string
 	// AllAccounts, when true, tells Store to ignore AccountIDs entirely —
@@ -339,6 +341,8 @@ type Filter struct {
 	RecurringTransactionID *string
 	From                   *time.Time
 	To                     *time.Time
+	AmountFrom             *int64
+	AmountTo               *int64
 	Query                  string
 	Sort                   SortField
 	Dir                    SortDir

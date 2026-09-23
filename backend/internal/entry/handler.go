@@ -223,10 +223,11 @@ func (h *Handler) convertToSelfTransfer(w http.ResponseWriter, r *http.Request) 
 
 // parseCommonFilter parses the account_id, category_id/category_mode,
 // tag_id, from, to, and q query parameters shared by GET /api/entries and
-// GET /api/entries/summary. list additionally parses sort, dir, kind,
-// limit, and after; summary uses no other parameters — it always sums
-// kind: transaction entries regardless of what the caller passes.
-func parseCommonFilter(q url.Values) (Filter, error) {
+// GET /api/entries/summary. When parseAmountBounds is true it also parses the
+// list-only amount bounds. list additionally parses sort, dir, kind, limit,
+// and after; summary uses no other parameters — it always sums kind:
+// transaction entries regardless of what the caller passes.
+func parseCommonFilter(q url.Values, parseAmountBounds bool) (Filter, error) {
 	f := Filter{
 		AccountIDs: q["account_id"],
 		Query:      q.Get("q"),
@@ -257,6 +258,25 @@ func parseCommonFilter(q url.Values) (Filter, error) {
 		}
 		f.To = &t
 	}
+	if parseAmountBounds {
+		if v := q.Get("amount_from"); v != "" {
+			amount, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return Filter{}, ErrInvalidValue
+			}
+			f.AmountFrom = &amount
+		}
+		if v := q.Get("amount_to"); v != "" {
+			amount, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return Filter{}, ErrInvalidValue
+			}
+			f.AmountTo = &amount
+		}
+		if f.AmountFrom != nil && f.AmountTo != nil && *f.AmountFrom > *f.AmountTo {
+			return Filter{}, ErrInvalidValue
+		}
+	}
 	return f, nil
 }
 
@@ -268,7 +288,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 
-	f, err := parseCommonFilter(q)
+	f, err := parseCommonFilter(q, true)
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -318,7 +338,7 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
 		writeUnauthorized(w)
 		return
 	}
-	f, err := parseCommonFilter(r.URL.Query())
+	f, err := parseCommonFilter(r.URL.Query(), false)
 	if err != nil {
 		h.renderError(w, r, err)
 		return

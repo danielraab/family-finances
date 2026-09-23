@@ -1624,6 +1624,20 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: amount_from
+          in: query
+          required: false
+          description: Inclusive signed amount lower bound in the fixed stored scale.
+          schema:
+            type: integer
+            format: int64
+        - name: amount_to
+          in: query
+          required: false
+          description: Inclusive signed amount upper bound in the fixed stored scale.
+          schema:
+            type: integer
+            format: int64
         - name: q
           in: query
           required: false

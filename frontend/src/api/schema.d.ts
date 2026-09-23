@@ -3078,6 +3078,10 @@ export interface operations {
                 account_id?: string[];
                 /** @description Opaque cursor from a previous response's next_cursor. */
                 after?: string;
+                /** @description Inclusive signed amount lower bound in the fixed stored scale. */
+                amount_from?: number;
+                /** @description Inclusive signed amount upper bound in the fixed stored scale. */
+                amount_to?: number;
                 /** @description Matches this category, plus every descendant unless category_mode=exact. */
                 category_id?: string;
                 /** @description Only meaningful together with category_id. subtree (the default) matches the category and every descendant; exact matches only that category. */

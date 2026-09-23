@@ -490,6 +490,12 @@ func buildWhere(table string, f entry.Filter) (where []string, args []any) {
 	if f.To != nil {
 		where = append(where, table+".booking_timestamp <= "+arg(*f.To))
 	}
+	if f.AmountFrom != nil {
+		where = append(where, table+".amount >= "+arg(*f.AmountFrom))
+	}
+	if f.AmountTo != nil {
+		where = append(where, table+".amount <= "+arg(*f.AmountTo))
+	}
 	if f.Query != "" {
 		p := arg("%" + f.Query + "%")
 		where = append(where, "("+table+".title ILIKE "+p+" OR "+table+".description ILIKE "+p+" OR "+table+".counterparty ILIKE "+p+")")
