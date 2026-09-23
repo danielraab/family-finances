@@ -394,6 +394,8 @@
       "allKinds": "Alle Arten",
       "from": "Von",
       "to": "Bis",
+      "amountFrom": "Betrag von",
+      "amountTo": "Betrag bis",
       "search": "Suche",
       "clearSearch": "Suche leeren"
     },

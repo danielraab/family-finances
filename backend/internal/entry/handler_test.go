@@ -224,6 +224,55 @@ func TestHandlerListAndPaginate(t *testing.T) {
 	}
 }
 
+func TestHandlerListFiltersBySignedAmount(t *testing.T) {
+	h, accounts, categories := newHandlerFixture()
+	accounts.add("acc1", "u1", "EUR")
+	accounts.add("acc2", "u1", "EUR")
+	categories.add("cat1")
+	user := auth.User{ID: "u1"}
+
+	for _, body := range []string{
+		`{"account_id":"acc1","kind":"transaction","amount":-100,"booking_timestamp":"2024-01-01T00:00:00Z","title":"expense","category_id":"cat1"}`,
+		`{"account_id":"acc1","kind":"balance_adjustment","balance":200,"booking_timestamp":"2024-01-02T00:00:00Z","title":"adjustment"}`,
+		`{"account_id":"acc1","to_account_id":"acc2","kind":"self_transfer","amount":-25,"booking_timestamp":"2024-01-03T00:00:00Z","title":"transfer"}`,
+	} {
+		h.ServeHTTP(httptest.NewRecorder(), withUser(httptest.NewRequest("POST", "/api/entries", strings.NewReader(body)), user))
+	}
+
+	get := func(query string) []entry.Entry {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries?"+query, nil), user))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("list status = %d, body = %s", rec.Code, rec.Body)
+		}
+		conforms(t, "GET", "/api/entries?"+query, rec)
+		var page struct {
+			Items []entry.Entry `json:"items"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+			t.Fatal(err)
+		}
+		return page.Items
+	}
+
+	if items := get("amount_from=300&amount_to=300"); len(items) != 1 || items[0].Title != "adjustment" {
+		t.Fatalf("adjustment range items = %+v, want just adjustment", items)
+	}
+	if items := get("amount_to=-1"); len(items) != 2 {
+		t.Fatalf("negative range items = %+v, want expense and sending transfer leg", items)
+	}
+
+	for _, query := range []string{"amount_from=not-a-number", "amount_from=1&amount_to=0"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, withUser(httptest.NewRequest("GET", "/api/entries?"+query, nil), user))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s status = %d, want 400", query, rec.Code)
+		}
+		conforms(t, "GET", "/api/entries?"+query, rec)
+	}
+}
+
 func TestHandlerSummary(t *testing.T) {
 	h, accounts, categories := newHandlerFixture()
 	accounts.add("acc1", "u1", "EUR")

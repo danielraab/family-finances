@@ -18,8 +18,10 @@ import { TagLabel } from "../components/TagLabel";
 import { UpcomingBlock } from "../components/UpcomingBlock";
 import {
   amountColorClass,
+  amountToInput,
   formatAmount,
   formatSignedAmount,
+  inputToAmount,
 } from "../lib/amount";
 import { flattenCategoryTree } from "../lib/categoryTree";
 import { compact } from "../lib/compact";
@@ -52,6 +54,8 @@ type EntriesSearch = {
   range?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
+  amount_from?: number | undefined;
+  amount_to?: number | undefined;
   q?: string | undefined;
   sort?: Sort | undefined;
   dir?: Dir | undefined;
@@ -85,6 +89,7 @@ function activeFilterCount(search: EntriesSearch): number {
     search.range !== undefined ||
       search.from !== undefined ||
       search.to !== undefined,
+    search.amount_from !== undefined || search.amount_to !== undefined,
     search.q !== undefined,
     search.show_recurring === true,
   ].filter(Boolean).length;
@@ -92,6 +97,10 @@ function activeFilterCount(search: EntriesSearch): number {
 
 function asString(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" ? v : undefined;
+}
+
+function asInteger(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isSafeInteger(v) ? v : undefined;
 }
 
 export const Route = createFileRoute("/entries/")({
@@ -107,6 +116,8 @@ export const Route = createFileRoute("/entries/")({
     range: asString(search["range"]),
     from: asString(search["from"]),
     to: asString(search["to"]),
+    amount_from: asInteger(search["amount_from"]),
+    amount_to: asInteger(search["amount_to"]),
     q: asString(search["q"]),
     sort: search["sort"] === "amount" ? "amount" : undefined,
     dir: search["dir"] === "asc" ? "asc" : undefined,
@@ -154,6 +165,12 @@ function EntriesListPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [qDraft, setQDraft] = useState(search.q ?? "");
+  const [amountFromDraft, setAmountFromDraft] = useState(() =>
+    search.amount_from === undefined ? "" : amountToInput(search.amount_from),
+  );
+  const [amountToDraft, setAmountToDraft] = useState(() =>
+    search.amount_to === undefined ? "" : amountToInput(search.amount_to),
+  );
 
   const [items, setItems] = useState<Entry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -201,6 +218,8 @@ function EntriesListPage() {
       kind: search.kind,
       from: effectiveRange.from ? toRangeStart(effectiveRange.from) : undefined,
       to: effectiveRange.to ? toRangeEnd(effectiveRange.to) : undefined,
+      amount_from: search.amount_from,
+      amount_to: search.amount_to,
       q: search.q,
       sort: search.sort ?? "booking_timestamp",
       dir: search.dir ?? "desc",
@@ -488,6 +507,46 @@ function EntriesListPage() {
           toLabel={t("entries.filters.to")}
           fullWidth
         />
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {t("entries.filters.amountFrom")}
+          <input
+            type="text"
+            inputMode="decimal"
+            className={filterControlClass}
+            value={amountFromDraft}
+            onChange={(e) => {
+              const value = e.target.value;
+              setAmountFromDraft(value);
+              patchSearch({
+                amount_from:
+                  value === ""
+                    ? undefined
+                    : (inputToAmount(value) ?? undefined),
+              });
+            }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {t("entries.filters.amountTo")}
+          <input
+            type="text"
+            inputMode="decimal"
+            className={filterControlClass}
+            value={amountToDraft}
+            onChange={(e) => {
+              const value = e.target.value;
+              setAmountToDraft(value);
+              patchSearch({
+                amount_to:
+                  value === ""
+                    ? undefined
+                    : (inputToAmount(value) ?? undefined),
+              });
+            }}
+          />
+        </label>
 
         <label className="flex items-center gap-2 pb-1.5 text-sm">
           <input
@@ -789,6 +848,8 @@ function EntriesListPage() {
           search.kind ||
           effectiveRange.from ||
           effectiveRange.to ||
+          search.amount_from !== undefined ||
+          search.amount_to !== undefined ||
           search.q
             ? t("entries.emptyFiltered")
             : t("entries.emptyAll")}

@@ -469,6 +469,12 @@ func (s *EntryStore) matchingRows(f entry.Filter) []entryRow {
 		if f.To != nil && e.BookingTimestamp.After(*f.To) {
 			continue
 		}
+		if f.AmountFrom != nil && e.Amount < *f.AmountFrom {
+			continue
+		}
+		if f.AmountTo != nil && e.Amount > *f.AmountTo {
+			continue
+		}
 		if f.Query != "" {
 			q := strings.ToLower(f.Query)
 			if !strings.Contains(strings.ToLower(e.Title), q) &&
