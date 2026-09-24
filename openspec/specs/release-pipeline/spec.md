@@ -26,6 +26,10 @@ pull request: it SHALL lint `openapi/openapi.yaml`, regenerate the frontend's
 committed API types from it, re-sync the committed `backend/openapi.yaml` copy
 from it, and fail if either generated artifact differs from what is committed.
 
+Continuous integration SHALL build the combined production container image on
+every pull request after the frontend, backend, and contract checks succeed.
+The pull-request image build SHALL NOT authenticate with or push to a registry.
+
 #### Scenario: Frontend check failure blocks publishing
 
 - **WHEN** the frontend lint check or static build fails
@@ -51,8 +55,10 @@ from it, and fail if either generated artifact differs from what is committed.
 
 #### Scenario: Pull requests do not publish
 
-- **WHEN** CI runs for a pull request
-- **THEN** no container image is built or pushed to the registry
+- **WHEN** CI runs for a pull request and the frontend, backend, and contract
+  checks pass
+- **THEN** CI builds the combined production container image
+- **AND** CI does not authenticate with or push the image to a registry
 
 #### Scenario: Ordinary branch pushes do not publish
 
@@ -125,4 +131,3 @@ pull request to be merged.
 - **THEN** the `i18n-coverage` job may report a failed outcome for itself,
   but the pull request remains mergeable, no container image build is
   blocked, and no other CI job is delayed or skipped as a result
-
