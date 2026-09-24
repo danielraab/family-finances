@@ -394,8 +394,12 @@
       "allKinds": "Alle Arten",
       "from": "Von",
       "to": "Bis",
+      "amountRange": "Betrag",
       "amountFrom": "Betrag von",
       "amountTo": "Betrag bis",
+      "amountPlaceholder": "Jeder Betrag",
+      "amountFromOnly": "Ab {{amount}}",
+      "amountToOnly": "Bis {{amount}}",
       "search": "Suche",
       "clearSearch": "Suche leeren"
     },
