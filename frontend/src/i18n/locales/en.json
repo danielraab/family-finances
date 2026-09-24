@@ -394,8 +394,12 @@
       "allKinds": "All kinds",
       "from": "From",
       "to": "To",
+      "amountRange": "Amount",
       "amountFrom": "Amount from",
       "amountTo": "Amount to",
+      "amountPlaceholder": "Any amount",
+      "amountFromOnly": "From {{amount}}",
+      "amountToOnly": "Up to {{amount}}",
       "search": "Search",
       "clearSearch": "Clear search"
     },

@@ -1,6 +1,8 @@
+import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { amountToInput, inputToAmount } from "../lib/amount";
+import { amountToNumber, inputToAmount } from "../lib/amount";
 import { filterControlClass } from "./FilterPanel";
 
 type AmountRange = {
@@ -9,11 +11,27 @@ type AmountRange = {
 };
 
 function amountDraft(amount: number | undefined): string {
-  return amount === undefined ? "" : amountToInput(amount);
+  if (amount === undefined) return "";
+  return amountToNumber(amount)
+    .toFixed(4)
+    .replace(/\.?0+$/, "");
 }
 
 function positiveDraft(value: string): string {
   return value.replaceAll("-", "").replaceAll("−", "");
+}
+
+function summaryFor(
+  amountFrom: number | undefined,
+  amountTo: number | undefined,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  const from = amountDraft(amountFrom);
+  const to = amountDraft(amountTo);
+  if (from && to) return `${from} – ${to}`;
+  if (from) return t("entries.filters.amountFromOnly", { amount: from });
+  if (to) return t("entries.filters.amountToOnly", { amount: to });
+  return t("entries.filters.amountPlaceholder");
 }
 
 /**
@@ -31,6 +49,7 @@ export function AmountRangeFilter({
   onChange: (range: AmountRange) => void;
 }) {
   const { t } = useTranslation();
+  const summary = summaryFor(amountFrom, amountTo, t);
   const [amountFromDraft, setAmountFromDraft] = useState(() =>
     amountDraft(amountFrom),
   );
@@ -71,28 +90,50 @@ export function AmountRangeFilter({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:col-span-2">
-      <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-        {t("entries.filters.amountFrom")}
-        <input
-          type="text"
-          inputMode="decimal"
-          className={filterControlClass}
-          value={amountFromDraft}
-          onChange={(e) => changeFrom(e.target.value)}
-        />
-      </label>
+    <div className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+      {t("entries.filters.amountRange")}
+      <Popover className="relative">
+        <PopoverButton
+          className={`${filterControlClass} flex min-w-40 items-center gap-2 text-left data-[open]:border-black/40 dark:data-[open]:border-white/40`}
+        >
+          <span className="flex-1 truncate text-zinc-900 dark:text-zinc-100">
+            {summary}
+          </span>
+          <ChevronDown
+            size={14}
+            className="shrink-0 text-zinc-400"
+            aria-hidden="true"
+          />
+        </PopoverButton>
+        <PopoverPanel
+          anchor="bottom start"
+          className="z-[60] mt-1 w-72 rounded-lg border border-black/10 bg-white p-3 shadow-xl dark:border-white/15 dark:bg-neutral-900"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              {t("entries.filters.amountFrom")}
+              <input
+                type="text"
+                inputMode="decimal"
+                className={filterControlClass}
+                value={amountFromDraft}
+                onChange={(e) => changeFrom(e.target.value)}
+              />
+            </label>
 
-      <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-        {t("entries.filters.amountTo")}
-        <input
-          type="text"
-          inputMode="decimal"
-          className={filterControlClass}
-          value={amountToDraft}
-          onChange={(e) => changeTo(e.target.value)}
-        />
-      </label>
+            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              {t("entries.filters.amountTo")}
+              <input
+                type="text"
+                inputMode="decimal"
+                className={filterControlClass}
+                value={amountToDraft}
+                onChange={(e) => changeTo(e.target.value)}
+              />
+            </label>
+          </div>
+        </PopoverPanel>
+      </Popover>
     </div>
   );
 }
