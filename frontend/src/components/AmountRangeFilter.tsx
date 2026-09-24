@@ -21,6 +21,11 @@ function positiveDraft(value: string): string {
   return value.replaceAll("-", "").replaceAll("−", "");
 }
 
+function trimDraft(value: string): string {
+  const amount = inputToAmount(value);
+  return amount === null ? value : amountDraft(amount);
+}
+
 function summaryFor(
   amountFrom: number | undefined,
   amountTo: number | undefined,
@@ -118,6 +123,7 @@ export function AmountRangeFilter({
                 className={filterControlClass}
                 value={amountFromDraft}
                 onChange={(e) => changeFrom(e.target.value)}
+                onBlur={() => setAmountFromDraft((draft) => trimDraft(draft))}
               />
             </label>
 
@@ -129,6 +135,7 @@ export function AmountRangeFilter({
                 className={filterControlClass}
                 value={amountToDraft}
                 onChange={(e) => changeTo(e.target.value)}
+                onBlur={() => setAmountToDraft((draft) => trimDraft(draft))}
               />
             </label>
           </div>
