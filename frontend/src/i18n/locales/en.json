@@ -400,6 +400,9 @@
       "amountPlaceholder": "Any amount",
       "amountFromOnly": "From {{amount}}",
       "amountToOnly": "Up to {{amount}}",
+      "clearAmountFrom": "Clear amount from",
+      "clearAmountTo": "Clear amount to",
+      "clearAmountRange": "Clear amount range",
       "search": "Search",
       "clearSearch": "Clear search"
     },

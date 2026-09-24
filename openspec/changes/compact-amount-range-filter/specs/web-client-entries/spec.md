@@ -4,7 +4,7 @@
 
 ### Requirement: The entry ledger's filter, search, and sort state lives in the URL
 
-`/entries` SHALL represent its current account, category, tag, kind, date range, amount-magnitude range, and free-text search filters, and its sort field and direction, as typed URL search parameters, readable and writable through TanStack Router's search-param APIs. The amount range SHALL use optional non-negative `amount_from` and `amount_to` stored-scale integer values and SHALL match entries regardless of whether their displayed signed amount is positive or negative. The ledger SHALL present the two bounds as one compact range control: its collapsed summary SHALL describe the active start and/or end magnitude, and activating it SHALL reveal both editable controls together in a small overlay. Bound values in the controls and summary SHALL omit unnecessary trailing decimal zeroes while retaining every non-zero stored-precision digit. Reloading a URL with search parameters SHALL reproduce the same filtered/sorted view. Arriving at `/entries` with an `account_id` parameter already set (for example, via the link from an account's details page) SHALL apply that filter immediately on load. Every change to this state SHALL also be written to browser-local storage, keyed per visitor's browser (not synced to the account or the backend) — see "Returning to the entry ledger restores the last-applied filters" for when that stored state is read back.
+`/entries` SHALL represent its current account, category, tag, kind, date range, amount-magnitude range, and free-text search filters, and its sort field and direction, as typed URL search parameters, readable and writable through TanStack Router's search-param APIs. The amount range SHALL use optional non-negative `amount_from` and `amount_to` stored-scale integer values and SHALL match entries regardless of whether their displayed signed amount is positive or negative. The ledger SHALL present the two bounds as one compact range control: its collapsed summary SHALL describe the active start and/or end magnitude, and activating it SHALL reveal both editable controls together in a small overlay. Each bound control SHALL offer an accessible clear action for that bound, and the compact trigger SHALL offer an accessible clear action for both bounds whenever either bound is active. Bound values in the controls and summary SHALL omit unnecessary trailing decimal zeroes while retaining every non-zero stored-precision digit. Reloading a URL with search parameters SHALL reproduce the same filtered/sorted view. Arriving at `/entries` with an `account_id` parameter already set (for example, via the link from an account's details page) SHALL apply that filter immediately on load. Every change to this state SHALL also be written to browser-local storage, keyed per visitor's browser (not synced to the account or the backend) — see "Returning to the entry ledger restores the last-applied filters" for when that stored state is read back.
 
 #### Scenario: A filtered view survives a reload
 
@@ -35,6 +35,11 @@
 
 - **WHEN** an amount bound has non-zero digits after the decimal point
 - **THEN** its control and collapsed summary retain those digits but omit trailing zeroes
+
+#### Scenario: Amount bounds can be cleared individually or together
+
+- **WHEN** an authenticated visitor activates a bound's clear action or the compact trigger's clear action
+- **THEN** the selected bound or both bounds respectively are removed from the URL and ledger filter
 
 #### Scenario: Arriving with a preset account filter
 

@@ -1,5 +1,5 @@
 import { Popover, PopoverButton, PopoverPanel } from "@headlessui/react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { amountToNumber, inputToAmount } from "../lib/amount";
@@ -55,6 +55,7 @@ export function AmountRangeFilter({
 }) {
   const { t } = useTranslation();
   const summary = summaryFor(amountFrom, amountTo, t);
+  const hasAmountRange = amountFrom !== undefined || amountTo !== undefined;
   const [amountFromDraft, setAmountFromDraft] = useState(() =>
     amountDraft(amountFrom),
   );
@@ -94,22 +95,40 @@ export function AmountRangeFilter({
     onChange(range);
   }
 
+  function clearRange() {
+    setAmountFromDraft("");
+    setAmountToDraft("");
+    const range = {};
+    lastEmitted.current = range;
+    onChange(range);
+  }
+
   return (
     <div className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
       {t("entries.filters.amountRange")}
       <Popover className="relative">
-        <PopoverButton
-          className={`${filterControlClass} flex min-w-40 items-center gap-2 text-left data-[open]:border-black/40 dark:data-[open]:border-white/40`}
-        >
-          <span className="flex-1 truncate text-zinc-900 dark:text-zinc-100">
-            {summary}
-          </span>
-          <ChevronDown
-            size={14}
-            className="shrink-0 text-zinc-400"
-            aria-hidden="true"
-          />
-        </PopoverButton>
+        <div className={`${filterControlClass} flex min-w-40 items-center p-0`}>
+          <PopoverButton className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left outline-none">
+            <span className="flex-1 truncate text-zinc-900 dark:text-zinc-100">
+              {summary}
+            </span>
+            <ChevronDown
+              size={14}
+              className="shrink-0 text-zinc-400"
+              aria-hidden="true"
+            />
+          </PopoverButton>
+          {hasAmountRange && (
+            <button
+              type="button"
+              aria-label={t("entries.filters.clearAmountRange")}
+              className="mr-1 grid size-6 shrink-0 place-items-center rounded text-zinc-400 hover:bg-black/[.06] hover:text-zinc-700 dark:hover:bg-white/[.08] dark:hover:text-zinc-200"
+              onClick={clearRange}
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          )}
+        </div>
         <PopoverPanel
           anchor="bottom start"
           className="z-[60] mt-1 w-72 rounded-lg border border-black/10 bg-white p-3 shadow-xl dark:border-white/15 dark:bg-neutral-900"
@@ -117,26 +136,50 @@ export function AmountRangeFilter({
           <div className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
               {t("entries.filters.amountFrom")}
-              <input
-                type="text"
-                inputMode="decimal"
-                className={filterControlClass}
-                value={amountFromDraft}
-                onChange={(e) => changeFrom(e.target.value)}
-                onBlur={() => setAmountFromDraft((draft) => trimDraft(draft))}
-              />
+              <span className="relative">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className={`${filterControlClass} pr-7`}
+                  value={amountFromDraft}
+                  onChange={(e) => changeFrom(e.target.value)}
+                  onBlur={() => setAmountFromDraft((draft) => trimDraft(draft))}
+                />
+                {amountFromDraft !== "" && (
+                  <button
+                    type="button"
+                    aria-label={t("entries.filters.clearAmountFrom")}
+                    className="absolute inset-y-0 right-1 grid size-7 place-items-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                    onClick={() => changeFrom("")}
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                )}
+              </span>
             </label>
 
             <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
               {t("entries.filters.amountTo")}
-              <input
-                type="text"
-                inputMode="decimal"
-                className={filterControlClass}
-                value={amountToDraft}
-                onChange={(e) => changeTo(e.target.value)}
-                onBlur={() => setAmountToDraft((draft) => trimDraft(draft))}
-              />
+              <span className="relative">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className={`${filterControlClass} pr-7`}
+                  value={amountToDraft}
+                  onChange={(e) => changeTo(e.target.value)}
+                  onBlur={() => setAmountToDraft((draft) => trimDraft(draft))}
+                />
+                {amountToDraft !== "" && (
+                  <button
+                    type="button"
+                    aria-label={t("entries.filters.clearAmountTo")}
+                    className="absolute inset-y-0 right-1 grid size-7 place-items-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                    onClick={() => changeTo("")}
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                )}
+              </span>
             </label>
           </div>
         </PopoverPanel>

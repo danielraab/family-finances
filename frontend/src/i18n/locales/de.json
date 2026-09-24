@@ -400,6 +400,9 @@
       "amountPlaceholder": "Jeder Betrag",
       "amountFromOnly": "Ab {{amount}}",
       "amountToOnly": "Bis {{amount}}",
+      "clearAmountFrom": "Betrag von leeren",
+      "clearAmountTo": "Betrag bis leeren",
+      "clearAmountRange": "Betragsbereich leeren",
       "search": "Suche",
       "clearSearch": "Suche leeren"
     },
