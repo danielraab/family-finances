@@ -71,7 +71,7 @@ export function AmountRangeFilter({
   }
 
   return (
-    <>
+    <div className="grid grid-cols-2 gap-3 sm:col-span-2">
       <label className="flex flex-col gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
         {t("entries.filters.amountFrom")}
         <input
@@ -93,6 +93,6 @@ export function AmountRangeFilter({
           onChange={(e) => changeTo(e.target.value)}
         />
       </label>
-    </>
+    </div>
   );
 }
