@@ -320,8 +320,8 @@ type Cursor struct {
 // CategoryIDs. Likewise AccountIDs is always resolved by Service.List to the
 // caller's own visible accounts (optionally narrowed further by the
 // caller-supplied AccountIDs) before reaching Store. AmountFrom and AmountTo
-// are inclusive signed bounds in AmountScale units, applied to the listed
-// account-oriented amount (including each self-transfer leg).
+// are inclusive non-negative magnitude bounds in AmountScale units, applied to
+// the listed account-oriented amount (including each self-transfer leg).
 type Filter struct {
 	AccountIDs []string
 	// AllAccounts, when true, tells Store to ignore AccountIDs entirely —

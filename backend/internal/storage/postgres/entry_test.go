@@ -1183,6 +1183,32 @@ func TestPGEntryListSearchMatchesCounterparty(t *testing.T) {
 	}
 }
 
+func TestPGEntryListFiltersByAmountMagnitude(t *testing.T) {
+	f := newEntryFixture(t)
+	ctx := context.Background()
+
+	for i, amount := range []int64{-100, 100, 200} {
+		if _, err := f.entries.Create(ctx, f.owner, entry.New{
+			AccountID: f.accID, Kind: entry.KindTransaction, Amount: ptrInt64(amount),
+			BookingTimestamp: at([]string{"2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z", "2024-01-03T00:00:00Z"}[i]),
+			Title:            "entry", CategoryID: &f.catID,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	from, to := int64(100), int64(100)
+	items, _, err := f.entries.List(ctx, entry.Filter{
+		AccountIDs: []string{f.accID}, AmountFrom: &from, AmountTo: &to, Limit: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 || items[0].Amount+items[1].Amount != 0 {
+		t.Fatalf("items = %+v, want both +/- 100 entries", items)
+	}
+}
+
 func TestPGListInUseCounterparties(t *testing.T) {
 	f := newEntryFixture(t)
 	ctx := context.Background()

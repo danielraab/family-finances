@@ -698,9 +698,9 @@ matching nothing, the same as an unknown id.
 
 ### Requirement: Entry listing supports filtering, free-text search, sorting, and cursor-based pagination
 
-`GET /api/entries` SHALL accept, all optional and combinable: `account_id` (repeatable; omitted means every non-deleted account the caller owns), `category_id` with an optional `category_mode` (`subtree`, the default — matches that category and every descendant in the category tree — or `exact`, matching only that category), `tag_id`, `kind`, `recurring_transaction_id`, `from`/`to` (an inclusive `booking_timestamp` range), `amount_from`/`amount_to` (inclusive signed `amount` bounds in the fixed stored scale), and `q` (a case-insensitive substring match against `title`, `description`, or `counterparty`). It SHALL reject a non-integer amount bound or a request whose `amount_from` exceeds its `amount_to` with `400`. It SHALL accept `sort` (`booking_timestamp`, the default, or `amount`) and `dir` (`desc`, the default, or `asc`). It SHALL accept `after`, an opaque cursor from a previous response's `next_cursor`, and `limit` (a page size). The response SHALL be `{ items, next_cursor }`, where `next_cursor` is `null` once no further matching entries remain. Every filter applies before pagination; results are always scoped to the caller's own, non-deleted accounts' non-deleted entries. `category_mode` without `category_id` has no effect.
+`GET /api/entries` SHALL accept, all optional and combinable: `account_id` (repeatable; omitted means every non-deleted account the caller owns), `category_id` with an optional `category_mode` (`subtree`, the default — matches that category and every descendant in the category tree — or `exact`, matching only that category), `tag_id`, `kind`, `recurring_transaction_id`, `from`/`to` (an inclusive `booking_timestamp` range), `amount_from`/`amount_to` (non-negative, inclusive absolute-`amount` bounds in the fixed stored scale), and `q` (a case-insensitive substring match against `title`, `description`, or `counterparty`). It SHALL reject a non-integer or negative amount bound, or a request whose `amount_from` exceeds its `amount_to`, with `400`. It SHALL accept `sort` (`booking_timestamp`, the default, or `amount`) and `dir` (`desc`, the default, or `asc`). It SHALL accept `after`, an opaque cursor from a previous response's `next_cursor`, and `limit` (a page size). The response SHALL be `{ items, next_cursor }`, where `next_cursor` is `null` once no further matching entries remain. Every filter applies before pagination; results are always scoped to the caller's own, non-deleted accounts' non-deleted entries. `category_mode` without `category_id` has no effect.
 
-A `self_transfer` entry SHALL appear once per resolved account (from the combination of any explicit `account_id` filter and the caller's own visible-accounts scoping) it touches: once, amount as stored, when `account_id` alone is in scope; once, amount sign flipped, when `to_account_id` alone is in scope; and twice — both of the above — when both accounts are in scope at once (for example, an unfiltered listing covering every account the caller can see, or an explicit `account_id` filter naming both). The amount bounds SHALL apply to that account-oriented signed amount, so the two occurrences may match differently. A balance adjustment's bounds SHALL likewise apply to its computed signed `amount` delta, not its absolute `balance` reading. Every other filter (`category_id`, `tag_id`, `kind`, `from`/`to`, `q`) applies identically to both self-transfer occurrences, since they represent the same underlying entry.
+A `self_transfer` entry SHALL appear once per resolved account (from the combination of any explicit `account_id` filter and the caller's own visible-accounts scoping) it touches: once, amount as stored, when `account_id` alone is in scope; once, amount sign flipped, when `to_account_id` alone is in scope; and twice — both of the above — when both accounts are in scope at once (for example, an unfiltered listing covering every account the caller can see, or an explicit `account_id` filter naming both). The amount bounds SHALL apply to the absolute value of that account-oriented amount, so both occurrences of a self-transfer with the same magnitude match identically. A balance adjustment's bounds SHALL likewise apply to the absolute value of its computed signed `amount` delta, not its absolute `balance` reading. Every other filter (`category_id`, `tag_id`, `kind`, `from`/`to`, `q`) applies identically to both self-transfer occurrences, since they represent the same underlying entry.
 
 #### Scenario: Filtering by account
 
@@ -724,27 +724,32 @@ A `self_transfer` entry SHALL appear once per resolved account (from the combina
 
 #### Scenario: Filtering by an open signed amount bound
 
-- **WHEN** `GET /api/entries?amount_to=0` is called
-- **THEN** entries whose signed amount is zero or negative are returned and positive entries are excluded
+- **WHEN** `GET /api/entries?amount_to=1000000` is called
+- **THEN** entries whose signed amount has an absolute value no greater than `1000000` are returned, regardless of sign
 
 #### Scenario: Filtering by an inclusive amount range
 
-- **WHEN** `GET /api/entries?amount_from=-1000000&amount_to=-500000` is called
-- **THEN** entries whose signed amount is within those inclusive stored-scale bounds are returned
+- **WHEN** `GET /api/entries?amount_from=500000&amount_to=1000000` is called
+- **THEN** entries whose signed amount has an absolute value within those inclusive stored-scale bounds are returned, regardless of sign
 
 #### Scenario: Amount bounds filter self-transfer legs independently
 
-- **WHEN** a self-transfer is listed for both accounts and its stored amount is negative, with an amount range that admits only negative amounts
-- **THEN** only the sending account's negative occurrence is returned
+- **WHEN** a self-transfer is listed for both accounts and its magnitude is within an amount range
+- **THEN** both the sending account's negative occurrence and the receiving account's positive occurrence are returned
 
 #### Scenario: Amount bounds filter a balance adjustment by its delta
 
-- **WHEN** a balance-adjustment entry has an absolute balance reading outside an amount range but a computed signed delta within it
+- **WHEN** a balance-adjustment entry has an absolute balance reading outside an amount range but its computed signed delta's magnitude is within it
 - **THEN** the entry is returned
 
 #### Scenario: An inverted amount range is rejected
 
 - **WHEN** `GET /api/entries` is called with `amount_from` greater than `amount_to`
+- **THEN** the response is `400`
+
+#### Scenario: A negative amount bound is rejected
+
+- **WHEN** `GET /api/entries` is called with a negative `amount_from` or `amount_to`
 - **THEN** the response is `400`
 
 #### Scenario: A malformed amount bound is rejected
@@ -760,7 +765,7 @@ A `self_transfer` entry SHALL appear once per resolved account (from the combina
 #### Scenario: Free-text search matches counterparty alone
 
 - **WHEN** `GET /api/entries?q=rewe` is called and a matching entry's `counterparty` is `"Rewe"` while its `title` and `description` contain neither "rewe" nor any substring of it
-- **THEN** that entry is included in the results
+- **THEN** that entry is returned
 
 #### Scenario: Sorting by amount
 

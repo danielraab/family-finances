@@ -261,14 +261,14 @@ func parseCommonFilter(q url.Values, parseAmountBounds bool) (Filter, error) {
 	if parseAmountBounds {
 		if v := q.Get("amount_from"); v != "" {
 			amount, err := strconv.ParseInt(v, 10, 64)
-			if err != nil {
+			if err != nil || amount < 0 {
 				return Filter{}, ErrInvalidValue
 			}
 			f.AmountFrom = &amount
 		}
 		if v := q.Get("amount_to"); v != "" {
 			amount, err := strconv.ParseInt(v, 10, 64)
-			if err != nil {
+			if err != nil || amount < 0 {
 				return Filter{}, ErrInvalidValue
 			}
 			f.AmountTo = &amount
