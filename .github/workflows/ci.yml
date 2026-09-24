@@ -112,7 +112,10 @@ jobs:
   i18n-coverage:
     needs: changes
     runs-on: ubuntu-latest
-    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.i18n == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/master') &&
+      needs.changes.outputs.i18n == 'true'
     continue-on-error: true
     permissions:
       contents: read
@@ -131,7 +134,7 @@ jobs:
         # non-zero, silently defeating the whole point of this job.
         run: node frontend/scripts/i18n-coverage.mjs
       - name: Comment on PR
-        if: always() && steps.coverage.outputs.has_shortfall == 'true'
+        if: always() && github.event_name == 'pull_request' && steps.coverage.outputs.has_shortfall == 'true'
         uses: actions/github-script@v9
         with:
           script: |
@@ -163,7 +166,7 @@ jobs:
               });
             }
       - name: Remove stale PR comment
-        if: always() && steps.coverage.outputs.has_shortfall == 'false'
+        if: always() && github.event_name == 'pull_request' && steps.coverage.outputs.has_shortfall == 'false'
         uses: actions/github-script@v9
         with:
           script: |
@@ -214,7 +217,10 @@ jobs:
   backend-integration:
     needs: changes
     runs-on: ubuntu-latest
-    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.backend == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/master') &&
+      needs.changes.outputs.backend == 'true'
     defaults:
       run:
         working-directory: backend
@@ -240,6 +246,30 @@ jobs:
         with:
           go-version-file: backend/go.mod
       - run: go test ./internal/storage/postgres/...
+
+  # Validates the combined production image for pull requests without loading
+  # it locally or authenticating to (or pushing to) a container registry.
+  image:
+    needs: [frontend, backend, contract]
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/master') &&
+      (needs.frontend.result == 'success' || needs.frontend.result == 'skipped') &&
+      (needs.backend.result == 'success' || needs.backend.result == 'skipped') &&
+      (needs.contract.result == 'success' || needs.contract.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          build-args: |
+            REVISION=${{ github.event.pull_request.head.sha }}
 
   # Builds and publishes the combined image. Only runs when a new git tag is
   # pushed, using that tag as the image tag.
