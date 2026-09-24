@@ -112,7 +112,10 @@ jobs:
   i18n-coverage:
     needs: changes
     runs-on: ubuntu-latest
-    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.i18n == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/master') &&
+      needs.changes.outputs.i18n == 'true'
     continue-on-error: true
     permissions:
       contents: read
@@ -131,7 +134,7 @@ jobs:
         # non-zero, silently defeating the whole point of this job.
         run: node frontend/scripts/i18n-coverage.mjs
       - name: Comment on PR
-        if: always() && steps.coverage.outputs.has_shortfall == 'true'
+        if: always() && github.event_name == 'pull_request' && steps.coverage.outputs.has_shortfall == 'true'
         uses: actions/github-script@v9
         with:
           script: |
@@ -163,7 +166,7 @@ jobs:
               });
             }
       - name: Remove stale PR comment
-        if: always() && steps.coverage.outputs.has_shortfall == 'false'
+        if: always() && github.event_name == 'pull_request' && steps.coverage.outputs.has_shortfall == 'false'
         uses: actions/github-script@v9
         with:
           script: |
@@ -214,7 +217,10 @@ jobs:
   backend-integration:
     needs: changes
     runs-on: ubuntu-latest
-    if: always() && github.event_name == 'pull_request' && needs.changes.outputs.backend == 'true'
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/master') &&
+      needs.changes.outputs.backend == 'true'
     defaults:
       run:
         working-directory: backend
@@ -247,7 +253,7 @@ jobs:
     needs: [frontend, backend, contract]
     if: >-
       always() &&
-      github.event_name == 'pull_request' &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/master') &&
       (needs.frontend.result == 'success' || needs.frontend.result == 'skipped') &&
       (needs.backend.result == 'success' || needs.backend.result == 'skipped') &&
       (needs.contract.result == 'success' || needs.contract.result == 'skipped')
