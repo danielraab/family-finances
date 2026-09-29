@@ -21,16 +21,16 @@
     "@fontsource-variable/geist-mono": "5.3.0",
     "@headlessui/react": "2.2.10",
     "@tailwindcss/vite": "^4.3.3",
-    "@tanstack/react-router": "1.170.38",
+    "@tanstack/react-router": "1.170.39",
     "i18next": "^26.4.2",
     "i18next-browser-languagedetector": "^8.2.1",
     "leaflet": "1.9.4",
-    "lucide-react": "^1.47.0",
+    "lucide-react": "^1.48.0",
     "openapi-fetch": "^0.17.0",
     "papaparse": "^5.7.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "react-i18next": "^17.0.14",
+    "react-i18next": "^17.0.15",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
@@ -39,14 +39,14 @@
     "@tanstack/router-cli": "1.167.38",
     "@tanstack/router-plugin": "1.168.40",
     "@types/leaflet": "1.9.22",
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.3",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "openapi-typescript": "^7.13.0",
     "typescript": "6.0.3",
-    "vite": "^8.3.0",
+    "vite": "^8.3.1",
     "yaml": "^2.9.1"
   }
 }
