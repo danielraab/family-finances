@@ -61,6 +61,7 @@ backend/
     ├── mailer/          # auth.Mailer over net/smtp — STARTTLS/implicit/none, hand-built MIME
     ├── oidcauth/        # auth.OIDCClient over coreos/go-oidc/v3 + x/oauth2 — discovery, PKCE, id_token verify
     ├── passkeyauth/     # auth.WebAuthn over go-webauthn — RP from AUTH_BASE_URL, discoverable credentials, UV required
+    ├── aaguid/          # embedded community AAGUID → passkey-provider list (name + SVG icons), display only; refreshed by hand
     ├── clientip/        # client IP resolution — X-Forwarded-For believed only from AUTH_TRUSTED_PROXIES
     ├── ratelimit/       # in-process sliding-window-log limiter (auth.Limiter) — per IP and per magic-link recipient
     ├── cli/             # `admin grant|revoke|list` — dispatched from main.go beside `healthcheck`
@@ -221,7 +222,14 @@ to status codes in the one place — `httpapi/respond.go`.
   `httpapi`'s middleware via `Service.AuthenticateSession`), and
   `GET /api/auth/me` reports it as `session` with
   `passkey_registration_until`. Ceremony challenges are single-use, live 5
-  minutes; expired ones are removed by the cleanup job (below). Tests:
+  minutes; expired ones are removed by the cleanup job (below). Each passkey's
+  stored AAGUID is mapped to a `provider` (name + icons) for display through
+  `auth.WithPasskeyProviders`, which `main.go` backs with `internal/aaguid`'s
+  embedded snapshot of github.com/passkeydeveloper/passkey-authenticator-aaguids
+  (no runtime fetch; refresh with the `curl` in the package doc — deliberately
+  not `go:generate`, since CI fails on generate drift). An unnamed passkey is
+  stored under its provider's name, else "Passkey". The AAGUID is
+  self-asserted: never use it for trust. Tests:
   `internal/storage/storetest` holds the store contract both stores run, and
   `internal/passkeyauth/passkeytest` is a software authenticator (ES256,
   `none` attestation) that drives real ceremonies in handler tests —

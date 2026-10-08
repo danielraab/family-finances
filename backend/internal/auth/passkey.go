@@ -82,6 +82,15 @@ const (
 	maxPasskeyNameLen = 100
 )
 
+// ProviderLookup names the provider of a passkey from its AAGUID, reporting
+// false for an absent, all-zero or unknown one. package main adapts
+// internal/aaguid to it.
+type ProviderLookup func(aaguid []byte) (PasskeyProvider, bool)
+
+// WithPasskeyProviders wires the AAGUID → provider lookup. Without it every
+// passkey's provider is nil and unnamed passkeys are called "Passkey".
+func WithPasskeyProviders(l ProviderLookup) Option { return func(s *Service) { s.providers = l } }
+
 // WithWebAuthn wires the passkey ceremony implementation. Without it every
 // passkey ceremony fails with ErrPasskeyInvalid/ErrPasskeyAuthFailed, while
 // listing and deleting passkeys still work.
@@ -177,13 +186,13 @@ func (s *Service) FinishPasskeyRegistration(ctx context.Context, user User, sess
 		AAGUID:         cred.AAGUID,
 		BackupEligible: cred.BackupEligible,
 		BackupState:    cred.BackupState,
-		Name:           name,
+		Name:           s.defaultPasskeyName(name, cred.AAGUID),
 		CreatedAt:      s.now(),
 	})
 	if err != nil {
 		return PasskeyInfo{}, err
 	}
-	return passkeyInfo(p, sess), nil
+	return s.passkeyInfo(p, sess), nil
 }
 
 // StartPasskeyLogin is POST /api/auth/passkeys/login/start: a discoverable
@@ -273,7 +282,7 @@ func (s *Service) ListPasskeys(ctx context.Context, userID string, sess Session)
 	}
 	out := make([]PasskeyInfo, 0, len(list))
 	for _, p := range list {
-		out = append(out, passkeyInfo(p, sess))
+		out = append(out, s.passkeyInfo(p, sess))
 	}
 	return out, nil
 }
@@ -322,10 +331,12 @@ func (s *Service) consumeCeremony(ctx context.Context, id string, kind Challenge
 	return ch, nil
 }
 
+// normalizePasskeyName trims a submitted name and enforces its length. ""
+// means "none given"; defaultPasskeyName fills it in once the AAGUID is known.
 func normalizePasskeyName(raw string) (string, error) {
 	name := strings.TrimSpace(raw)
 	if name == "" {
-		return defaultPasskeyName, nil
+		return "", nil
 	}
 	if utf8.RuneCountInString(name) > maxPasskeyNameLen {
 		return "", ErrInvalidPasskeyName
@@ -333,8 +344,35 @@ func normalizePasskeyName(raw string) (string, error) {
 	return name, nil
 }
 
-func passkeyInfo(p Passkey, sess Session) PasskeyInfo {
+// defaultPasskeyName names an unnamed passkey after its provider ("Apple
+// Passwords"), falling back to "Passkey". The name is stored, so it stays put
+// if the provider list later renames the provider.
+func (s *Service) defaultPasskeyName(name string, aaguid []byte) string {
+	if name != "" {
+		return name
+	}
+	if p := s.provider(aaguid); p != nil {
+		if r := []rune(p.Name); len(r) > maxPasskeyNameLen {
+			return string(r[:maxPasskeyNameLen])
+		}
+		return p.Name
+	}
+	return defaultPasskeyName
+}
+
+func (s *Service) provider(aaguid []byte) *PasskeyProvider {
+	if s.providers == nil {
+		return nil
+	}
+	if p, ok := s.providers(aaguid); ok {
+		return &p
+	}
+	return nil
+}
+
+func (s *Service) passkeyInfo(p Passkey, sess Session) PasskeyInfo {
 	return PasskeyInfo{
+		Provider:   s.provider(p.AAGUID),
 		ID:         p.ID,
 		Name:       p.Name,
 		CreatedAt:  p.CreatedAt,

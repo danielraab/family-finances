@@ -40,10 +40,12 @@ type Credential struct {
 }
 
 // Authenticator answers WebAuthn options. Origin is the origin the "browser"
-// reports in clientDataJSON; SkipUV leaves the user-verified flag unset.
+// reports in clientDataJSON; SkipUV leaves the user-verified flag unset;
+// AAGUID is the 16-byte model id reported at registration (zeros when nil).
 type Authenticator struct {
 	Origin      string
 	SkipUV      bool
+	AAGUID      []byte
 	Credentials []*Credential
 }
 
@@ -103,7 +105,9 @@ func (a *Authenticator) Register(options json.RawMessage, counter uint32) (json.
 	}
 
 	authData := a.authData(opts.RP.ID, flagAT, counter)
-	authData = append(authData, make([]byte, 16)...) // AAGUID: none
+	aaguid := make([]byte, 16)
+	copy(aaguid, a.AAGUID)
+	authData = append(authData, aaguid...)
 	authData = binary.BigEndian.AppendUint16(authData, uint16(len(credID)))
 	authData = append(authData, credID...)
 	authData = append(authData, coseKey...)

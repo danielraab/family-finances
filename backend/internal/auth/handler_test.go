@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"at.draab/familyfinances/internal/aaguid"
 	"at.draab/familyfinances/internal/auth"
 	"at.draab/familyfinances/internal/clientip"
 	"at.draab/familyfinances/internal/httpapi"
@@ -50,7 +51,7 @@ func newHarness(t *testing.T, opts ...svcOpt) *harness {
 	if err != nil {
 		t.Fatalf("passkeyauth.New: %v", err)
 	}
-	svcOpts := []auth.Option{auth.WithClock(cfg.clock.Now), auth.WithWebAuthn(wa)}
+	svcOpts := []auth.Option{auth.WithClock(cfg.clock.Now), auth.WithWebAuthn(wa), auth.WithPasskeyProviders(providerLookup)}
 	if cfg.mailLimit > 0 {
 		svcOpts = append(svcOpts, auth.WithMailLimiter(ratelimit.New(cfg.mailLimit, 15*time.Minute, cfg.clock.Now)))
 	}
@@ -65,6 +66,12 @@ func newHarness(t *testing.T, opts ...svcOpt) *harness {
 	}
 	h := auth.NewHandler(svc, hopts)
 	return &harness{h: h, svc: svc, store: store, mailer: mailer, clock: cfg.clock}
+}
+
+// providerLookup is main.go's adapter over the real embedded AAGUID list.
+func providerLookup(id []byte) (auth.PasskeyProvider, bool) {
+	p, ok := aaguid.Lookup(id)
+	return auth.PasskeyProvider{Name: p.Name, IconLight: p.IconLight, IconDark: p.IconDark}, ok
 }
 
 // do runs req as user (anonymous when nil). A user gets a fresh web session

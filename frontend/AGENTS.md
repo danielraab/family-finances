@@ -178,6 +178,11 @@ Invitations, and Tags for everyone; Users only when `user.is_admin`) plus
   available behind a confirmation that warns more strongly for the current
   session's passkey; removing that one calls `signOutLocally()` and navigates
   to `/login`.
+  Each row shows the passkey's `provider` (from its AAGUID, see
+  `backend/internal/aaguid`): the logo as an `<img>` of the SVG data URI —
+  `icon_light` with `dark:hidden`, `icon_dark` with `hidden dark:block` — and
+  the provider name in the secondary line when it differs from the passkey's
+  own name; `provider: null` keeps the key glyph.
 - `settings.invitations.tsx` (`/settings/invitations`, "My Invitations" tab,
   every authenticated user) — lists the invitations the visitor personally
   created (`GET /api/auth/invites/mine`), with a Revoke action per row

@@ -132,6 +132,17 @@ type PasskeyInfo struct {
 	LastUsedAt *time.Time `json:"last_used_at"`
 	BackedUp   bool       `json:"backed_up"`
 	Current    bool       `json:"current"`
+	// Provider is who made the passkey (from its AAGUID), or nil when the
+	// authenticator didn't say or isn't known. Display only, never trusted.
+	Provider *PasskeyProvider `json:"provider"`
+}
+
+// PasskeyProvider names a passkey's provider, e.g. "Google Password
+// Manager", with optional SVG data-URI icons for light and dark themes.
+type PasskeyProvider struct {
+	Name      string `json:"name"`
+	IconLight string `json:"icon_light,omitempty"`
+	IconDark  string `json:"icon_dark,omitempty"`
 }
 
 // ChallengeKind distinguishes the two WebAuthn ceremonies.

@@ -102,6 +102,7 @@ type Service struct {
 	mailer       Mailer
 	oidc         OIDCClient     // nil when no provider is configured
 	webauthn     WebAuthn       // nil when not wired; passkey ceremonies then fail
+	providers    ProviderLookup // nil: passkeys carry no provider
 	mailLimiter  Limiter        // nil: no per-recipient limit on magic-link mails
 	evicters     []Evicter      // limiters whose idle keys Cleanup drops
 	lang         LanguageLookup // nil when not wired
