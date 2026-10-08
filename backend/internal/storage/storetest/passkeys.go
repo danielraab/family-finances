@@ -195,7 +195,7 @@ func PasskeyContract(t *testing.T, newStore func(t *testing.T) auth.Store) {
 		s := newStore(t)
 		ch, err := s.CreateWebAuthnChallenge(ctx, auth.WebAuthnChallenge{
 			Kind: auth.ChallengeLogin, Data: []byte(`{"challenge":"abc"}`), ExpiresAt: base.Add(5 * time.Minute),
-		}, base)
+		})
 		if err != nil {
 			t.Fatalf("CreateWebAuthnChallenge: %v", err)
 		}
@@ -217,35 +217,14 @@ func PasskeyContract(t *testing.T, newStore func(t *testing.T) auth.Store) {
 		}
 	})
 
-	t.Run("creating a challenge purges expired ones", func(t *testing.T) {
-		s := newStore(t)
-		old, _ := s.CreateWebAuthnChallenge(ctx, auth.WebAuthnChallenge{
-			Kind: auth.ChallengeLogin, Data: []byte(`{}`), ExpiresAt: base.Add(time.Minute),
-		}, base)
-		live, _ := s.CreateWebAuthnChallenge(ctx, auth.WebAuthnChallenge{
-			Kind: auth.ChallengeLogin, Data: []byte(`{}`), ExpiresAt: base.Add(10 * time.Minute),
-		}, base)
-		if _, err := s.CreateWebAuthnChallenge(ctx, auth.WebAuthnChallenge{
-			Kind: auth.ChallengeLogin, Data: []byte(`{}`), ExpiresAt: base.Add(15 * time.Minute),
-		}, base.Add(5*time.Minute)); err != nil {
-			t.Fatalf("create: %v", err)
-		}
-		if _, err := s.ConsumeWebAuthnChallenge(ctx, old.ID, auth.ChallengeLogin); !errors.Is(err, auth.ErrNotFound) {
-			t.Fatalf("expired challenge survived: %v", err)
-		}
-		if _, err := s.ConsumeWebAuthnChallenge(ctx, live.ID, auth.ChallengeLogin); err != nil {
-			t.Fatalf("unexpired challenge was purged: %v", err)
-		}
-	})
-
 	t.Run("delete expired challenges keeps live ones", func(t *testing.T) {
 		s := newStore(t)
 		old, _ := s.CreateWebAuthnChallenge(ctx, auth.WebAuthnChallenge{
 			Kind: auth.ChallengeLogin, Data: []byte(`{}`), ExpiresAt: base.Add(time.Minute),
-		}, base)
+		})
 		live, _ := s.CreateWebAuthnChallenge(ctx, auth.WebAuthnChallenge{
 			Kind: auth.ChallengeLogin, Data: []byte(`{}`), ExpiresAt: base.Add(10 * time.Minute),
-		}, base)
+		})
 		if err := s.DeleteExpiredWebAuthnChallenges(ctx, base.Add(5*time.Minute)); err != nil {
 			t.Fatalf("DeleteExpiredWebAuthnChallenges: %v", err)
 		}
@@ -263,7 +242,7 @@ func PasskeyContract(t *testing.T, newStore func(t *testing.T) auth.Store) {
 		sess := newSession(t, s, u.ID, "", "s1")
 		ch, err := s.CreateWebAuthnChallenge(ctx, auth.WebAuthnChallenge{
 			Kind: auth.ChallengeRegistration, SessionID: sess.ID, Data: []byte(`{}`), ExpiresAt: base.Add(time.Hour),
-		}, base)
+		})
 		if err != nil {
 			t.Fatalf("create: %v", err)
 		}

@@ -2,9 +2,11 @@ package auth
 
 import (
 	"encoding/json"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,6 +23,13 @@ type HandlerOptions struct {
 	RenderError RenderError
 	// CookieSecure sets the Secure attribute on the session cookie.
 	CookieSecure bool
+	// ClientIP resolves the client address recorded on new sessions and used
+	// as the per-IP rate-limit key — internal/clientip's trusted-proxy
+	// resolver in production. Nil uses the request's direct peer.
+	ClientIP func(*http.Request) string
+	// IPLimiter throttles the unauthenticated sign-in endpoints per client
+	// IP, one budget shared across all of them. Nil disables it.
+	IPLimiter Limiter
 }
 
 // Handler is the auth HTTP surface, mounted by internal/httpapi at
@@ -30,6 +39,8 @@ type Handler struct {
 	svc          *Service
 	renderError  RenderError
 	cookieSecure bool
+	clientIP     func(*http.Request) string
+	ipLimiter    Limiter
 	mux          *http.ServeMux
 }
 
@@ -42,13 +53,18 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 		svc:          svc,
 		renderError:  opts.RenderError,
 		cookieSecure: opts.CookieSecure,
+		clientIP:     opts.ClientIP,
+		ipLimiter:    opts.IPLimiter,
 		mux:          http.NewServeMux(),
 	}
+	if h.clientIP == nil {
+		h.clientIP = peerIP
+	}
 
-	h.mux.HandleFunc("POST /api/auth/email/start", h.emailStart)
-	h.mux.HandleFunc("GET /api/auth/email/callback", h.emailCallback)
-	h.mux.HandleFunc("GET /api/auth/oidc/start", h.oidcStart)
-	h.mux.HandleFunc("GET /api/auth/oidc/callback", h.oidcCallback)
+	h.mux.HandleFunc("POST /api/auth/email/start", h.throttle(h.emailStart))
+	h.mux.HandleFunc("GET /api/auth/email/callback", h.throttle(h.emailCallback))
+	h.mux.HandleFunc("GET /api/auth/oidc/start", h.throttle(h.oidcStart))
+	h.mux.HandleFunc("GET /api/auth/oidc/callback", h.throttle(h.oidcCallback))
 	h.mux.HandleFunc("GET /api/auth/config", h.config)
 	h.mux.HandleFunc("GET /api/auth/me", h.me)
 	h.mux.HandleFunc("PATCH /api/auth/me", h.patchMe)
@@ -56,7 +72,7 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("POST /api/auth/invites", h.createInvite)
 	h.mux.HandleFunc("GET /api/auth/invites", h.listInvites)
 	h.mux.HandleFunc("GET /api/auth/invites/mine", h.listMyInvites)
-	h.mux.HandleFunc("GET /api/auth/invites/accept", h.acceptInvite)
+	h.mux.HandleFunc("GET /api/auth/invites/accept", h.throttle(h.acceptInvite))
 	h.mux.HandleFunc("POST /api/auth/invites/{id}/revoke", h.revokeInvite)
 	h.mux.HandleFunc("DELETE /api/auth/invites/{id}", h.deleteInvite)
 	h.mux.HandleFunc("GET /api/auth/users", h.listUsers)
@@ -67,8 +83,8 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("DELETE /api/auth/passkeys/{id}", h.deletePasskey)
 	h.mux.HandleFunc("POST /api/auth/passkeys/register/start", h.passkeyRegisterStart)
 	h.mux.HandleFunc("POST /api/auth/passkeys/register/finish", h.passkeyRegisterFinish)
-	h.mux.HandleFunc("POST /api/auth/passkeys/login/start", h.passkeyLoginStart)
-	h.mux.HandleFunc("POST /api/auth/passkeys/login/finish", h.passkeyLoginFinish)
+	h.mux.HandleFunc("POST /api/auth/passkeys/login/start", h.throttle(h.passkeyLoginStart))
+	h.mux.HandleFunc("POST /api/auth/passkeys/login/finish", h.throttle(h.passkeyLoginFinish))
 
 	return h
 }
@@ -108,7 +124,7 @@ func (h *Handler) emailCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonClient := wantsJSON(r)
-	user, session, err := h.svc.CompleteEmailLogin(r.Context(), token, sessionContext(r, jsonClient))
+	user, session, err := h.svc.CompleteEmailLogin(r.Context(), token, h.sessionContext(r, jsonClient))
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -139,7 +155,7 @@ func (h *Handler) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonClient := wantsJSON(r)
-	user, session, returnTo, err := h.svc.CompleteOIDC(r.Context(), state, code, currentUserID(r), sessionContext(r, jsonClient))
+	user, session, returnTo, err := h.svc.CompleteOIDC(r.Context(), state, code, currentUserID(r), h.sessionContext(r, jsonClient))
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -415,7 +431,7 @@ func (h *Handler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonClient := wantsJSON(r)
-	user, session, err := h.svc.AcceptInvite(r.Context(), token, sessionContext(r, jsonClient))
+	user, session, err := h.svc.AcceptInvite(r.Context(), token, h.sessionContext(r, jsonClient))
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -532,7 +548,7 @@ func (h *Handler) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, ErrPasskeyAuthFailed)
 		return
 	}
-	user, token, err := h.svc.CompletePasskeyLogin(r.Context(), body.CeremonyID, body.Credential, sessionContext(r, false))
+	user, token, err := h.svc.CompletePasskeyLogin(r.Context(), body.CeremonyID, body.Credential, h.sessionContext(r, false))
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -593,15 +609,35 @@ func wantsJSON(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "application/json")
 }
 
-func sessionContext(r *http.Request, jsonClient bool) SessionContext {
+// throttle applies the per-IP limit to an unauthenticated sign-in endpoint.
+// It runs before the body is read, so a refused request has no side effect.
+func (h *Handler) throttle(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.ipLimiter != nil {
+			if ok, retryAfter := h.ipLimiter.Allow("ip:" + h.clientIP(r)); !ok {
+				secs := int(math.Ceil(retryAfter.Seconds()))
+				if secs < 1 {
+					secs = 1
+				}
+				w.Header().Set("Retry-After", strconv.Itoa(secs))
+				h.renderError(w, r, ErrRateLimited)
+				return
+			}
+		}
+		next(w, r)
+	}
+}
+
+func (h *Handler) sessionContext(r *http.Request, jsonClient bool) SessionContext {
 	client := ClientWeb
 	if jsonClient {
 		client = ClientAPI
 	}
-	return SessionContext{Client: client, UserAgent: r.UserAgent(), IP: clientIP(r)}
+	return SessionContext{Client: client, UserAgent: r.UserAgent(), IP: h.clientIP(r)}
 }
 
-func clientIP(r *http.Request) string {
+// peerIP is the default ClientIP: the direct peer, no proxy headers.
+func peerIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

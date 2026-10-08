@@ -630,10 +630,7 @@ func (a *AuthStore) DeletePasskey(ctx context.Context, userID, id string) error 
 
 // --- passkey ceremony challenges ---------------------------------------
 
-func (a *AuthStore) CreateWebAuthnChallenge(ctx context.Context, ch auth.WebAuthnChallenge, now time.Time) (auth.WebAuthnChallenge, error) {
-	if err := a.DeleteExpiredWebAuthnChallenges(ctx, now); err != nil {
-		return auth.WebAuthnChallenge{}, err
-	}
+func (a *AuthStore) CreateWebAuthnChallenge(ctx context.Context, ch auth.WebAuthnChallenge) (auth.WebAuthnChallenge, error) {
 	err := a.pool.QueryRow(ctx,
 		`INSERT INTO webauthn_challenges (kind, session_id, data, expires_at)
 		 VALUES ($1, NULLIF($2, '')::uuid, $3, $4)
@@ -662,5 +659,24 @@ func (a *AuthStore) ConsumeWebAuthnChallenge(ctx context.Context, id string, kin
 
 func (a *AuthStore) DeleteExpiredWebAuthnChallenges(ctx context.Context, now time.Time) error {
 	_, err := a.pool.Exec(ctx, `DELETE FROM webauthn_challenges WHERE expires_at < $1`, now)
+	return err
+}
+
+// --- cleanup ---------------------------------------------------------
+
+func (a *AuthStore) DeleteExpiredSessions(ctx context.Context, now, createdBefore time.Time) error {
+	_, err := a.pool.Exec(ctx,
+		`DELETE FROM sessions WHERE expires_at < $1 OR created_at < $2`, now, createdBefore)
+	return err
+}
+
+func (a *AuthStore) DeleteStaleMagicLinkTokens(ctx context.Context, now time.Time) error {
+	_, err := a.pool.Exec(ctx,
+		`DELETE FROM magic_link_tokens WHERE consumed_at IS NOT NULL OR expires_at < $1`, now)
+	return err
+}
+
+func (a *AuthStore) DeleteExpiredOIDCState(ctx context.Context, now time.Time) error {
+	_, err := a.pool.Exec(ctx, `DELETE FROM oidc_login_state WHERE expires_at < $1`, now)
 	return err
 }

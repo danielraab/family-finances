@@ -2008,6 +2008,17 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description Too many sign-in requests from this client IP (RATE_LIMIT_IP_REQUESTS per RATE_LIMIT_IP_WINDOW, shared across every unauthenticated sign-in endpoint). Nothing was done; retry after the indicated delay. */
+        TooManyRequests: {
+            headers: {
+                /** @description Seconds until the next request from this IP is allowed. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description No valid session was presented. */
         Unauthorized: {
             headers: {
@@ -2429,6 +2440,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getAuthInvites: {
@@ -2724,6 +2736,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     startAuthPasskeyLogin: {
@@ -2744,6 +2757,7 @@ export interface operations {
                     "application/json": components["schemas"]["PasskeyCeremony"];
                 };
             };
+            429: components["responses"]["TooManyRequests"];
         };
     };
     finishAuthPasskeyRegistration: {

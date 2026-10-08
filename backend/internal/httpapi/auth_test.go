@@ -204,6 +204,7 @@ func TestEveryAuthSentinelHasAStatus(t *testing.T) {
 		auth.ErrPasskeyConflict:    http.StatusConflict,
 		auth.ErrPasskeyAuthFailed:  http.StatusUnauthorized,
 		auth.ErrInvalidPasskeyName: http.StatusBadRequest,
+		auth.ErrRateLimited:        http.StatusTooManyRequests,
 	}
 	for _, sentinel := range auth.Sentinels {
 		rec := httptest.NewRecorder()

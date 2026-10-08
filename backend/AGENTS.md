@@ -29,7 +29,7 @@ nothing outside this module can import it and the packages stay free to change.
 
 ```
 backend/
-├── main.go              # package main — compose the app, start/stop the server
+├── main.go              # package main — compose the app, start/stop the server and the auth cleanup loop
 ├── healthcheck.go       # package main — `server healthcheck` self-probe (Docker HEALTHCHECK)
 ├── embed.go             # package main — //go:embed all:static/out  (must stay here; see below)
 ├── static/out/          # embed target — placeholder .gitkeep in git; Docker overwrites with the real build
@@ -61,6 +61,8 @@ backend/
     ├── mailer/          # auth.Mailer over net/smtp — STARTTLS/implicit/none, hand-built MIME
     ├── oidcauth/        # auth.OIDCClient over coreos/go-oidc/v3 + x/oauth2 — discovery, PKCE, id_token verify
     ├── passkeyauth/     # auth.WebAuthn over go-webauthn — RP from AUTH_BASE_URL, discoverable credentials, UV required
+    ├── clientip/        # client IP resolution — X-Forwarded-For believed only from AUTH_TRUSTED_PROXIES
+    ├── ratelimit/       # in-process sliding-window-log limiter (auth.Limiter) — per IP and per magic-link recipient
     ├── cli/             # `admin grant|revoke|list` — dispatched from main.go beside `healthcheck`
     ├── account/         # one package per product noun (account, transaction, budget, …)
     │   ├── account.go   #   domain type + validation + invariants — no HTTP, no SQL
@@ -219,11 +221,27 @@ to status codes in the one place — `httpapi/respond.go`.
   `httpapi`'s middleware via `Service.AuthenticateSession`), and
   `GET /api/auth/me` reports it as `session` with
   `passkey_registration_until`. Ceremony challenges are single-use, live 5
-  minutes, and expired ones are purged whenever a new one is stored. Tests:
+  minutes; expired ones are removed by the cleanup job (below). Tests:
   `internal/storage/storetest` holds the store contract both stores run, and
   `internal/passkeyauth/passkeytest` is a software authenticator (ES256,
   `none` attestation) that drives real ceremonies in handler tests —
   `github.com/fxamacker/cbor/v2` is a direct requirement only for it.
+- **Rate limiting and cleanup.** The seven unauthenticated sign-in routes
+  (magic-link start/callback, OIDC start/callback, invite acceptance, passkey
+  login start/finish) share one per-IP budget (`Handler.throttle`, before the
+  body is read; `429` + `Retry-After`, `ErrRateLimited`), keyed on
+  `internal/clientip`'s resolution of the client — `X-Forwarded-For` is walked
+  right to left and believed only from `AUTH_TRUSTED_PROXIES`; the same
+  resolved IP is recorded on new sessions. `RATE_LIMIT_IP_ENABLED=false`
+  leaves the limiter nil. Magic-link mails are limited per normalized
+  recipient inside `StartEmailLogin`, consulted only for permitted addresses;
+  over budget is the same silent `200`. Both limiters (`internal/ratelimit`)
+  are in memory and per process. `main.go`'s `runCleanup` calls
+  `Service.Cleanup` at startup and every `AUTH_CLEANUP_INTERVAL` on the
+  server's shutdown context: idempotent `DELETE`s of expired/over-age
+  sessions, consumed/expired magic-link tokens, expired OIDC state and passkey
+  challenges (never invites, users, identities, passkeys), plus eviction of
+  idle limiter keys; a failed step is logged and the others still run.
 - **`GET /api/auth/config`** — unauthenticated; reports which sign-in methods
   the client should show. Today: `{ "oidc": { "label", "start_path" } }` when an
   OIDC provider is configured, else `{ "oidc": null }`. `label` is `OIDC_LABEL`.
@@ -242,7 +260,10 @@ to status codes in the one place — `httpapi/respond.go`.
   `redirect_uri`), `AUTH_SESSION_TTL`/`AUTH_SESSION_MAX_TTL`,
   `AUTH_COOKIE_SECURE`, `AUTH_SIGNUP_ENABLED`, `AUTH_ALLOWED_EMAIL_DOMAINS`,
   `AUTH_INVITE_ENABLED`, `AUTH_INVITE_TTL`, `AUTH_MAGIC_LINK_TTL`,
-  `AUTH_PASSKEY_REAUTH_WINDOW`; `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_FROM`/`SMTP_TLS`
+  `AUTH_PASSKEY_REAUTH_WINDOW`, `AUTH_TRUSTED_PROXIES`,
+  `AUTH_CLEANUP_INTERVAL`; `RATE_LIMIT_IP_ENABLED`/`RATE_LIMIT_IP_REQUESTS`/
+  `RATE_LIMIT_IP_WINDOW`/`RATE_LIMIT_EMAIL_REQUESTS`/`RATE_LIMIT_EMAIL_WINDOW`;
+  `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_FROM`/`SMTP_TLS`
   (`starttls|implicit|none`);
   `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_SCOPES`/`OIDC_LABEL`
   (button text, default `Single sign-on`).

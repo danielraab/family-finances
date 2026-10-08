@@ -11,3 +11,7 @@ import (
 func TestMemoryPasskeyContract(t *testing.T) {
 	storetest.PasskeyContract(t, func(*testing.T) auth.Store { return memory.NewAuthStore() })
 }
+
+func TestMemoryCleanupContract(t *testing.T) {
+	storetest.CleanupContract(t, func(*testing.T) auth.Store { return memory.NewAuthStore() })
+}

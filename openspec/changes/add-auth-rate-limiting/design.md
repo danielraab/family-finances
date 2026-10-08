@@ -130,7 +130,7 @@ auth.WithMailLimiter(Limiter) // service option
 - The runner is a small `runCleanup(ctx, svc, interval)` goroutine in
   `main.go`. It runs once immediately, then on a `time.Ticker`, using the same
   `signal.NotifyContext` context as the HTTP server, so it stops on shutdown.
-  Each pass logs counts at `Debug` and errors at `Error`.
+  Each pass logs completion at `Info` and errors at `Error`.
 - Indexes: the tables are small (a family-sized install), so no new index is
   added. If that changes, `sessions(expires_at)` is the first candidate.
 

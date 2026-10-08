@@ -625,10 +625,9 @@ func (a *AuthStore) DeletePasskey(_ context.Context, userID, id string) error {
 
 // --- passkey ceremony challenges ----------------------------------------
 
-func (a *AuthStore) CreateWebAuthnChallenge(_ context.Context, ch auth.WebAuthnChallenge, now time.Time) (auth.WebAuthnChallenge, error) {
+func (a *AuthStore) CreateWebAuthnChallenge(_ context.Context, ch auth.WebAuthnChallenge) (auth.WebAuthnChallenge, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.deleteExpiredChallengesLocked(now)
 	ch.ID = a.nextID("ch")
 	ch.Data = append([]byte(nil), ch.Data...)
 	a.challenges[ch.ID] = ch
@@ -669,4 +668,40 @@ func (a *AuthStore) deleteChallengesForSessionLocked(sessionID string) {
 			delete(a.challenges, id)
 		}
 	}
+}
+
+// --- cleanup ---------------------------------------------------------
+
+func (a *AuthStore) DeleteExpiredSessions(_ context.Context, now, createdBefore time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for id, row := range a.sessions {
+		if row.s.ExpiresAt.Before(now) || row.s.CreatedAt.Before(createdBefore) {
+			delete(a.sessions, id)
+			a.deleteChallengesForSessionLocked(id)
+		}
+	}
+	return nil
+}
+
+func (a *AuthStore) DeleteStaleMagicLinkTokens(_ context.Context, now time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for hash, row := range a.magic {
+		if row.consumedAt != nil || row.expiresAt.Before(now) {
+			delete(a.magic, hash)
+		}
+	}
+	return nil
+}
+
+func (a *AuthStore) DeleteExpiredOIDCState(_ context.Context, now time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for state, st := range a.oidc {
+		if st.ExpiresAt.Before(now) {
+			delete(a.oidc, state)
+		}
+	}
+	return nil
 }

@@ -207,6 +207,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/invites:
     post:
@@ -466,6 +468,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PasskeyCeremony"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/passkeys/login/finish:
     post:
@@ -497,6 +501,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/users:
     get:
@@ -2791,6 +2797,8 @@ paths:
           description: Signed in; redirect to a safe in-app path.
         "400":
           description: The token is missing, invalid, expired, or already used.
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/oidc/start:
     get:
@@ -2811,6 +2819,8 @@ paths:
           description: Redirect to the identity provider.
         "404":
           description: OIDC is not configured on this instance.
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/oidc/callback:
     get:
@@ -2844,6 +2854,8 @@ paths:
           description: Signed in; redirect to a safe in-app path.
         "400":
           description: Missing/unknown state, provider error, or id_token verification failed.
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/invites/accept:
     get:
@@ -2867,6 +2879,8 @@ paths:
           description: Account created / signed in; redirect to a safe in-app path.
         "400":
           description: The invite token is missing, invalid, expired, or already used.
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
 components:
   securitySchemes:
@@ -2902,6 +2916,21 @@ components:
         No such resource — including one that belongs to a different owner,
         which behaves identically to nonexistent (existence is not
         disclosed across owners).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: >-
+        Too many sign-in requests from this client IP (RATE_LIMIT_IP_REQUESTS
+        per RATE_LIMIT_IP_WINDOW, shared across every unauthenticated sign-in
+        endpoint). Nothing was done; retry after the indicated delay.
+      headers:
+        Retry-After:
+          description: Seconds until the next request from this IP is allowed.
+          schema:
+            type: integer
+            minimum: 1
       content:
         application/json:
           schema:

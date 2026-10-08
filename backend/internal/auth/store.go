@@ -69,6 +69,9 @@ var (
 	ErrPasskeyAuthFailed = errors.New("passkey sign-in failed")
 	// ErrInvalidPasskeyName: the name is longer than 100 characters.
 	ErrInvalidPasskeyName = errors.New("invalid passkey name")
+	// ErrRateLimited: the client IP made too many sign-in requests in the
+	// current window.
+	ErrRateLimited = errors.New("too many requests")
 )
 
 // Sentinels is every error above, for the httpapi mapping and for tests.
@@ -79,7 +82,7 @@ var Sentinels = []error{
 	ErrEmailRequired, ErrAccountDisabled, ErrInviteRevokeForbidden,
 	ErrInviteNotRevoked, ErrReauthRequired, ErrPasskeyWebOnly,
 	ErrCeremonyInvalid, ErrPasskeyInvalid, ErrPasskeyConflict,
-	ErrPasskeyAuthFailed, ErrInvalidPasskeyName,
+	ErrPasskeyAuthFailed, ErrInvalidPasskeyName, ErrRateLimited,
 }
 
 // NewUser is the input to account creation.
@@ -227,13 +230,25 @@ type Store interface {
 	// --- passkey ceremony challenges ---
 
 	// CreateWebAuthnChallenge stores a ceremony challenge and returns it with
-	// its id. It first deletes every challenge already expired at now, which
-	// bounds the table without a background job.
-	CreateWebAuthnChallenge(ctx context.Context, ch WebAuthnChallenge, now time.Time) (WebAuthnChallenge, error)
+	// its id. Expired challenges are removed by Service.Cleanup.
+	CreateWebAuthnChallenge(ctx context.Context, ch WebAuthnChallenge) (WebAuthnChallenge, error)
 	// ConsumeWebAuthnChallenge atomically deletes and returns the challenge
 	// with this id and kind, or ErrNotFound. Expiry and session binding are
 	// checked by the caller.
 	ConsumeWebAuthnChallenge(ctx context.Context, id string, kind ChallengeKind) (WebAuthnChallenge, error)
 	// DeleteExpiredWebAuthnChallenges deletes every challenge expired at now.
 	DeleteExpiredWebAuthnChallenges(ctx context.Context, now time.Time) error
+
+	// --- cleanup ---
+	// Each is a single idempotent delete, safe to run from several replicas
+	// at once.
+
+	// DeleteExpiredSessions deletes sessions past expires_at at now, or
+	// created before createdBefore (the absolute-age cap).
+	DeleteExpiredSessions(ctx context.Context, now, createdBefore time.Time) error
+	// DeleteStaleMagicLinkTokens deletes consumed tokens and tokens past
+	// expires_at at now.
+	DeleteStaleMagicLinkTokens(ctx context.Context, now time.Time) error
+	// DeleteExpiredOIDCState deletes OIDC login state past expires_at at now.
+	DeleteExpiredOIDCState(ctx context.Context, now time.Time) error
 }

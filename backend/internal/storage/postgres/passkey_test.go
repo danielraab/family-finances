@@ -13,3 +13,10 @@ func TestPGPasskeyContract(t *testing.T) {
 		return store
 	})
 }
+
+func TestPGCleanupContract(t *testing.T) {
+	storetest.CleanupContract(t, func(t *testing.T) auth.Store {
+		store, _ := newAuthStore(t)
+		return store
+	})
+}

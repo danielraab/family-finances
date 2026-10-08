@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"at.draab/familyfinances/internal/auth"
+	"at.draab/familyfinances/internal/clientip"
 	"at.draab/familyfinances/internal/httpapi"
 	"at.draab/familyfinances/internal/openapicheck"
 	"at.draab/familyfinances/internal/passkeyauth"
+	"at.draab/familyfinances/internal/ratelimit"
 	"at.draab/familyfinances/internal/storage/memory"
 )
 
@@ -48,8 +50,20 @@ func newHarness(t *testing.T, opts ...svcOpt) *harness {
 	if err != nil {
 		t.Fatalf("passkeyauth.New: %v", err)
 	}
-	svc := auth.NewService(store, mailer, cfg.oidc, p, auth.WithClock(cfg.clock.Now), auth.WithWebAuthn(wa))
-	h := auth.NewHandler(svc, auth.HandlerOptions{RenderError: httpapi.WriteError, CookieSecure: true})
+	svcOpts := []auth.Option{auth.WithClock(cfg.clock.Now), auth.WithWebAuthn(wa)}
+	if cfg.mailLimit > 0 {
+		svcOpts = append(svcOpts, auth.WithMailLimiter(ratelimit.New(cfg.mailLimit, 15*time.Minute, cfg.clock.Now)))
+	}
+	svc := auth.NewService(store, mailer, cfg.oidc, p, svcOpts...)
+	hopts := auth.HandlerOptions{
+		RenderError:  httpapi.WriteError,
+		CookieSecure: true,
+		ClientIP:     clientip.Resolver{Trusted: cfg.trusted}.String,
+	}
+	if cfg.ipLimit > 0 {
+		hopts.IPLimiter = ratelimit.New(cfg.ipLimit, time.Minute, cfg.clock.Now)
+	}
+	h := auth.NewHandler(svc, hopts)
 	return &harness{h: h, svc: svc, store: store, mailer: mailer, clock: cfg.clock}
 }
 

@@ -105,6 +105,11 @@ function LoginPage() {
       const { response } = await api.POST("/api/auth/email/start", {
         body: { email: value },
       });
+      if (response.status === 429) {
+        // Throttled per IP: keep the form, say why, don't claim a mail went out.
+        setError(t("login.rateLimited"));
+        return;
+      }
       if (!response.ok) {
         throw new Error(`unexpected status ${response.status}`);
       }

@@ -42,6 +42,7 @@ func init() {
 	registerErrStatus(auth.ErrPasskeyConflict, http.StatusConflict)
 	registerErrStatus(auth.ErrPasskeyAuthFailed, http.StatusUnauthorized)
 	registerErrStatus(auth.ErrInvalidPasskeyName, http.StatusBadRequest)
+	registerErrStatus(auth.ErrRateLimited, http.StatusTooManyRequests)
 }
 
 // authResolve is middleware that reads a session token from the

@@ -296,7 +296,7 @@ func (s *Service) storeCeremony(ctx context.Context, kind ChallengeKind, session
 		SessionID: sessionID,
 		Data:      state,
 		ExpiresAt: now.Add(passkeyChallengeTTL),
-	}, now)
+	})
 	if err != nil {
 		return PasskeyCeremony{}, err
 	}
