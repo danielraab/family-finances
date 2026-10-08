@@ -13,7 +13,7 @@ import (
 // a database driver — so the middleware can name an authenticated user without
 // importing the persistence layer.
 type Authenticator interface {
-	Authenticate(ctx context.Context, token string) (auth.User, error)
+	AuthenticateSession(ctx context.Context, token string) (auth.User, auth.Session, error)
 }
 
 func init() {
@@ -35,6 +35,13 @@ func init() {
 	registerErrStatus(auth.ErrAccountDisabled, http.StatusForbidden)
 	registerErrStatus(auth.ErrInviteRevokeForbidden, http.StatusForbidden)
 	registerErrStatus(auth.ErrInviteNotRevoked, http.StatusConflict)
+	registerErrStatus(auth.ErrReauthRequired, http.StatusForbidden)
+	registerErrStatus(auth.ErrPasskeyWebOnly, http.StatusForbidden)
+	registerErrStatus(auth.ErrCeremonyInvalid, http.StatusBadRequest)
+	registerErrStatus(auth.ErrPasskeyInvalid, http.StatusBadRequest)
+	registerErrStatus(auth.ErrPasskeyConflict, http.StatusConflict)
+	registerErrStatus(auth.ErrPasskeyAuthFailed, http.StatusUnauthorized)
+	registerErrStatus(auth.ErrInvalidPasskeyName, http.StatusBadRequest)
 }
 
 // authResolve is middleware that reads a session token from the
@@ -51,8 +58,8 @@ func authResolve(a Authenticator, next http.Handler) http.Handler {
 			}
 		}
 		if token != "" {
-			if u, err := a.Authenticate(r.Context(), token); err == nil {
-				r = r.WithContext(auth.WithUser(r.Context(), u))
+			if u, sess, err := a.AuthenticateSession(r.Context(), token); err == nil {
+				r = r.WithContext(auth.WithSession(auth.WithUser(r.Context(), u), sess))
 			}
 		}
 		next.ServeHTTP(w, r)

@@ -21,6 +21,7 @@ import (
 	"at.draab/familyfinances/internal/httpapi"
 	"at.draab/familyfinances/internal/mailer"
 	"at.draab/familyfinances/internal/oidcauth"
+	"at.draab/familyfinances/internal/passkeyauth"
 	"at.draab/familyfinances/internal/recurringtransaction"
 	"at.draab/familyfinances/internal/settings"
 	"at.draab/familyfinances/internal/storage/postgres"
@@ -263,13 +264,27 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, mail
 		MagicLinkTTL:        cfg.Auth.MagicLinkTTL,
 		OIDCIssuer:          cfg.OIDC.Issuer,
 		OIDCLabel:           cfg.OIDC.Label,
-	}, auth.WithLanguageLookup(settingsSvc), auth.WithNewUserHooks(categorySvc))
+		PasskeyReauthWindow: cfg.Auth.PasskeyReauthWindow,
+	}, auth.WithLanguageLookup(settingsSvc), auth.WithNewUserHooks(categorySvc), passkeyOption(cfg.Auth.BaseURL))
 
 	handler := auth.NewHandler(svc, auth.HandlerOptions{
 		RenderError:  httpapi.WriteError,
 		CookieSecure: cfg.Auth.CookieSecure,
 	})
 	return svc, handler, nil
+}
+
+// passkeyOption wires the WebAuthn relying party for AUTH_BASE_URL. Without a
+// usable absolute base URL there is no relying-party ID, so passkeys are
+// left off (their ceremonies fail) rather than refusing to start — magic
+// links and OIDC keep working.
+func passkeyOption(baseURL string) auth.Option {
+	wa, err := passkeyauth.New(baseURL)
+	if err != nil {
+		slog.Warn("passkeys disabled", "error", err)
+		return func(*auth.Service) {}
+	}
+	return auth.WithWebAuthn(wa)
 }
 
 // run starts srv and blocks until SIGINT/SIGTERM, then shuts it down

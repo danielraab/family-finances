@@ -62,7 +62,7 @@ func TestLoadAuthDefaults(t *testing.T) {
 		"AUTH_SESSION_TTL", "AUTH_SESSION_MAX_TTL", "AUTH_INVITE_TTL",
 		"AUTH_MAGIC_LINK_TTL", "AUTH_COOKIE_SECURE", "AUTH_SIGNUP_ENABLED",
 		"AUTH_INVITE_ENABLED", "AUTH_ALLOWED_EMAIL_DOMAINS", "SMTP_TLS", "OIDC_SCOPES",
-		"OIDC_LABEL",
+		"OIDC_LABEL", "AUTH_PASSKEY_REAUTH_WINDOW",
 	} {
 		t.Setenv(k, "")
 	}
@@ -80,6 +80,9 @@ func TestLoadAuthDefaults(t *testing.T) {
 	}
 	if cfg.Auth.MagicLinkTTL != 15*time.Minute {
 		t.Errorf("MagicLinkTTL = %s, want 15m", cfg.Auth.MagicLinkTTL)
+	}
+	if cfg.Auth.PasskeyReauthWindow != 5*time.Minute {
+		t.Errorf("PasskeyReauthWindow = %s, want 5m", cfg.Auth.PasskeyReauthWindow)
 	}
 	if !cfg.Auth.CookieSecure {
 		t.Error("CookieSecure = false, want true")
@@ -168,6 +171,26 @@ func TestLoadInvalidDurationRejected(t *testing.T) {
 
 	if _, err := config.Load(); err == nil {
 		t.Fatal("Load() succeeded with a bad AUTH_SESSION_TTL, want error")
+	}
+}
+
+func TestLoadPasskeyReauthWindowOverride(t *testing.T) {
+	t.Setenv("AUTH_PASSKEY_REAUTH_WINDOW", "90s")
+
+	cfg := load(t)
+	if cfg.Auth.PasskeyReauthWindow != 90*time.Second {
+		t.Errorf("PasskeyReauthWindow = %s, want 90s", cfg.Auth.PasskeyReauthWindow)
+	}
+}
+
+func TestLoadInvalidPasskeyReauthWindowRejected(t *testing.T) {
+	for _, v := range []string{"0s", "-1m", "soon"} {
+		t.Run(v, func(t *testing.T) {
+			t.Setenv("AUTH_PASSKEY_REAUTH_WINDOW", v)
+			if _, err := config.Load(); err == nil {
+				t.Fatalf("Load() succeeded with AUTH_PASSKEY_REAUTH_WINDOW=%s, want error", v)
+			}
+		})
 	}
 }
 

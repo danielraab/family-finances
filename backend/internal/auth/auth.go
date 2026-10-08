@@ -100,6 +100,58 @@ type Session struct {
 	CreatedAt  time.Time
 	LastSeenAt time.Time
 	ExpiresAt  time.Time
+	// PasskeyCredentialID is the passkey (Passkey.ID) that created this
+	// session, or "" for a magic-link, OIDC or invite session. Deleting that
+	// passkey revokes the session.
+	PasskeyCredentialID string
+}
+
+// Passkey is a registered WebAuthn credential. It only ever signs in to the
+// user it was registered on — it takes no part in identity linking.
+type Passkey struct {
+	ID             string
+	UserID         string
+	CredentialID   []byte
+	PublicKey      []byte
+	SignCount      uint32
+	Transports     []string
+	AAGUID         []byte
+	BackupEligible bool
+	BackupState    bool
+	Name           string
+	CreatedAt      time.Time
+	LastUsedAt     *time.Time
+}
+
+// PasskeyInfo is a passkey as returned over HTTP: no key material. Current
+// is true exactly when the requesting session was created by this passkey.
+type PasskeyInfo struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	BackedUp   bool       `json:"backed_up"`
+	Current    bool       `json:"current"`
+}
+
+// ChallengeKind distinguishes the two WebAuthn ceremonies.
+type ChallengeKind string
+
+const (
+	ChallengeRegistration ChallengeKind = "registration"
+	ChallengeLogin        ChallengeKind = "login"
+)
+
+// WebAuthnChallenge is the short-lived, single-use state of one passkey
+// ceremony. Data is the WebAuthn adapter's opaque ceremony state; SessionID
+// binds a registration ceremony to the session that started it ("" for a
+// login ceremony).
+type WebAuthnChallenge struct {
+	ID        string
+	Kind      ChallengeKind
+	SessionID string
+	Data      []byte
+	ExpiresAt time.Time
 }
 
 // Invite is a pending invitation created by an authenticated user.

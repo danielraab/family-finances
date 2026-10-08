@@ -83,6 +83,9 @@ type Params struct {
 	MagicLinkTTL        time.Duration
 	OIDCIssuer          string
 	OIDCLabel           string
+	// PasskeyReauthWindow is the maximum age of a web session that may
+	// register a passkey.
+	PasskeyReauthWindow time.Duration
 }
 
 // Service is the auth use-case layer. It depends only on the Store interface
@@ -91,6 +94,7 @@ type Service struct {
 	store        Store
 	mailer       Mailer
 	oidc         OIDCClient     // nil when no provider is configured
+	webauthn     WebAuthn       // nil when not wired; passkey ceremonies then fail
 	lang         LanguageLookup // nil when not wired
 	newUserHooks []NewUserHook
 	p            Params
@@ -437,19 +441,27 @@ func checkAccountUsable(u User) error {
 // sliding-expiry bump and the absolute cap. It returns ErrNotFound for any
 // missing, expired, or over-age session.
 func (s *Service) Authenticate(ctx context.Context, token string) (User, error) {
+	user, _, err := s.AuthenticateSession(ctx, token)
+	return user, err
+}
+
+// AuthenticateSession is Authenticate that also returns the session itself —
+// its creation time, client, and passkey are what the passkey endpoints
+// authorize on. internal/httpapi's middleware calls this one.
+func (s *Service) AuthenticateSession(ctx context.Context, token string) (User, Session, error) {
 	if token == "" {
-		return User{}, ErrNotFound
+		return User{}, Session{}, ErrNotFound
 	}
 	hash := hashToken(token)
 	sess, err := s.store.SessionByTokenHash(ctx, hash)
 	if err != nil {
-		return User{}, err
+		return User{}, Session{}, err
 	}
 
 	now := s.now()
 	if now.After(sess.ExpiresAt) || now.Sub(sess.CreatedAt) >= s.p.SessionMaxTTL {
 		_ = s.store.DeleteSessionByTokenHash(ctx, hash)
-		return User{}, ErrNotFound
+		return User{}, Session{}, ErrNotFound
 	}
 
 	// Sliding expiry: once past half the sliding window since last activity,
@@ -460,19 +472,20 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 			newExpiry = cap
 		}
 		_ = s.store.TouchSession(ctx, sess.ID, now, newExpiry)
+		sess.LastSeenAt, sess.ExpiresAt = now, newExpiry
 	}
 
 	user, err := s.store.UserByID(ctx, sess.UserID)
 	if err != nil {
-		return User{}, err
+		return User{}, Session{}, err
 	}
 	// Belt-and-suspenders: disable/delete already revoke sessions
 	// immediately, but a session row can outlive that in a race — reject it
 	// here too rather than trusting the row alone.
 	if user.Disabled || user.DeletedAt != nil {
-		return User{}, ErrNotFound
+		return User{}, Session{}, ErrNotFound
 	}
-	return user, nil
+	return user, sess, nil
 }
 
 // Logout revokes the session identified by token. It is idempotent: an unknown
@@ -838,6 +851,12 @@ func (s *Service) issueSession(ctx context.Context, user User, sc SessionContext
 }
 
 func (s *Service) issueSessionToken(ctx context.Context, user User, sc SessionContext) (string, error) {
+	return s.issueSessionTokenWith(ctx, user, sc, "")
+}
+
+// issueSessionTokenWith issues a session, recording the passkey that created
+// it ("" for any other sign-in method) so deleting that passkey revokes it.
+func (s *Service) issueSessionTokenWith(ctx context.Context, user User, sc SessionContext, passkeyID string) (string, error) {
 	token, hash, err := newToken()
 	if err != nil {
 		return "", err
@@ -855,6 +874,8 @@ func (s *Service) issueSessionToken(ctx context.Context, user User, sc SessionCo
 		CreatedAt:  now,
 		LastSeenAt: now,
 		ExpiresAt:  now.Add(s.p.SessionTTL),
+
+		PasskeyCredentialID: passkeyID,
 	}, hash)
 	if err != nil {
 		return "", err

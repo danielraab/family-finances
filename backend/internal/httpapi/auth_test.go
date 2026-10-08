@@ -14,11 +14,11 @@ import (
 // fakeAuth resolves a fixed set of tokens to users.
 type fakeAuth struct{ byToken map[string]auth.User }
 
-func (f fakeAuth) Authenticate(_ context.Context, token string) (auth.User, error) {
+func (f fakeAuth) AuthenticateSession(_ context.Context, token string) (auth.User, auth.Session, error) {
 	if u, ok := f.byToken[token]; ok {
-		return u, nil
+		return u, auth.Session{ID: "sess-" + token, UserID: u.ID}, nil
 	}
-	return auth.User{}, auth.ErrNotFound
+	return auth.User{}, auth.Session{}, auth.ErrNotFound
 }
 
 func probeUser(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +72,40 @@ func TestAuthResolveHeaderWinsOverCookie(t *testing.T) {
 
 	if rec.Body.String() != "user:from-header" {
 		t.Fatalf("body = %q, want user:from-header", rec.Body.String())
+	}
+}
+
+func TestAuthResolveAttachesSession(t *testing.T) {
+	fa := fakeAuth{byToken: map[string]auth.User{"tok-b": {ID: "u1"}, "tok-c": {ID: "u2"}}}
+	h := authResolve(fa, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sess, ok := auth.SessionFromContext(r.Context())
+		if !ok {
+			_, _ = w.Write([]byte("no-session"))
+			return
+		}
+		_, _ = w.Write([]byte(sess.ID))
+	}))
+
+	bearer := httptest.NewRequest("GET", "/x", nil)
+	bearer.Header.Set("Authorization", "Bearer tok-b")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, bearer)
+	if rec.Body.String() != "sess-tok-b" {
+		t.Fatalf("bearer session = %q, want sess-tok-b", rec.Body.String())
+	}
+
+	cookie := httptest.NewRequest("GET", "/x", nil)
+	cookie.AddCookie(&http.Cookie{Name: auth.CookieName, Value: "tok-c"})
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, cookie)
+	if rec.Body.String() != "sess-tok-c" {
+		t.Fatalf("cookie session = %q, want sess-tok-c", rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/x", nil))
+	if rec.Body.String() != "no-session" {
+		t.Fatalf("anonymous request carried a session: %q", rec.Body.String())
 	}
 }
 
@@ -155,6 +189,30 @@ func TestHTTPAPIImportGraphHasNoStorageOrDriver(t *testing.T) {
 		}
 		if strings.HasPrefix(line, "github.com/jackc/pgx") {
 			t.Errorf("internal/httpapi transitively imports the pgx driver: %s", line)
+		}
+	}
+}
+
+// TestEveryAuthSentinelHasAStatus guards the mapping table: an auth sentinel
+// that reaches WriteError unregistered would surface as a 500.
+func TestEveryAuthSentinelHasAStatus(t *testing.T) {
+	want := map[error]int{
+		auth.ErrReauthRequired:     http.StatusForbidden,
+		auth.ErrPasskeyWebOnly:     http.StatusForbidden,
+		auth.ErrCeremonyInvalid:    http.StatusBadRequest,
+		auth.ErrPasskeyInvalid:     http.StatusBadRequest,
+		auth.ErrPasskeyConflict:    http.StatusConflict,
+		auth.ErrPasskeyAuthFailed:  http.StatusUnauthorized,
+		auth.ErrInvalidPasskeyName: http.StatusBadRequest,
+	}
+	for _, sentinel := range auth.Sentinels {
+		rec := httptest.NewRecorder()
+		WriteError(rec, httptest.NewRequest("GET", "/x", nil), sentinel)
+		if rec.Code == http.StatusInternalServerError {
+			t.Errorf("%q maps to 500; register it in init()", sentinel)
+		}
+		if code, ok := want[sentinel]; ok && rec.Code != code {
+			t.Errorf("%q maps to %d, want %d", sentinel, rec.Code, code)
 		}
 	}
 }

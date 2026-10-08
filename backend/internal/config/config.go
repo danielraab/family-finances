@@ -74,6 +74,11 @@ type AuthConfig struct {
 
 	// MagicLinkTTL is how long a magic-link token stays valid.
 	MagicLinkTTL time.Duration
+
+	// PasskeyReauthWindow is the maximum age of a web session that may
+	// register a new passkey — a stolen cookie must not be able to plant a
+	// credential. Defaults to 5m; must be positive.
+	PasskeyReauthWindow time.Duration
 }
 
 // SMTPTLSMode is one of the accepted SMTP_TLS values.
@@ -153,6 +158,9 @@ func Load() (Config, error) {
 	if cfg.Auth.MagicLinkTTL, err = durationEnv("AUTH_MAGIC_LINK_TTL", 15*time.Minute); err != nil {
 		return Config{}, err
 	}
+	if cfg.Auth.PasskeyReauthWindow, err = positiveDurationEnv("AUTH_PASSKEY_REAUTH_WINDOW", 5*time.Minute); err != nil {
+		return Config{}, err
+	}
 	if cfg.Auth.CookieSecure, err = boolEnv("AUTH_COOKIE_SECURE", true); err != nil {
 		return Config{}, err
 	}
@@ -210,6 +218,19 @@ func durationEnv(key string, fallback time.Duration) (time.Duration, error) {
 	d, err := time.ParseDuration(raw)
 	if err != nil {
 		return 0, fmt.Errorf("config: %s: %w", key, err)
+	}
+	return d, nil
+}
+
+// positiveDurationEnv is durationEnv for settings where zero or a negative
+// value would be meaningless rather than "disabled".
+func positiveDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
+	d, err := durationEnv(key, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("config: %s: must be a positive duration, got %s", key, d)
 	}
 	return d, nil
 }

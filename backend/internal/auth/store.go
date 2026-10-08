@@ -50,6 +50,25 @@ var (
 	// ErrInviteNotRevoked: a soft-delete was attempted on an invite that has
 	// not been revoked yet.
 	ErrInviteNotRevoked = errors.New("invite has not been revoked")
+	// ErrReauthRequired: registering a passkey needs a session created within
+	// the re-authentication window; this one is older.
+	ErrReauthRequired = errors.New("a fresh sign-in is required to add a passkey")
+	// ErrPasskeyWebOnly: passkeys can only be registered from a browser
+	// (cookie) session, never with a bearer token.
+	ErrPasskeyWebOnly = errors.New("passkeys can only be added from a browser session")
+	// ErrCeremonyInvalid: the passkey ceremony id is unknown, expired, already
+	// used, or belongs to another session.
+	ErrCeremonyInvalid = errors.New("passkey ceremony is invalid or has expired")
+	// ErrPasskeyInvalid: a passkey registration response failed verification.
+	ErrPasskeyInvalid = errors.New("passkey registration could not be verified")
+	// ErrPasskeyConflict: the credential is already registered.
+	ErrPasskeyConflict = errors.New("passkey is already registered")
+	// ErrPasskeyAuthFailed: a passkey sign-in failed verification — unknown
+	// credential, bad signature, mismatched user handle, or a counter
+	// regression. One generic error, so the reason is not revealed.
+	ErrPasskeyAuthFailed = errors.New("passkey sign-in failed")
+	// ErrInvalidPasskeyName: the name is longer than 100 characters.
+	ErrInvalidPasskeyName = errors.New("invalid passkey name")
 )
 
 // Sentinels is every error above, for the httpapi mapping and for tests.
@@ -58,7 +77,9 @@ var Sentinels = []error{
 	ErrTokenExpired, ErrTokenConsumed, ErrInviteInvalid, ErrIdentityConflict,
 	ErrEmailInUse, ErrInvalidEmail, ErrInvalidDisplayName, ErrOIDCNotConfigured,
 	ErrEmailRequired, ErrAccountDisabled, ErrInviteRevokeForbidden,
-	ErrInviteNotRevoked,
+	ErrInviteNotRevoked, ErrReauthRequired, ErrPasskeyWebOnly,
+	ErrCeremonyInvalid, ErrPasskeyInvalid, ErrPasskeyConflict,
+	ErrPasskeyAuthFailed, ErrInvalidPasskeyName,
 }
 
 // NewUser is the input to account creation.
@@ -184,4 +205,35 @@ type Store interface {
 	// ListInvitesByInviter returns every non-soft-deleted invite created by
 	// inviterID, regardless of status, newest first.
 	ListInvitesByInviter(ctx context.Context, inviterID string) ([]InviteInfo, error)
+
+	// --- passkeys ---
+
+	// CreatePasskey stores a new passkey, returning ErrPasskeyConflict when
+	// its credential id is already registered.
+	CreatePasskey(ctx context.Context, p Passkey) (Passkey, error)
+	// PasskeyByCredentialID looks a passkey up by its WebAuthn credential id,
+	// or ErrNotFound.
+	PasskeyByCredentialID(ctx context.Context, credentialID []byte) (Passkey, error)
+	// ListPasskeysByUser returns the user's passkeys, oldest first.
+	ListPasskeysByUser(ctx context.Context, userID string) ([]Passkey, error)
+	// UpdatePasskeyUsage records a successful sign-in: the new signature
+	// counter, the current backup state, and the time of use.
+	UpdatePasskeyUsage(ctx context.Context, id string, signCount uint32, backupState bool, usedAt time.Time) error
+	// DeletePasskey deletes the user's passkey together with every session it
+	// created (and no other session). ErrNotFound when no passkey with this
+	// id belongs to userID.
+	DeletePasskey(ctx context.Context, userID, id string) error
+
+	// --- passkey ceremony challenges ---
+
+	// CreateWebAuthnChallenge stores a ceremony challenge and returns it with
+	// its id. It first deletes every challenge already expired at now, which
+	// bounds the table without a background job.
+	CreateWebAuthnChallenge(ctx context.Context, ch WebAuthnChallenge, now time.Time) (WebAuthnChallenge, error)
+	// ConsumeWebAuthnChallenge atomically deletes and returns the challenge
+	// with this id and kind, or ErrNotFound. Expiry and session binding are
+	// checked by the caller.
+	ConsumeWebAuthnChallenge(ctx context.Context, id string, kind ChallengeKind) (WebAuthnChallenge, error)
+	// DeleteExpiredWebAuthnChallenges deletes every challenge expired at now.
+	DeleteExpiredWebAuthnChallenges(ctx context.Context, now time.Time) error
 }

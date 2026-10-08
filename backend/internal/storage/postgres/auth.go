@@ -31,6 +31,13 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
+// isInvalidText reports a malformed value for a typed column — in practice a
+// client-supplied id that is not a UUID, which reads as "no such row".
+func isInvalidText(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "22P02"
+}
+
 func isForeignKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
@@ -307,11 +314,11 @@ func (a *AuthStore) CreateUserWithIdentity(ctx context.Context, u auth.NewUser, 
 
 func (a *AuthStore) CreateSession(ctx context.Context, s auth.Session, tokenHash []byte) (auth.Session, error) {
 	err := a.pool.QueryRow(ctx,
-		`INSERT INTO sessions (user_id, token_hash, client, user_agent, ip, created_at, last_seen_at, expires_at)
-		 VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, '')::inet, $6, $7, $8)
+		`INSERT INTO sessions (user_id, token_hash, client, user_agent, ip, created_at, last_seen_at, expires_at, passkey_credential_id)
+		 VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, '')::inet, $6, $7, $8, NULLIF($9, '')::uuid)
 		 RETURNING id::text`,
 		s.UserID, tokenHash, string(clientOrAPI(s.Client)), s.UserAgent, s.IP,
-		s.CreatedAt, s.LastSeenAt, s.ExpiresAt,
+		s.CreatedAt, s.LastSeenAt, s.ExpiresAt, s.PasskeyCredentialID,
 	).Scan(&s.ID)
 	if err != nil {
 		return auth.Session{}, err
@@ -331,9 +338,9 @@ func (a *AuthStore) SessionByTokenHash(ctx context.Context, tokenHash []byte) (a
 	var client string
 	err := a.pool.QueryRow(ctx,
 		`SELECT id::text, user_id::text, client, COALESCE(user_agent, ''), COALESCE(host(ip), ''),
-		        created_at, last_seen_at, expires_at
+		        created_at, last_seen_at, expires_at, COALESCE(passkey_credential_id::text, '')
 		 FROM sessions WHERE token_hash = $1`, tokenHash,
-	).Scan(&s.ID, &s.UserID, &client, &s.UserAgent, &s.IP, &s.CreatedAt, &s.LastSeenAt, &s.ExpiresAt)
+	).Scan(&s.ID, &s.UserID, &client, &s.UserAgent, &s.IP, &s.CreatedAt, &s.LastSeenAt, &s.ExpiresAt, &s.PasskeyCredentialID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return auth.Session{}, auth.ErrNotFound
 	}
@@ -521,4 +528,139 @@ func (a *AuthStore) ConsumeOIDCState(ctx context.Context, state string, now time
 		return auth.OIDCState{}, auth.ErrTokenExpired
 	}
 	return st, nil
+}
+
+// --- passkeys -------------------------------------------------------
+
+const passkeyCols = `id::text, user_id::text, credential_id, public_key, sign_count, transports,
+	COALESCE(aaguid, ''::bytea), backup_eligible, backup_state, name, created_at, last_used_at`
+
+func scanPasskey(row pgx.Row) (auth.Passkey, error) {
+	var p auth.Passkey
+	var signCount int64
+	err := row.Scan(&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey, &signCount, &p.Transports,
+		&p.AAGUID, &p.BackupEligible, &p.BackupState, &p.Name, &p.CreatedAt, &p.LastUsedAt)
+	if errors.Is(err, pgx.ErrNoRows) || isInvalidText(err) {
+		return auth.Passkey{}, auth.ErrNotFound
+	}
+	if err != nil {
+		return auth.Passkey{}, err
+	}
+	p.SignCount = uint32(signCount)
+	return p, nil
+}
+
+func (a *AuthStore) CreatePasskey(ctx context.Context, p auth.Passkey) (auth.Passkey, error) {
+	transports := p.Transports
+	if transports == nil {
+		transports = []string{}
+	}
+	out, err := scanPasskey(a.pool.QueryRow(ctx,
+		`INSERT INTO webauthn_credentials
+		     (user_id, credential_id, public_key, sign_count, transports, aaguid,
+		      backup_eligible, backup_state, name, created_at)
+		 VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''::bytea), $7, $8, $9, $10)
+		 RETURNING `+passkeyCols,
+		p.UserID, p.CredentialID, p.PublicKey, int64(p.SignCount), transports, p.AAGUID,
+		p.BackupEligible, p.BackupState, p.Name, p.CreatedAt))
+	if isUniqueViolation(err) {
+		return auth.Passkey{}, auth.ErrPasskeyConflict
+	}
+	return out, err
+}
+
+func (a *AuthStore) PasskeyByCredentialID(ctx context.Context, credentialID []byte) (auth.Passkey, error) {
+	return scanPasskey(a.pool.QueryRow(ctx,
+		`SELECT `+passkeyCols+` FROM webauthn_credentials WHERE credential_id = $1`, credentialID))
+}
+
+func (a *AuthStore) ListPasskeysByUser(ctx context.Context, userID string) ([]auth.Passkey, error) {
+	rows, err := a.pool.Query(ctx,
+		`SELECT `+passkeyCols+` FROM webauthn_credentials WHERE user_id = $1 ORDER BY created_at, id`, userID)
+	if err != nil {
+		if isInvalidText(err) {
+			return []auth.Passkey{}, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+	out := []auth.Passkey{}
+	for rows.Next() {
+		p, err := scanPasskey(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (a *AuthStore) UpdatePasskeyUsage(ctx context.Context, id string, signCount uint32, backupState bool, usedAt time.Time) error {
+	tag, err := a.pool.Exec(ctx,
+		`UPDATE webauthn_credentials SET sign_count = $2, backup_state = $3, last_used_at = $4 WHERE id = $1`,
+		id, int64(signCount), backupState, usedAt)
+	if isInvalidText(err) {
+		return auth.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrNotFound
+	}
+	return nil
+}
+
+// DeletePasskey relies on sessions.passkey_credential_id's ON DELETE CASCADE
+// to revoke the passkey's sessions in the same statement.
+func (a *AuthStore) DeletePasskey(ctx context.Context, userID, id string) error {
+	tag, err := a.pool.Exec(ctx,
+		`DELETE FROM webauthn_credentials WHERE id = $1 AND user_id = $2`, id, userID)
+	if isInvalidText(err) {
+		return auth.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return auth.ErrNotFound
+	}
+	return nil
+}
+
+// --- passkey ceremony challenges ---------------------------------------
+
+func (a *AuthStore) CreateWebAuthnChallenge(ctx context.Context, ch auth.WebAuthnChallenge, now time.Time) (auth.WebAuthnChallenge, error) {
+	if err := a.DeleteExpiredWebAuthnChallenges(ctx, now); err != nil {
+		return auth.WebAuthnChallenge{}, err
+	}
+	err := a.pool.QueryRow(ctx,
+		`INSERT INTO webauthn_challenges (kind, session_id, data, expires_at)
+		 VALUES ($1, NULLIF($2, '')::uuid, $3, $4)
+		 RETURNING id::text`,
+		string(ch.Kind), ch.SessionID, ch.Data, ch.ExpiresAt).Scan(&ch.ID)
+	if err != nil {
+		return auth.WebAuthnChallenge{}, err
+	}
+	return ch, nil
+}
+
+func (a *AuthStore) ConsumeWebAuthnChallenge(ctx context.Context, id string, kind auth.ChallengeKind) (auth.WebAuthnChallenge, error) {
+	ch := auth.WebAuthnChallenge{ID: id, Kind: kind}
+	err := a.pool.QueryRow(ctx,
+		`DELETE FROM webauthn_challenges WHERE id = $1 AND kind = $2
+		 RETURNING COALESCE(session_id::text, ''), data, expires_at`,
+		id, string(kind)).Scan(&ch.SessionID, &ch.Data, &ch.ExpiresAt)
+	if errors.Is(err, pgx.ErrNoRows) || isInvalidText(err) {
+		return auth.WebAuthnChallenge{}, auth.ErrNotFound
+	}
+	if err != nil {
+		return auth.WebAuthnChallenge{}, err
+	}
+	return ch, nil
+}
+
+func (a *AuthStore) DeleteExpiredWebAuthnChallenges(ctx context.Context, now time.Time) error {
+	_, err := a.pool.Exec(ctx, `DELETE FROM webauthn_challenges WHERE expires_at < $1`, now)
+	return err
 }

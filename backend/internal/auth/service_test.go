@@ -92,6 +92,8 @@ func baseParams() auth.Params {
 		InviteTTL:     168 * time.Hour,
 		MagicLinkTTL:  15 * time.Minute,
 		OIDCIssuer:    "https://idp.example",
+
+		PasskeyReauthWindow: 5 * time.Minute,
 	}
 }
 
@@ -124,15 +126,17 @@ func (c *clock) advance(d time.Duration) {
 }
 
 type svcConfig struct {
-	clock *clock
-	oidc  auth.OIDCClient
-	label string
-	hooks []auth.NewUserHook
+	clock        *clock
+	oidc         auth.OIDCClient
+	label        string
+	hooks        []auth.NewUserHook
+	reauthWindow time.Duration
 }
 type svcOpt func(*svcConfig)
 
-func withOIDC(o auth.OIDCClient) svcOpt { return func(c *svcConfig) { c.oidc = o } }
-func withOIDCLabel(label string) svcOpt { return func(c *svcConfig) { c.label = label } }
+func withOIDC(o auth.OIDCClient) svcOpt       { return func(c *svcConfig) { c.oidc = o } }
+func withReauthWindow(d time.Duration) svcOpt { return func(c *svcConfig) { c.reauthWindow = d } }
+func withOIDCLabel(label string) svcOpt       { return func(c *svcConfig) { c.label = label } }
 func withNewUserHooks(h ...auth.NewUserHook) svcOpt {
 	return func(c *svcConfig) { c.hooks = h }
 }

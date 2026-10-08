@@ -11,7 +11,10 @@ Go HTTP API for family-finances. Module `at.draab/familyfinances`.
   dependencies: `github.com/jackc/pgx/v5` (PostgreSQL driver + pool),
   `github.com/coreos/go-oidc/v3` + `golang.org/x/oauth2` (OIDC discovery,
   `id_token` verification, and the authorization-code exchange — see
-  `internal/oidcauth`), and `github.com/getkin/kin-openapi` — **test-support
+  `internal/oidcauth`), `github.com/go-webauthn/webauthn` (passkey
+  ceremonies — CBOR/COSE parsing and assertion/attestation verification are
+  not something to hand-roll; used only by `internal/passkeyauth`, behind the
+  `auth.WebAuthn` interface), and `github.com/getkin/kin-openapi` — **test-support
   only**: `internal/openapicheck` validates handler-test responses against
   `openapi/openapi.yaml`. A guard test (`openapi_guard_test.go`) asserts it
   never enters the server binary's dependency graph.
@@ -56,6 +59,7 @@ backend/
     │   └── *_test.go
     ├── mailer/          # auth.Mailer over net/smtp — STARTTLS/implicit/none, hand-built MIME
     ├── oidcauth/        # auth.OIDCClient over coreos/go-oidc/v3 + x/oauth2 — discovery, PKCE, id_token verify
+    ├── passkeyauth/     # auth.WebAuthn over go-webauthn — RP from AUTH_BASE_URL, discoverable credentials, UV required
     ├── cli/             # `admin grant|revoke|list` — dispatched from main.go beside `healthcheck`
     ├── account/         # one package per product noun (account, transaction, budget, …)
     │   ├── account.go   #   domain type + validation + invariants — no HTTP, no SQL
