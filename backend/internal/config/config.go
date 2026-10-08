@@ -6,6 +6,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"os"
 	"strconv"
@@ -31,6 +32,10 @@ type Config struct {
 
 	// OIDC holds the single configured OpenID Connect provider.
 	OIDC OIDCConfig
+
+	// Log controls log output: the global level and the per-request access
+	// log.
+	Log LogConfig
 
 	// RateLimit holds the in-process limits on unauthenticated sign-in
 	// requests (per client IP) and on magic-link mails (per recipient).
@@ -94,6 +99,27 @@ type AuthConfig struct {
 	// CleanupInterval is how often expired sessions, used or expired tokens,
 	// stale OIDC state and passkey challenges are deleted. Defaults to 15m.
 	CleanupInterval time.Duration
+}
+
+// RequestLogMode selects which HTTP requests get an access-log line.
+type RequestLogMode string
+
+const (
+	// RequestLogAll logs every request (the default).
+	RequestLogAll RequestLogMode = "all"
+	// RequestLogErrors logs only responses with status 400 or above.
+	RequestLogErrors RequestLogMode = "errors"
+	// RequestLogOff logs no request lines.
+	RequestLogOff RequestLogMode = "off"
+)
+
+// LogConfig is the logging configuration.
+type LogConfig struct {
+	// Level is the minimum level of all log output (LOG_LEVEL, default info).
+	// Access lines are Info, so a higher level hides them too.
+	Level slog.Level
+	// Requests selects which requests are logged (LOG_REQUESTS, default all).
+	Requests RequestLogMode
 }
 
 // RateLimitConfig is the in-process rate limiting of sign-in endpoints.
@@ -189,6 +215,12 @@ func Load() (Config, error) {
 	if cfg.Auth.PasskeyReauthWindow, err = positiveDurationEnv("AUTH_PASSKEY_REAUTH_WINDOW", 5*time.Minute); err != nil {
 		return Config{}, err
 	}
+	if cfg.Log.Level, err = logLevelEnv("LOG_LEVEL"); err != nil {
+		return Config{}, err
+	}
+	if cfg.Log.Requests, err = requestLogEnv("LOG_REQUESTS"); err != nil {
+		return Config{}, err
+	}
 	if cfg.Auth.CleanupInterval, err = positiveDurationEnv("AUTH_CLEANUP_INTERVAL", 15*time.Minute); err != nil {
 		return Config{}, err
 	}
@@ -282,6 +314,34 @@ func positiveDurationEnv(key string, fallback time.Duration) (time.Duration, err
 		return 0, fmt.Errorf("config: %s: must be a positive duration, got %s", key, d)
 	}
 	return d, nil
+}
+
+func logLevelEnv(key string) (slog.Level, error) {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch raw {
+	case "", "info":
+		return slog.LevelInfo, nil
+	case "debug":
+		return slog.LevelDebug, nil
+	case "warn", "warning":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	default:
+		return 0, fmt.Errorf("config: %s: must be one of debug|info|warn|error, got %q", key, raw)
+	}
+}
+
+func requestLogEnv(key string) (RequestLogMode, error) {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch RequestLogMode(raw) {
+	case "", RequestLogAll:
+		return RequestLogAll, nil
+	case RequestLogErrors, RequestLogOff:
+		return RequestLogMode(raw), nil
+	default:
+		return "", fmt.Errorf("config: %s: must be one of all|errors|off, got %q", key, raw)
+	}
 }
 
 func positiveIntEnv(key string, fallback int) (int, error) {

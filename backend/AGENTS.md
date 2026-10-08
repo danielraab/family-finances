@@ -151,8 +151,13 @@ to status codes in the one place — `httpapi/respond.go`.
   below). Go does not auto-load `.env` — export the vars or use direnv.
   `config.Load()` returns `(Config, error)` and rejects a malformed duration,
   bool, or `SMTP_TLS` value.
-- Logging via `log/slog` to stderr; one structured line per request from the
-  logging middleware.
+- Logging via `log/slog` to stderr, through the default logger (`main.go`
+  never replaces its handler, so the line format is stable). `LOG_LEVEL`
+  (`debug|info|warn|error`, default `info`) sets its floor via
+  `slog.SetLogLoggerLevel`; `LOG_REQUESTS` (`all|errors|off`, default `all`)
+  decides which requests get the middleware's `Info` access line — `errors`
+  means status >= 400, `off` drops the logging middleware. A level above
+  `info` hides access lines too.
 
 ## Persistence
 

@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -280,6 +282,50 @@ func TestLoadInvalidRateLimitAndCleanupRejected(t *testing.T) {
 			t.Setenv(tc.key, tc.value)
 			if _, err := config.Load(); err == nil {
 				t.Fatalf("Load() accepted %s=%s", tc.key, tc.value)
+			}
+		})
+	}
+}
+
+func TestLoadLogDefaults(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "")
+	t.Setenv("LOG_REQUESTS", "")
+	cfg := load(t)
+	if cfg.Log.Level != slog.LevelInfo || cfg.Log.Requests != config.RequestLogAll {
+		t.Fatalf("Log = %+v, want info/all", cfg.Log)
+	}
+}
+
+func TestLoadLogValues(t *testing.T) {
+	for raw, want := range map[string]slog.Level{
+		"debug": slog.LevelDebug, "INFO": slog.LevelInfo, "warn": slog.LevelWarn,
+		"Warning": slog.LevelWarn, " error ": slog.LevelError,
+	} {
+		t.Setenv("LOG_LEVEL", raw)
+		if got := load(t).Log.Level; got != want {
+			t.Errorf("LOG_LEVEL=%q → %v, want %v", raw, got, want)
+		}
+	}
+	t.Setenv("LOG_LEVEL", "")
+	for raw, want := range map[string]config.RequestLogMode{
+		"all": config.RequestLogAll, "Errors": config.RequestLogErrors, "OFF": config.RequestLogOff,
+	} {
+		t.Setenv("LOG_REQUESTS", raw)
+		if got := load(t).Log.Requests; got != want {
+			t.Errorf("LOG_REQUESTS=%q → %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestLoadInvalidLogRejected(t *testing.T) {
+	for _, tc := range []struct{ key, value string }{
+		{"LOG_LEVEL", "verbose"}, {"LOG_LEVEL", "3"}, {"LOG_REQUESTS", "some"}, {"LOG_REQUESTS", "true"},
+	} {
+		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
+			t.Setenv(tc.key, tc.value)
+			_, err := config.Load()
+			if err == nil || !strings.Contains(err.Error(), tc.key) {
+				t.Fatalf("Load() err = %v, want an error naming %s", err, tc.key)
 			}
 		})
 	}
