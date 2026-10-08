@@ -2,9 +2,8 @@
 
 ## 1. Prerequisites and setup
 
-- [ ] 1.1 Confirm `add-auth-rate-limiting` is implemented on the branch (`internal/clientip`, `auth.Limiter` throttle, `Service.Cleanup` exist); verify by grepping for them
-- [ ] 1.2 Add `github.com/go-webauthn/webauthn` with `cd backend && go get` and `go mod tidy`, and record the justified dependency in `backend/AGENTS.md`; verify `go build ./...` passes and the openapi guard test still passes
-- [ ] 1.3 Add `Auth.PasskeyReauthWindow` (`AUTH_PASSKEY_REAUTH_WINDOW`, default `5m`, positive duration) to `internal/config`, and derive the RP ID and origin from `AUTH_BASE_URL`; document both in `backend/.env.example`, including the "changing the host invalidates passkeys" and "browser origin must equal `AUTH_BASE_URL`" notes; verify with `config_test.go` cases for the default, an override, and an invalid value
+- [ ] 1.1 Add `github.com/go-webauthn/webauthn` with `cd backend && go get` and `go mod tidy`, and record the justified dependency in `backend/AGENTS.md`; verify `go build ./...` passes and the openapi guard test still passes
+- [ ] 1.2 Add `Auth.PasskeyReauthWindow` (`AUTH_PASSKEY_REAUTH_WINDOW`, default `5m`, positive duration) to `internal/config`, and derive the RP ID and origin from `AUTH_BASE_URL`; document both in `backend/.env.example`, including the "changing the host invalidates passkeys" and "browser origin must equal `AUTH_BASE_URL`" notes; verify with `config_test.go` cases for the default, an override, and an invalid value
 
 ## 2. Schema and persistence
 
@@ -27,7 +26,7 @@
 ## 5. Sign-in
 
 - [ ] 5.1 Implement login start and finish (discoverable, user-handle check, counter policy, disabled/deleted check, update usage, issue a web session bound to the passkey, set the cookie, replace an existing cookie session); verify with tests for success, unknown credential, bad signature or user handle, counter regression, disabled user, single-use ceremony, and "no user or identity created"
-- [ ] 5.2 Wrap both login routes in the shared per-IP throttle; verify with a handler test that the passkey and email routes share one budget
+- [ ] 5.2 Purge expired challenges inside `CreateWebAuthnChallenge` (design D7); verify with a store test that creating a challenge removes expired ones and keeps unexpired ones
 - [ ] 5.3 Verify with a test that a passkey-created session can register another passkey within the window
 
 ## 6. Listing and deletion
@@ -35,21 +34,17 @@
 - [ ] 6.1 Implement `GET /api/auth/passkeys` (own passkeys only, `current` flag, no key material); verify with handler tests for ownership, the `current` flag, and the response shape
 - [ ] 6.2 Implement `DELETE /api/auth/passkeys/{id}` (any session and age; 404 for others' or unknown ids; clears the cookie when it is the current session's passkey); verify with tests for the S1/S2/S3 scenario, current-passkey sign-out, a 404 on someone else's passkey, and that a deleted passkey can no longer sign in
 
-## 7. Cleanup
+## 7. API contract
 
-- [ ] 7.1 Add `DeleteExpiredWebAuthnChallenges` to `Service.Cleanup`; verify with a test that expired challenges go, unexpired ones stay, and passkeys are never removed
+- [ ] 7.1 Document the six passkey operations, the `Passkey` and ceremony schemas, the `session` object on the `me` responses, and the `401`/`403` responses in `openapi/openapi.yaml`; regenerate `backend/openapi.yaml` and `frontend/src/api/schema.d.ts`; verify the spec lint, the contract drift check, and the `openapicheck` response validation in handler tests all pass
 
-## 8. API contract
+## 8. Web client
 
-- [ ] 8.1 Document the six passkey operations, the `Passkey` and ceremony schemas, the `session` object on the `me` responses, and the `401`/`403`/`429` responses in `openapi/openapi.yaml`; regenerate `backend/openapi.yaml` and `frontend/src/api/schema.d.ts`; verify the spec lint, the contract drift check, and the `openapicheck` response validation in handler tests all pass
+- [ ] 8.1 Add `src/lib/webauthn.ts` (native JSON helpers with a base64url fallback, cancel detection); verify with unit tests for the conversion and cancel mapping, or a typed manual check, plus `pnpm lint`
+- [ ] 8.2 Add "Sign in with a passkey" to `/login` (feature-detected, above OIDC/email, silent cancel, failure message, auth refresh plus navigate to `/`), with `en`/`de` strings; verify manually against the embedded build, plus `pnpm lint` and i18n coverage
+- [ ] 8.3 Add the `/settings/passkeys` tab (list, current marker, empty state, fresh-sign-in notice, Add passkey with optional name, live stale switch, 403 handling, in-place passkey re-auth or sign-out fallback, confirmed removal with a current-passkey warning and redirect), with `settings.passkeys.*` strings in `en`/`de`; verify manually against the embedded build, plus `pnpm lint`, `pnpm build` and i18n coverage
 
-## 9. Web client
+## 9. Integration check
 
-- [ ] 9.1 Add `src/lib/webauthn.ts` (native JSON helpers with a base64url fallback, cancel detection); verify with unit tests for the conversion and cancel mapping, or a typed manual check, plus `pnpm lint`
-- [ ] 9.2 Add "Sign in with a passkey" to `/login` (feature-detected, above OIDC/email, silent cancel, failure and 429 messages, auth refresh plus navigate to `/`), with `en`/`de` strings; verify manually against the embedded build, plus `pnpm lint` and i18n coverage
-- [ ] 9.3 Add the `/settings/passkeys` tab (list, current marker, empty state, fresh-sign-in notice, Add passkey with optional name, live stale switch, 403 handling, in-place passkey re-auth or sign-out fallback, confirmed removal with a current-passkey warning and redirect), with `settings.passkeys.*` strings in `en`/`de`; verify manually against the embedded build, plus `pnpm lint`, `pnpm build` and i18n coverage
-
-## 10. Integration check
-
-- [ ] 10.1 Run `cd backend && go vet ./... && go test -race ./...` with Postgres, and `cd frontend && pnpm lint && pnpm build`; then, through `compose.yaml` with `AUTH_BASE_URL` matching the browser origin, manually walk through: magic-link sign-in → add passkey → sign out → passkey sign-in → wait past 5 minutes and confirm Add is blocked → remove the current passkey and confirm sign-out
-- [ ] 10.2 Add a short "Passkeys" section to the README (how they work, origin requirement, local-dev limitation); verify it matches the `.env.example` wording
+- [ ] 9.1 Run `cd backend && go vet ./... && go test -race ./...` with Postgres, and `cd frontend && pnpm lint && pnpm build`; then, through `compose.yaml` with `AUTH_BASE_URL` matching the browser origin, manually walk through: magic-link sign-in → add passkey → sign out → passkey sign-in → wait past 5 minutes and confirm Add is blocked → remove the current passkey and confirm sign-out
+- [ ] 9.2 Add a short "Passkeys" section to the README (how they work, origin requirement, local-dev limitation); verify it matches the `.env.example` wording

@@ -2,9 +2,9 @@
 
 ## Context
 
-- **Prerequisite:** `add-auth-rate-limiting` provides `internal/clientip`, the
-  shared per-IP `auth.Limiter` throttle, and `auth.Service.Cleanup`. This
-  change extends all three and must be implemented after it.
+- **Ordering:** this change lands before `add-auth-rate-limiting`, so there is
+  no rate limiter, no trusted-proxy IP resolution and no cleanup job yet.
+  Sessions keep recording the IP from the existing `clientIP` helper.
 - **Sessions:** `sessions.created_at` is written once in `issueSessionToken`.
   The sliding expiry only moves `last_seen_at` and `expires_at`, so
   "session age" is already trustworthy without a schema change.
@@ -159,8 +159,8 @@ the WebAuthn JSON form, so the browser can use `parse*OptionsFromJSON`.
 | `POST /api/auth/passkeys/register/finish` | fresh web session | `{ceremony_id, name?, credential}` → `201 Passkey` |
 | `GET /api/auth/passkeys` | any session | → `Passkey[]` |
 | `DELETE /api/auth/passkeys/{id}` | any session | → `204`; clears the cookie if it was the current session's passkey |
-| `POST /api/auth/passkeys/login/start` | none, IP-throttled | → `{ceremony_id, options}` |
-| `POST /api/auth/passkeys/login/finish` | none, IP-throttled | `{ceremony_id, credential}` → `200 {user}` + `Set-Cookie` |
+| `POST /api/auth/passkeys/login/start` | none | → `{ceremony_id, options}` |
+| `POST /api/auth/passkeys/login/finish` | none | `{ceremony_id, credential}` → `200 {user}` + `Set-Cookie` |
 
 - **Login finish** always issues a **web** session with
   `passkey_credential_id` set, regardless of `Accept`. The ceremony is
@@ -209,21 +209,36 @@ the WebAuthn JSON form, so the browser can use `parse*OptionsFromJSON`.
   - Removal uses the existing confirmation modal. When the removed passkey is
     `current`, the client clears its auth state and goes to `/login`.
 
-### D7. Rate limiting and cleanup hooks
+### D7. Bounding challenges without a cleanup job
 
-- Both login routes are wrapped in the shared `h.throttle` from
-  `add-auth-rate-limiting`. Registration and management routes are
-  authenticated and stay unthrottled.
-- `Service.Cleanup` gains `DeleteExpiredWebAuthnChallenges(ctx, now)`.
+`login/start` is anonymous and writes a challenge row. Until
+`add-auth-rate-limiting` adds its periodic cleanup, every
+`CreateWebAuthnChallenge` first runs
+`DELETE FROM webauthn_challenges WHERE expires_at < now()`. That's cheap on a
+small table and keeps it bounded by "challenges created in the last 5
+minutes". `add-auth-rate-limiting` then:
+
+- wraps both login routes in its per-IP throttle;
+- calls the same `DeleteExpiredWebAuthnChallenges` from `Service.Cleanup`;
+- may drop the inline purge.
+
+Registration and management routes are authenticated and are never
+throttled.
 
 ### D8. Spec sequencing
 
-The `authentication` configuration requirement and the `auth-rate-limiting`
-per-IP requirement are MODIFIED here. Their text already includes the
-additions from `add-auth-rate-limiting`, so archive that change first, then
-this one.
+Archive this change before `add-auth-rate-limiting`. That change's MODIFIED
+`authentication` configuration requirement already contains the
+`AUTH_PASSKEY_REAUTH_WINDOW` text added here, and its specs reference the
+passkey endpoints.
 
 ## Risks / Trade-offs
+
+- **[Passkey sign-in is unthrottled until `add-auth-rate-limiting` ships]** →
+  Brute-forcing a passkey is not feasible (signatures, not secrets). The
+  remaining abuse is load and challenge-row churn, which the inline purge (D7)
+  bounds. If both changes go into the same release, there is no exposure
+  window.
 
 - **[Attacker with a stolen cookie deletes the victim's passkeys or signs out
   the victim's passkey sessions]** → Deletion grants the attacker no lasting

@@ -7,9 +7,9 @@ The unauthenticated sign-in endpoints have no throttling: anyone can call
 magic-link mails and lets an attacker hammer token and callback endpoints.
 Short-lived auth rows (expired sessions, consumed/expired magic-link tokens,
 abandoned OIDC login state) are also never deleted and accumulate forever.
-Both gaps get worse with the upcoming passkey login (`add-passkey-login`),
-which adds another unauthenticated ceremony with its own short-lived state —
-so the foundation lands first, on its own.
+The passkey login added by `add-passkey-login`, which lands first, adds
+another unauthenticated ceremony with its own short-lived challenge rows, so
+it is covered here too.
 
 ## What Changes
 
@@ -18,17 +18,18 @@ so the foundation lands first, on its own.
   (`AUTH_TRUSTED_PROXIES`). Sessions record this resolved IP instead of the
   proxy's address.
 - Add an **in-memory per-IP rate limiter** in front of the unauthenticated
-  sign-in endpoints; over-limit requests get `429 Too Many Requests` with
+  sign-in endpoints, including the passkey login endpoints; over-limit requests get `429 Too Many Requests` with
   `Retry-After`. It can be switched off with `RATE_LIMIT_IP_ENABLED=false`.
 - Add an **in-memory per-recipient limiter** for magic-link mails: once an
   address hits its budget, `POST /api/auth/email/start` still answers `200`
   but sends no mail (no account enumeration).
 - All limits are configurable through optional env variables with defaults.
 - Add a **periodic cleanup job** that deletes expired sessions, expired or
-  consumed magic-link tokens, and expired OIDC login state, and evicts idle
+  consumed magic-link tokens, expired OIDC login state, and expired passkey
+  ceremony challenges, and evicts idle
   limiter buckets. Interval configurable (`AUTH_CLEANUP_INTERVAL`).
 - Web client: the login view shows a "too many attempts, try again later"
-  message on a `429`.
+  message on a `429`, for both the email and the passkey sign-in.
 
 ## Capabilities
 

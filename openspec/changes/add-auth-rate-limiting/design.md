@@ -12,6 +12,9 @@
 - `internal/auth` must not import `internal/httpapi`; it receives
   `RenderError` through `HandlerOptions`. Sentinels map to HTTP statuses via
   `registerErrStatus` in `httpapi/auth.go`.
+- `add-passkey-login` has landed: `POST /api/auth/passkeys/login/{start,finish}`
+  exist unthrottled, and `webauthn_challenges` is purged only inline on
+  challenge creation (`auth.Store.DeleteExpiredWebAuthnChallenges` exists).
 - The reference topology is one app container plus Postgres. The user
   accepted per-process (in-memory) limiting for now.
 
@@ -90,12 +93,13 @@ HandlerOptions{ ..., ClientIP func(*http.Request) string, IPLimiter Limiter }
 auth.WithMailLimiter(Limiter) // service option
 ```
 
-- **Per-IP:** the handler wraps the five unauthenticated routes in
+- **Per-IP:** the handler wraps the seven unauthenticated routes (the five
+  magic-link/OIDC/invite routes plus both passkey login routes) in
   `h.throttle(next)`. When `IPLimiter` is set and `Allow("ip:"+ip)` fails, it
   sets `Retry-After` (seconds, rounded up, minimum 1) and renders the new
   sentinel `auth.ErrRateLimited`, which `httpapi/auth.go` registers (via `registerErrStatus`) as
   `429`. This happens before the body is read, so a rejected request has no
-  side effect. All five routes share one budget per IP, keyed by IP only. A
+  side effect. All seven routes share one budget per IP, keyed by IP only. A
   per-route budget would let an attacker get 5× the attempts.
 - **Per-recipient:** inside `Service.StartEmailLogin`, after `emailPermitted`
   returns true and before the token is created, call
@@ -117,6 +121,9 @@ auth.WithMailLimiter(Limiter) // service option
   - `DeleteStaleMagicLinkTokens(ctx, now)`, for rows that are consumed or past
     `expires_at`
   - `DeleteExpiredOIDCState(ctx, now)`
+  - the existing `DeleteExpiredWebAuthnChallenges(ctx, now)` from
+    `add-passkey-login`; the inline purge on challenge creation is then
+    removed
 - Each method is a single `DELETE … WHERE …`, so passes are idempotent and safe
   to run from several replicas without a lock. An advisory lock would only
   avoid duplicate work and is not needed at this scale.
@@ -126,8 +133,6 @@ auth.WithMailLimiter(Limiter) // service option
   Each pass logs counts at `Debug` and errors at `Error`.
 - Indexes: the tables are small (a family-sized install), so no new index is
   added. If that changes, `sessions(expires_at)` is the first candidate.
-- The upcoming `add-passkey-login` change extends `Cleanup` with its challenge
-  table. That is the only extension point this design reserves.
 
 ### D5. Configuration
 
@@ -145,7 +150,7 @@ and the root `README` if it lists env variables.
 ### D6. API contract
 
 A shared `TooManyRequests` response (error body plus a `Retry-After` header) is
-added to `openapi/openapi.yaml` and referenced from the five throttled
+added to `openapi/openapi.yaml` and referenced from the seven throttled
 operations. Both generated copies are regenerated in the same change.
 
 ## Risks / Trade-offs

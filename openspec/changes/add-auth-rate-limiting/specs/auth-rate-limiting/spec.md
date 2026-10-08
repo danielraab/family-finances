@@ -53,13 +53,21 @@ on new sessions.
 
 ### Requirement: Per-IP throttling of unauthenticated sign-in endpoints
 
-When `RATE_LIMIT_IP_ENABLED` is true (the default), the backend SHALL allow at
-most `RATE_LIMIT_IP_REQUESTS` (default 20) requests per client IP within
-`RATE_LIMIT_IP_WINDOW` (default `1m`), counted together across
-`POST /api/auth/email/start`, `GET /api/auth/email/callback`,
-`GET /api/auth/oidc/start`, `GET /api/auth/oidc/callback` and
-`GET /api/auth/invites/accept`. Excess requests SHALL get `429` with a
-`Retry-After` header and SHALL perform no side effect.
+When `RATE_LIMIT_IP_ENABLED` is true (default), the backend SHALL allow at most
+`RATE_LIMIT_IP_REQUESTS` (default 20) requests per client IP within
+`RATE_LIMIT_IP_WINDOW` (default `1m`), counted together across the
+unauthenticated sign-in endpoints: email start and callback, OIDC start and
+callback, invite acceptance, and passkey login start and finish. Excess
+requests SHALL get `429` with `Retry-After` and SHALL have no side effect.
+
+#### Scenario: Throttled endpoint set
+
+- **WHEN** the per-IP limiter is enabled
+- **THEN** it applies to exactly `POST /api/auth/email/start`,
+  `GET /api/auth/email/callback`, `GET /api/auth/oidc/start`,
+  `GET /api/auth/oidc/callback`, `GET /api/auth/invites/accept`,
+  `POST /api/auth/passkeys/login/start` and
+  `POST /api/auth/passkeys/login/finish`
 
 #### Scenario: Within the limit
 
@@ -77,6 +85,13 @@ most `RATE_LIMIT_IP_REQUESTS` (default 20) requests per client IP within
 
 - **WHEN** a throttled client IP waits until its window has passed
 - **THEN** its next request is processed normally
+
+#### Scenario: Passkey sign-in shares the budget
+
+- **WHEN** a client IP has used its whole budget on
+  `POST /api/auth/passkeys/login/start`
+- **THEN** its next `POST /api/auth/email/start` also receives `429`, and a
+  throttled `login/start` stores no challenge
 
 #### Scenario: Other clients are unaffected
 

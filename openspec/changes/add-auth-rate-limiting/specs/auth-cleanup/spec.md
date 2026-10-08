@@ -13,9 +13,10 @@ in-process rate limiters.
 While the server runs, the backend SHALL run a cleanup pass once at startup and
 then every `AUTH_CLEANUP_INTERVAL` (optional, default `15m`). Each pass SHALL
 delete sessions past `expires_at` or older than `AUTH_SESSION_MAX_TTL`,
-magic-link tokens that are expired or consumed, and OIDC login state past
-`expires_at`. It SHALL NOT delete invites, users, identities or still-valid
-sessions and tokens.
+magic-link tokens that are expired or consumed, OIDC login state past
+`expires_at`, and passkey ceremony challenges past their expiry. It SHALL NOT
+delete invites, users, identities, passkeys, or still-valid sessions, tokens
+and challenges.
 
 #### Scenario: Expired session is removed
 
@@ -45,6 +46,17 @@ sessions and tokens.
 - **WHEN** a cleanup pass runs and an OIDC login state row is past its
   `expires_at`
 - **THEN** that row is deleted
+
+#### Scenario: Abandoned passkey ceremony is removed
+
+- **WHEN** a cleanup pass runs and a passkey challenge is past its expiry
+- **THEN** that challenge is deleted, while unexpired challenges are kept so an
+  in-progress ceremony can still finish
+
+#### Scenario: Unused passkeys are kept
+
+- **WHEN** a cleanup pass runs and a passkey has never been used
+- **THEN** the passkey is kept
 
 #### Scenario: Invites are untouched
 

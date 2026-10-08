@@ -2,6 +2,7 @@
 
 ## 1. Configuration
 
+- [ ] 1.0 Confirm `add-passkey-login` is implemented on the branch (passkey login routes and `DeleteExpiredWebAuthnChallenges` exist); verify by grepping for them
 - [ ] 1.1 Add `Auth.TrustedProxies` (CIDR list; bare IPs become /32 or /128), `Auth.CleanupInterval` (default `15m`) and `RateLimit{IPEnabled=true, IPRequests=20, IPWindow=1m, EmailRequests=5, EmailWindow=15m}` to `internal/config`, with a positive-int helper and a CIDR-list helper; verify with `config_test.go` cases for defaults, valid overrides, and rejection of `0`, negative values, `0s`, garbage durations and `10.0.0.0/33`
 - [ ] 1.2 Document every new variable with its default in `backend/.env.example`, including the per-process caveat and the "set `AUTH_TRUSTED_PROXIES` behind a reverse proxy" note; verify the file lists all six `RATE_LIMIT_*`/`AUTH_*` additions
 
@@ -17,7 +18,7 @@
 
 ## 4. Per-IP throttling
 
-- [ ] 4.1 Add `IPLimiter` to `auth.HandlerOptions` and wrap `POST /api/auth/email/start`, `GET /api/auth/email/callback`, `GET /api/auth/oidc/start`, `GET /api/auth/oidc/callback` and `GET /api/auth/invites/accept` in a shared-budget throttle that sets `Retry-After` and renders `ErrRateLimited` before reading the body; verify with handler tests: N requests pass, request N+1 is `429` with `Retry-After` and sends no mail, budget is shared across routes, other IPs are unaffected, and `/api/auth/me` is never throttled
+- [ ] 4.1 Add `IPLimiter` to `auth.HandlerOptions` and wrap `POST /api/auth/email/start`, `GET /api/auth/email/callback`, `GET /api/auth/oidc/start`, `GET /api/auth/oidc/callback`, `GET /api/auth/invites/accept`, `POST /api/auth/passkeys/login/start` and `POST /api/auth/passkeys/login/finish` in a shared-budget throttle that sets `Retry-After` and renders `ErrRateLimited` before reading the body; verify with handler tests: N requests pass, request N+1 is `429` with `Retry-After` and sends no mail, budget is shared across routes (including passkey login, where a throttled start stores no challenge), other IPs are unaffected, and `/api/auth/me` is never throttled
 - [ ] 4.2 Build the IP limiter in `main.go` only when `RATE_LIMIT_IP_ENABLED` is true; verify with a test that a nil limiter never returns `429`
 
 ## 5. Per-recipient throttling
@@ -28,17 +29,17 @@
 ## 6. Cleanup job
 
 - [ ] 6.1 Add `DeleteExpiredSessions(ctx, now, createdBefore)`, `DeleteStaleMagicLinkTokens(ctx, now)` and `DeleteExpiredOIDCState(ctx, now)` to `auth.Store`, implemented in `storage/memory` and `storage/postgres`; verify with store tests (memory, and Postgres integration tests) that expired, over-age and consumed rows are removed while valid sessions/tokens, invites, users and identities are kept
-- [ ] 6.2 Add `auth.Service.Cleanup(ctx)`, which runs all deletes and evicts registered limiters, joining errors without short-circuiting; verify with a service test using a fake store where one delete fails and the others still run
+- [ ] 6.2 Add `auth.Service.Cleanup(ctx)`, which runs all deletes (including the existing `DeleteExpiredWebAuthnChallenges`, and remove the inline purge from challenge creation) and evicts registered limiters, joining errors without short-circuiting; verify with a service test using a fake store where one delete fails and the others still run
 - [ ] 6.3 Start `runCleanup(ctx, svc, interval)` from `main.go` on the shutdown context: run once at startup, then on a ticker, log errors, and stop on cancel; verify with a test that injects a short interval and a cancellable context and observes passes, error tolerance, and termination
 
 ## 7. API contract and docs
 
-- [ ] 7.1 Add a reusable `TooManyRequests` response with a `Retry-After` header to `openapi/openapi.yaml` and reference it from the five throttled operations; regenerate with `cd backend && go generate ./...` and `cd frontend && pnpm generate:api`, and verify the spec lint and the contract drift check pass
+- [ ] 7.1 Add a reusable `TooManyRequests` response with a `Retry-After` header to `openapi/openapi.yaml` and reference it from the seven throttled operations; regenerate with `cd backend && go generate ./...` and `cd frontend && pnpm generate:api`, and verify the spec lint and the contract drift check pass
 - [ ] 7.2 Update `backend/AGENTS.md` (package layout: `clientip`, `ratelimit`; the cleanup job in `main.go`) and verify the layout block matches the tree
 
 ## 8. Web client
 
-- [ ] 8.1 Handle `429` from `POST /api/auth/email/start` on `/login` with a dedicated "too many attempts" message (keep the form; separate from the generic error), adding `login.rateLimited` to `en.json` and `de.json`; verify with a component/route test or manual run, plus `pnpm lint` and the i18n-coverage check
+- [ ] 8.1 Handle `429` from `POST /api/auth/email/start` and from the passkey login calls on `/login` with a dedicated "too many attempts" message (keep the form; separate from the generic error), adding `login.rateLimited` to `en.json` and `de.json`; verify with a component/route test or manual run, plus `pnpm lint` and the i18n-coverage check
 
 ## 9. Integration check
 

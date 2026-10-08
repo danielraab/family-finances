@@ -8,8 +8,9 @@ trip. The main new risk is that a stolen session cookie could register an
 attacker's passkey and keep access after the session ends. The design closes
 that by allowing registration only on a freshly created web session.
 
-This change builds on `add-auth-rate-limiting` (client-IP resolution, the
-per-IP limiter and the cleanup job) and must land after it.
+This change lands first. `add-auth-rate-limiting` follows it and adds per-IP
+throttling of the passkey sign-in endpoints and periodic cleanup of their
+challenges.
 
 ## What Changes
 
@@ -33,8 +34,9 @@ per-IP limiter and the cleanup job) and must land after it.
   only while the session is fresh), a notice that adding a passkey needs a
   sign-in from the last 5 minutes, a "sign in again" path, and deletion with
   confirmation.
-- The passkey login endpoints join the shared per-IP rate limit. Expired
-  passkey ceremony challenges are removed by the cleanup job.
+- Expired passkey ceremony challenges are deleted whenever a new ceremony
+  starts, so anonymous `login/start` calls cannot grow the table without
+  bound before the cleanup job exists.
 - The relying-party ID and allowed origin come from `AUTH_BASE_URL`. A dev
   setup where the browser origin differs from `AUTH_BASE_URL` (such as the
   Vite port) is not supported for passkeys.
@@ -51,10 +53,6 @@ per-IP limiter and the cleanup job) and must land after it.
 
 - `authentication`: the environment-configuration requirement gains
   `AUTH_PASSKEY_REAUTH_WINDOW`.
-- `auth-rate-limiting` (introduced by `add-auth-rate-limiting`): the per-IP
-  throttled endpoint set gains the two passkey login endpoints.
-- `auth-cleanup` (introduced by `add-auth-rate-limiting`): cleanup passes also
-  delete expired passkey ceremony challenges.
 - `web-client-auth`: `/login` offers "Sign in with a passkey".
 - `web-client-settings`: a new Passkeys tab.
 

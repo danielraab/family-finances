@@ -35,12 +35,6 @@ exist in `en` and `de`.
 - **THEN** the view shows a "passkey sign-in failed — try another method"
   message and the email form remains usable
 
-#### Scenario: Passkey sign-in rate limited
-
-- **WHEN** login start or finish responds `429`
-- **THEN** the view shows the same "too many attempts" message as the email
-  flow
-
 #### Scenario: Email form still works alongside
 
 - **WHEN** the passkey button is shown
