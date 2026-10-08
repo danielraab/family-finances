@@ -1,9 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { KeyRound } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { components } from "../api/schema";
 import { useAuth } from "../components/AuthProvider";
+import { signInWithPasskey } from "../lib/passkeys";
+import { passkeysSupported } from "../lib/webauthn";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -14,7 +17,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type OidcLogin = components["schemas"]["OidcLogin"];
 
 function LoginPage() {
-  const { status } = useAuth();
+  const { status, refresh } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -26,6 +29,10 @@ function LoginPage() {
   // OIDC sign-in affordance, or null when the backend offers none / the
   // request is still in flight or failed. The email form never waits on it.
   const [oidc, setOidc] = useState<OidcLogin | null>(null);
+  // Feature-detected once: browsers without WebAuthn never see the button.
+  const [canUsePasskey] = useState(passkeysSupported);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -53,6 +60,35 @@ function LoginPage() {
   // Already signed in — the effect above is navigating away.
   if (status === "authenticated") {
     return null;
+  }
+
+  async function onPasskey() {
+    setPasskeyError(null);
+    setPasskeyBusy(true);
+    try {
+      const result = await signInWithPasskey();
+      switch (result) {
+        case "ok":
+          // The session cookie is set; resolving /me flips useAuth to
+          // authenticated and the redirect effect above takes over.
+          await refresh();
+          break;
+        case "cancelled":
+          break;
+        case "rateLimited":
+          setPasskeyError(t("login.rateLimited"));
+          break;
+        case "disabled":
+          setPasskeyError(t("login.passkeyDisabled"));
+          break;
+        default:
+          setPasskeyError(t("login.passkeyFailed"));
+      }
+    } catch {
+      setPasskeyError(t("login.passkeyFailed"));
+    } finally {
+      setPasskeyBusy(false);
+    }
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -94,14 +130,32 @@ function LoginPage() {
 
       {phase === "form" ? (
         <>
-          {oidc && (
+          {(canUsePasskey || oidc) && (
             <div className="flex flex-col gap-4">
-              <a
-                href={oidc.start_path}
-                className="flex items-center justify-center rounded-md border border-black/15 px-3 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]"
-              >
-                {oidc.label}
-              </a>
+              {canUsePasskey && (
+                <button
+                  type="button"
+                  onClick={onPasskey}
+                  disabled={passkeyBusy}
+                  className="flex items-center justify-center gap-2 rounded-md border border-black/15 px-3 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] disabled:opacity-60 dark:border-white/15 dark:hover:bg-white/[.06]"
+                >
+                  <KeyRound aria-hidden="true" className="size-4" />
+                  {passkeyBusy ? t("login.passkeyWorking") : t("login.passkey")}
+                </button>
+              )}
+              {passkeyError && (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {passkeyError}
+                </p>
+              )}
+              {oidc && (
+                <a
+                  href={oidc.start_path}
+                  className="flex items-center justify-center rounded-md border border-black/15 px-3 py-2 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/15 dark:hover:bg-white/[.06]"
+                >
+                  {oidc.label}
+                </a>
+              )}
               <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
                 <span className="h-px flex-1 bg-black/10 dark:bg-white/10" />
                 {t("login.or")}

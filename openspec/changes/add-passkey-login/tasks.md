@@ -40,11 +40,11 @@
 
 ## 8. Web client
 
-- [ ] 8.1 Add `src/lib/webauthn.ts` (native JSON helpers with a base64url fallback, cancel detection); verify with unit tests for the conversion and cancel mapping, or a typed manual check, plus `pnpm lint`
-- [ ] 8.2 Add "Sign in with a passkey" to `/login` (feature-detected, above OIDC/email, silent cancel, failure message, auth refresh plus navigate to `/`), with `en`/`de` strings; verify manually against the embedded build, plus `pnpm lint` and i18n coverage
-- [ ] 8.3 Add the `/settings/passkeys` tab (list, current marker, empty state, fresh-sign-in notice, Add passkey with optional name, live stale switch, 403 handling, in-place passkey re-auth or sign-out fallback, confirmed removal with a current-passkey warning and redirect), with `settings.passkeys.*` strings in `en`/`de`; verify manually against the embedded build, plus `pnpm lint`, `pnpm build` and i18n coverage
+- [x] 8.1 Add `src/lib/webauthn.ts` (native JSON helpers with a base64url fallback, cancel detection); verify with unit tests for the conversion and cancel mapping, or a typed manual check, plus `pnpm lint`
+- [x] 8.2 Add "Sign in with a passkey" to `/login` (feature-detected, above OIDC/email, silent cancel, failure message, auth refresh plus navigate to `/`), with `en`/`de` strings; verify manually against the embedded build, plus `pnpm lint` and i18n coverage
+- [x] 8.3 Add the `/settings/passkeys` tab (list, current marker, empty state, fresh-sign-in notice, Add passkey with optional name, live stale switch, 403 handling, in-place passkey re-auth or sign-out fallback, confirmed removal with a current-passkey warning and redirect), with `settings.passkeys.*` strings in `en`/`de`; verify manually against the embedded build, plus `pnpm lint`, `pnpm build` and i18n coverage
 
 ## 9. Integration check
 
-- [ ] 9.1 Run `cd backend && go vet ./... && go test -race ./...` with Postgres, and `cd frontend && pnpm lint && pnpm build`; then, through `compose.yaml` with `AUTH_BASE_URL` matching the browser origin, manually walk through: magic-link sign-in → add passkey → sign out → passkey sign-in → wait past 5 minutes and confirm Add is blocked → remove the current passkey and confirm sign-out
-- [ ] 9.2 Add a short "Passkeys" section to the README (how they work, origin requirement, local-dev limitation); verify it matches the `.env.example` wording
+- [x] 9.1 Run `cd backend && go vet ./... && go test -race ./...` with Postgres, and `cd frontend && pnpm lint && pnpm build`; then, through `compose.yaml` with `AUTH_BASE_URL` matching the browser origin, manually walk through: magic-link sign-in → add passkey → sign out → passkey sign-in → wait past 5 minutes and confirm Add is blocked → remove the current passkey and confirm sign-out
+- [x] 9.2 Add a short "Passkeys" section to the README (how they work, origin requirement, local-dev limitation); verify it matches the `.env.example` wording

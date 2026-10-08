@@ -41,7 +41,12 @@
     "submitting": "Wird gesendet…",
     "checkInbox": "Prüfe dein Postfach",
     "sentTo": "Wir haben einen Anmeldelink an <bold>{{email}}</bold> gesendet. Öffne ihn auf diesem Gerät, um die Anmeldung abzuschließen.",
-    "useDifferentAddress": "Andere Adresse verwenden"
+    "useDifferentAddress": "Andere Adresse verwenden",
+    "passkey": "Mit Passkey anmelden",
+    "passkeyWorking": "Warte auf deinen Passkey…",
+    "passkeyFailed": "Die Anmeldung mit Passkey hat nicht funktioniert. Versuche einen anderen Passkey oder melde dich per E-Mail-Link an.",
+    "passkeyDisabled": "Dieses Konto ist deaktiviert.",
+    "rateLimited": "Zu viele Versuche – bitte warte kurz und versuche es erneut."
   },
   "home": {
     "tagline": "Behalte die Finanzen der Familie an einem Ort im Blick.",
@@ -139,6 +144,7 @@
     "title": "Einstellungen",
     "tabs": {
       "profile": "Profil",
+      "passkeys": "Passkeys",
       "myInvitations": "Meine Einladungen",
       "users": "Benutzer"
     },
@@ -217,6 +223,33 @@
     "myInvitations": {
       "heading": "Von dir gesendete Einladungen",
       "noInvites": "Du hast noch niemanden eingeladen."
+    },
+    "passkeys": {
+      "heading": "Deine Passkeys",
+      "intro": "Melde dich mit Fingerabdruck, Gesichtserkennung oder Geräte-PIN an statt mit einem E-Mail-Link. Du kannst mehrere hinzufügen — einen pro Gerät oder Passwortmanager.",
+      "empty": "Du hast noch keinen Passkey hinzugefügt.",
+      "thisSession": "Diese Sitzung",
+      "added": "Hinzugefügt am {{date}}",
+      "lastUsed": "zuletzt verwendet am {{date}}",
+      "neverUsed": "noch nie verwendet",
+      "remove": "Entfernen",
+      "freshNotice": "Zu deiner Sicherheit ist zum Hinzufügen eines Passkeys eine Anmeldung innerhalb der letzten {{minutes}} Minuten nötig. Entfernen ist jederzeit möglich.",
+      "staleHint": "Deine aktuelle Anmeldung ist älter als {{minutes}} Minuten. Melde dich erneut an und füge den Passkey gleich danach hinzu.",
+      "unsupported": "Dieser Browser unterstützt keine Passkeys.",
+      "add": "Passkey hinzufügen",
+      "signInAgain": "Erneut anmelden",
+      "signInWithOther": "Abmelden und andere Methode verwenden",
+      "reauthError": "Die erneute Anmeldung hat nicht funktioniert. Versuche einen anderen Passkey oder melde dich ab und nutze einen E-Mail-Link.",
+      "addTitle": "Passkey hinzufügen",
+      "nameLabel": "Name (optional)",
+      "namePlaceholder": "z. B. Laptop oder Handy",
+      "addConfirm": "Weiter",
+      "adding": "Warte auf dein Gerät…",
+      "addError": "Der Passkey konnte nicht hinzugefügt werden. Bitte versuche es erneut.",
+      "removeError": "Der Passkey konnte nicht entfernt werden. Bitte versuche es erneut.",
+      "confirmRemoveTitle": "„{{name}}“ entfernen?",
+      "confirmRemoveBody": "Du kannst dich dann nicht mehr mit diesem Passkey anmelden, und alle damit angemeldeten Sitzungen werden abgemeldet.",
+      "confirmRemoveCurrent": "Du bist mit diesem Passkey angemeldet. Wenn du ihn entfernst, wirst du hier abgemeldet – zusammen mit allen anderen damit angemeldeten Sitzungen."
     }
   },
   "accounts": {

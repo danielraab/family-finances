@@ -41,6 +41,7 @@ function SettingsLayout() {
 
   const tabs = [
     { to: "/settings" as const, label: t("settings.tabs.profile") },
+    { to: "/settings/passkeys" as const, label: t("settings.tabs.passkeys") },
     {
       to: "/settings/invitations" as const,
       label: t("settings.tabs.myInvitations"),

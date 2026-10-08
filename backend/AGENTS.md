@@ -49,7 +49,8 @@ backend/
     │   ├── service.go   #   use-case logic; declares Store, Mailer, OIDCClient, LanguageLookup interfaces
     │   ├── store.go     #   Store interface + sentinel errors (ErrSignupDisabled, ErrTokenExpired…)
     │   ├── handler.go   #   http.Handler for /api/auth/…; RenderError injected so it needn't import httpapi
-    │   ├── httpctx.go   #   CookieName, WithUser / UserFromContext
+    │   ├── passkey.go   #   passkey use cases + the WebAuthn interface (re-auth window, ceremonies, session binding)
+    │   ├── httpctx.go   #   CookieName, WithUser / UserFromContext, WithSession / SessionFromContext
     │   └── *_test.go
     ├── settings/        # per-user preferences — display language, timezone, default currency
     │   ├── settings.go  #   domain type + hardcoded defaults (en/UTC/EUR) + validation
@@ -200,6 +201,29 @@ to status codes in the one place — `httpapi/respond.go`.
   a session already on the request: each names one specific address, so
   completing either always resolves to that address's own account, never an
   unrelated account a stale/shared session cookie happens to belong to.
+- **Passkeys (WebAuthn)** — a third way to sign in, never a way to create or
+  link an account (`webauthn_credentials`, `webauthn_challenges`, and
+  `sessions.passkey_credential_id`, migration `0032_passkeys.sql`). The
+  ceremony crypto lives in `internal/passkeyauth` (go-webauthn, RP ID/origin
+  from `AUTH_BASE_URL`, resident key + UV required, no attestation) behind
+  `auth.WebAuthn`; everything else — `internal/auth/passkey.go`. Registration
+  (`POST /api/auth/passkeys/register/{start,finish}`) requires a **web**
+  session whose `created_at` is within `AUTH_PASSKEY_REAUTH_WINDOW` (default
+  5m), checked on both calls (`ErrReauthRequired`/`ErrPasskeyWebOnly`, 403).
+  Sign-in (`POST /api/auth/passkeys/login/{start,finish}`) is discoverable,
+  always issues a cookie session bound to the passkey, and replaces a session
+  cookie already on the request. `DELETE /api/auth/passkeys/{id}` is allowed on
+  any session and revokes exactly that passkey's sessions through the FK's
+  `ON DELETE CASCADE` (the memory store mirrors it). The session — not just the
+  user — is on the request context (`auth.SessionFromContext`, set by
+  `httpapi`'s middleware via `Service.AuthenticateSession`), and
+  `GET /api/auth/me` reports it as `session` with
+  `passkey_registration_until`. Ceremony challenges are single-use, live 5
+  minutes, and expired ones are purged whenever a new one is stored. Tests:
+  `internal/storage/storetest` holds the store contract both stores run, and
+  `internal/passkeyauth/passkeytest` is a software authenticator (ES256,
+  `none` attestation) that drives real ceremonies in handler tests —
+  `github.com/fxamacker/cbor/v2` is a direct requirement only for it.
 - **`GET /api/auth/config`** — unauthenticated; reports which sign-in methods
   the client should show. Today: `{ "oidc": { "label", "start_path" } }` when an
   OIDC provider is configured, else `{ "oidc": null }`. `label` is `OIDC_LABEL`.
@@ -217,8 +241,8 @@ to status codes in the one place — `httpapi/respond.go`.
 - Env groups: `AUTH_BASE_URL` (builds magic-link URLs and the OIDC
   `redirect_uri`), `AUTH_SESSION_TTL`/`AUTH_SESSION_MAX_TTL`,
   `AUTH_COOKIE_SECURE`, `AUTH_SIGNUP_ENABLED`, `AUTH_ALLOWED_EMAIL_DOMAINS`,
-  `AUTH_INVITE_ENABLED`, `AUTH_INVITE_TTL`, `AUTH_MAGIC_LINK_TTL`;
-  `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_FROM`/`SMTP_TLS`
+  `AUTH_INVITE_ENABLED`, `AUTH_INVITE_TTL`, `AUTH_MAGIC_LINK_TTL`,
+  `AUTH_PASSKEY_REAUTH_WINDOW`; `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_FROM`/`SMTP_TLS`
   (`starttls|implicit|none`);
   `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_SCOPES`/`OIDC_LABEL`
   (button text, default `Single sign-on`).

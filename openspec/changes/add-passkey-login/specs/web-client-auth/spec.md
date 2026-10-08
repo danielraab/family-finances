@@ -16,8 +16,9 @@ exist in `en` and `de`.
 
 - **WHEN** the visitor activates "Sign in with a passkey", picks a passkey and
   the finish call returns `200`
-- **THEN** the shared auth state becomes authenticated with the returned user
-  and the client navigates to `/`
+- **THEN** the shared auth state becomes authenticated and the client
+  navigates to the same destination as an already-authenticated visitor
+  opening `/login`
 
 #### Scenario: Browser without WebAuthn
 

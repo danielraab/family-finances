@@ -51,9 +51,10 @@ WebAuthn verification needs:
 That is roughly 500+ lines of security-critical parsing. `go-webauthn` is the
 maintained, widely used Go implementation. Its transitive dependencies are
 `fxamacker/cbor`, `go-webauthn/x`, `golang-jwt/jwt` (used for the FIDO MDS,
-which this change doesn't use) and `google/uuid`. It is used only from
-`internal/auth`, behind a small `auth.WebAuthn` interface, so tests can fake
-it and the library stays swappable.
+which this change doesn't use) and `google/uuid`. It is used only from a
+new `internal/passkeyauth` adapter package (the same shape as
+`internal/oidcauth`), which implements a small `auth.WebAuthn` interface, so
+`internal/auth` never imports the library and it stays swappable.
 
 - *Alternative — hand-rolled verifier with `attestation: "none"` only:*
   rejected, because owning CBOR and COSE edge cases isn't worth the risk.
@@ -124,7 +125,9 @@ CREATE TABLE webauthn_challenges (
 
 ### D3. Session on the request context
 
-- `Authenticator.Authenticate` returns `(User, Session, error)`.
+- `httpapi.Authenticator` calls a new `Service.AuthenticateSession`, which
+  returns `(User, Session, error)`. `Authenticate` is kept as a thin wrapper,
+  so its many existing callers are untouched.
 - `authResolve` stores both values; `auth.WithSession` and
   `auth.SessionFromContext` are added to `httpctx.go`.
 - `auth.Session` gains `PasskeyCredentialID string`.
@@ -199,7 +202,8 @@ the WebAuthn JSON form, so the browser can use `parse*OptionsFromJSON`.
 - **No `@simplewebauthn/browser`:** the native API plus a tiny fallback
   covers the two calls needed.
 - **Login:** the passkey button sits above the OIDC/email controls. On success
-  the client calls the existing `AuthProvider` refresh and navigates to `/`.
+  the client calls a new `AuthProvider.refresh()`; the login route's existing
+  authenticated-visitor redirect then takes over.
 - **Settings:**
   - A new route `settings.passkeys.tsx`, plus a tab entry in `settings.tsx`.
   - A timer re-renders at `passkey_registration_until`.
