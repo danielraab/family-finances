@@ -29,6 +29,7 @@ import { Route as RecurringIndexRouteImport } from './routes/recurring.index'
 import { Route as RecurringNewRouteImport } from './routes/recurring.new'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsInvitationsRouteImport } from './routes/settings.invitations'
+import { Route as SettingsPasskeysRouteImport } from './routes/settings.passkeys'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as AccountsAccountIdIndexRouteImport } from './routes/accounts.$accountId.index'
 import { Route as AccountsAccountIdEditRouteImport } from './routes/accounts.$accountId.edit'
@@ -139,6 +140,11 @@ const SettingsInvitationsRoute = SettingsInvitationsRouteImport.update({
   path: '/invitations',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsPasskeysRoute = SettingsPasskeysRouteImport.update({
+  id: '/passkeys',
+  path: '/passkeys',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsUsersRoute = SettingsUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -205,6 +211,7 @@ export interface FileRoutesByFullPath {
   '/entries/new': typeof EntriesNewRoute
   '/recurring/new': typeof RecurringNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
+  '/settings/passkeys': typeof SettingsPasskeysRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts/': typeof AccountsIndexRoute
   '/entries/': typeof EntriesIndexRoute
@@ -231,6 +238,7 @@ export interface FileRoutesByTo {
   '/entries/new': typeof EntriesNewRoute
   '/recurring/new': typeof RecurringNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
+  '/settings/passkeys': typeof SettingsPasskeysRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts': typeof AccountsIndexRoute
   '/entries': typeof EntriesIndexRoute
@@ -263,6 +271,7 @@ export interface FileRoutesById {
   '/entries/new': typeof EntriesNewRoute
   '/recurring/new': typeof RecurringNewRoute
   '/settings/invitations': typeof SettingsInvitationsRoute
+  '/settings/passkeys': typeof SettingsPasskeysRoute
   '/settings/users': typeof SettingsUsersRoute
   '/accounts/': typeof AccountsIndexRoute
   '/entries/': typeof EntriesIndexRoute
@@ -296,6 +305,7 @@ export interface FileRouteTypes {
     | '/entries/new'
     | '/recurring/new'
     | '/settings/invitations'
+    | '/settings/passkeys'
     | '/settings/users'
     | '/accounts/'
     | '/entries/'
@@ -322,6 +332,7 @@ export interface FileRouteTypes {
     | '/entries/new'
     | '/recurring/new'
     | '/settings/invitations'
+    | '/settings/passkeys'
     | '/settings/users'
     | '/accounts'
     | '/entries'
@@ -353,6 +364,7 @@ export interface FileRouteTypes {
     | '/entries/new'
     | '/recurring/new'
     | '/settings/invitations'
+    | '/settings/passkeys'
     | '/settings/users'
     | '/accounts/'
     | '/entries/'
@@ -525,6 +537,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsInvitationsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/passkeys': {
+      id: '/settings/passkeys'
+      path: '/passkeys'
+      fullPath: '/settings/passkeys'
+      preLoaderRoute: typeof SettingsPasskeysRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/users': {
       id: '/settings/users'
       path: '/users'
@@ -659,12 +678,14 @@ const RecurringRouteWithChildren = RecurringRoute._addFileChildren(
 
 interface SettingsRouteChildren {
   SettingsInvitationsRoute: typeof SettingsInvitationsRoute
+  SettingsPasskeysRoute: typeof SettingsPasskeysRoute
   SettingsUsersRoute: typeof SettingsUsersRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsInvitationsRoute: SettingsInvitationsRoute,
+  SettingsPasskeysRoute: SettingsPasskeysRoute,
   SettingsUsersRoute: SettingsUsersRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }

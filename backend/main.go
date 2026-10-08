@@ -15,12 +15,15 @@ import (
 	"at.draab/familyfinances/internal/auth"
 	"at.draab/familyfinances/internal/category"
 	"at.draab/familyfinances/internal/cli"
+	"at.draab/familyfinances/internal/clientip"
 	"at.draab/familyfinances/internal/config"
 	"at.draab/familyfinances/internal/dashboard"
 	"at.draab/familyfinances/internal/entry"
 	"at.draab/familyfinances/internal/httpapi"
 	"at.draab/familyfinances/internal/mailer"
 	"at.draab/familyfinances/internal/oidcauth"
+	"at.draab/familyfinances/internal/passkeyauth"
+	"at.draab/familyfinances/internal/ratelimit"
 	"at.draab/familyfinances/internal/recurringtransaction"
 	"at.draab/familyfinances/internal/settings"
 	"at.draab/familyfinances/internal/storage/postgres"
@@ -137,7 +140,7 @@ func main() {
 		AnalyticsScript:             cfg.AnalyticsScript,
 	})
 
-	if err := run(srv); err != nil {
+	if err := run(srv, authSvc, cfg.Auth.CleanupInterval); err != nil {
 		slog.Error("server", "error", err)
 		os.Exit(1)
 	}
@@ -252,6 +255,27 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, mail
 		oidcClient = c
 	}
 
+	// Rate limits are in-process (see .env.example): per client IP on the
+	// unauthenticated sign-in endpoints, per recipient on magic-link mails.
+	mailLimiter := ratelimit.New(cfg.RateLimit.EmailRequests, cfg.RateLimit.EmailWindow, nil)
+	opts := []auth.Option{
+		auth.WithLanguageLookup(settingsSvc),
+		auth.WithNewUserHooks(categorySvc),
+		passkeyOption(cfg.Auth.BaseURL),
+		auth.WithMailLimiter(mailLimiter),
+		auth.WithEvicters(mailLimiter),
+	}
+	handlerOpts := auth.HandlerOptions{
+		RenderError:  httpapi.WriteError,
+		CookieSecure: cfg.Auth.CookieSecure,
+		ClientIP:     clientip.Resolver{Trusted: cfg.Auth.TrustedProxies}.String,
+	}
+	if cfg.RateLimit.IPEnabled {
+		ipLimiter := ratelimit.New(cfg.RateLimit.IPRequests, cfg.RateLimit.IPWindow, nil)
+		handlerOpts.IPLimiter = ipLimiter
+		opts = append(opts, auth.WithEvicters(ipLimiter))
+	}
+
 	svc := auth.NewService(store, mail, oidcClient, auth.Params{
 		BaseURL:             cfg.Auth.BaseURL,
 		SessionTTL:          cfg.Auth.SessionTTL,
@@ -263,20 +287,60 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, mail
 		MagicLinkTTL:        cfg.Auth.MagicLinkTTL,
 		OIDCIssuer:          cfg.OIDC.Issuer,
 		OIDCLabel:           cfg.OIDC.Label,
-	}, auth.WithLanguageLookup(settingsSvc), auth.WithNewUserHooks(categorySvc))
+		PasskeyReauthWindow: cfg.Auth.PasskeyReauthWindow,
+	}, opts...)
 
-	handler := auth.NewHandler(svc, auth.HandlerOptions{
-		RenderError:  httpapi.WriteError,
-		CookieSecure: cfg.Auth.CookieSecure,
-	})
-	return svc, handler, nil
+	return svc, auth.NewHandler(svc, handlerOpts), nil
 }
 
-// run starts srv and blocks until SIGINT/SIGTERM, then shuts it down
-// gracefully.
-func run(srv *http.Server) error {
+// passkeyOption wires the WebAuthn relying party for AUTH_BASE_URL. Without a
+// usable absolute base URL there is no relying-party ID, so passkeys are
+// left off (their ceremonies fail) rather than refusing to start — magic
+// links and OIDC keep working.
+func passkeyOption(baseURL string) auth.Option {
+	wa, err := passkeyauth.New(baseURL)
+	if err != nil {
+		slog.Warn("passkeys disabled", "error", err)
+		return func(*auth.Service) {}
+	}
+	return auth.WithWebAuthn(wa)
+}
+
+// cleaner is the auth service's periodic cleanup, as runCleanup needs it.
+type cleaner interface {
+	Cleanup(ctx context.Context) error
+}
+
+// runCleanup runs a cleanup pass immediately and then every interval until
+// ctx is cancelled. A failed pass is logged and the next one still runs.
+func runCleanup(ctx context.Context, c cleaner, interval time.Duration) {
+	pass := func() {
+		if err := c.Cleanup(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("auth cleanup failed", "error", err)
+			return
+		}
+		slog.Info("auth cleanup done")
+	}
+	pass()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			pass()
+		}
+	}
+}
+
+// run starts srv — and the auth cleanup loop, on the same lifetime — and
+// blocks until SIGINT/SIGTERM, then shuts both down gracefully.
+func run(srv *http.Server, cleanup cleaner, cleanupInterval time.Duration) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	go runCleanup(ctx, cleanup, cleanupInterval)
 
 	errc := make(chan error, 1)
 	go func() {

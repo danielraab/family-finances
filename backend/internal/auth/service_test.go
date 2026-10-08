@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -92,6 +93,8 @@ func baseParams() auth.Params {
 		InviteTTL:     168 * time.Hour,
 		MagicLinkTTL:  15 * time.Minute,
 		OIDCIssuer:    "https://idp.example",
+
+		PasskeyReauthWindow: 5 * time.Minute,
 	}
 }
 
@@ -124,15 +127,29 @@ func (c *clock) advance(d time.Duration) {
 }
 
 type svcConfig struct {
-	clock *clock
-	oidc  auth.OIDCClient
-	label string
-	hooks []auth.NewUserHook
+	clock        *clock
+	oidc         auth.OIDCClient
+	label        string
+	hooks        []auth.NewUserHook
+	reauthWindow time.Duration
+	ipLimit      int // per-IP requests per minute; 0 disables
+	mailLimit    int // magic-link mails per recipient per 15m; 0 disables
+	trusted      []netip.Prefix
 }
 type svcOpt func(*svcConfig)
 
 func withOIDC(o auth.OIDCClient) svcOpt { return func(c *svcConfig) { c.oidc = o } }
-func withOIDCLabel(label string) svcOpt { return func(c *svcConfig) { c.label = label } }
+func withIPLimit(n int) svcOpt          { return func(c *svcConfig) { c.ipLimit = n } }
+func withMailLimit(n int) svcOpt        { return func(c *svcConfig) { c.mailLimit = n } }
+func withTrustedProxies(p ...string) svcOpt {
+	return func(c *svcConfig) {
+		for _, s := range p {
+			c.trusted = append(c.trusted, netip.MustParsePrefix(s))
+		}
+	}
+}
+func withReauthWindow(d time.Duration) svcOpt { return func(c *svcConfig) { c.reauthWindow = d } }
+func withOIDCLabel(label string) svcOpt       { return func(c *svcConfig) { c.label = label } }
 func withNewUserHooks(h ...auth.NewUserHook) svcOpt {
 	return func(c *svcConfig) { c.hooks = h }
 }

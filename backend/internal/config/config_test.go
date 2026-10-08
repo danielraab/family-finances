@@ -62,7 +62,7 @@ func TestLoadAuthDefaults(t *testing.T) {
 		"AUTH_SESSION_TTL", "AUTH_SESSION_MAX_TTL", "AUTH_INVITE_TTL",
 		"AUTH_MAGIC_LINK_TTL", "AUTH_COOKIE_SECURE", "AUTH_SIGNUP_ENABLED",
 		"AUTH_INVITE_ENABLED", "AUTH_ALLOWED_EMAIL_DOMAINS", "SMTP_TLS", "OIDC_SCOPES",
-		"OIDC_LABEL",
+		"OIDC_LABEL", "AUTH_PASSKEY_REAUTH_WINDOW",
 	} {
 		t.Setenv(k, "")
 	}
@@ -80,6 +80,9 @@ func TestLoadAuthDefaults(t *testing.T) {
 	}
 	if cfg.Auth.MagicLinkTTL != 15*time.Minute {
 		t.Errorf("MagicLinkTTL = %s, want 15m", cfg.Auth.MagicLinkTTL)
+	}
+	if cfg.Auth.PasskeyReauthWindow != 5*time.Minute {
+		t.Errorf("PasskeyReauthWindow = %s, want 5m", cfg.Auth.PasskeyReauthWindow)
 	}
 	if !cfg.Auth.CookieSecure {
 		t.Error("CookieSecure = false, want true")
@@ -171,6 +174,26 @@ func TestLoadInvalidDurationRejected(t *testing.T) {
 	}
 }
 
+func TestLoadPasskeyReauthWindowOverride(t *testing.T) {
+	t.Setenv("AUTH_PASSKEY_REAUTH_WINDOW", "90s")
+
+	cfg := load(t)
+	if cfg.Auth.PasskeyReauthWindow != 90*time.Second {
+		t.Errorf("PasskeyReauthWindow = %s, want 90s", cfg.Auth.PasskeyReauthWindow)
+	}
+}
+
+func TestLoadInvalidPasskeyReauthWindowRejected(t *testing.T) {
+	for _, v := range []string{"0s", "-1m", "soon"} {
+		t.Run(v, func(t *testing.T) {
+			t.Setenv("AUTH_PASSKEY_REAUTH_WINDOW", v)
+			if _, err := config.Load(); err == nil {
+				t.Fatalf("Load() succeeded with AUTH_PASSKEY_REAUTH_WINDOW=%s, want error", v)
+			}
+		})
+	}
+}
+
 func TestLoadInvalidBoolRejected(t *testing.T) {
 	t.Setenv("AUTH_SIGNUP_ENABLED", "maybe")
 
@@ -189,4 +212,75 @@ func equal(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func TestLoadRateLimitAndCleanupDefaults(t *testing.T) {
+	for _, k := range []string{
+		"RATE_LIMIT_IP_ENABLED", "RATE_LIMIT_IP_REQUESTS", "RATE_LIMIT_IP_WINDOW",
+		"RATE_LIMIT_EMAIL_REQUESTS", "RATE_LIMIT_EMAIL_WINDOW",
+		"AUTH_CLEANUP_INTERVAL", "AUTH_TRUSTED_PROXIES",
+	} {
+		t.Setenv(k, "")
+	}
+	cfg := load(t)
+	rl := cfg.RateLimit
+	if !rl.IPEnabled || rl.IPRequests != 20 || rl.IPWindow != time.Minute ||
+		rl.EmailRequests != 5 || rl.EmailWindow != 15*time.Minute {
+		t.Errorf("RateLimit = %+v, want on, 20/1m, 5/15m", rl)
+	}
+	if cfg.Auth.CleanupInterval != 15*time.Minute {
+		t.Errorf("CleanupInterval = %s, want 15m", cfg.Auth.CleanupInterval)
+	}
+	if cfg.Auth.TrustedProxies != nil {
+		t.Errorf("TrustedProxies = %v, want none", cfg.Auth.TrustedProxies)
+	}
+}
+
+func TestLoadRateLimitAndCleanupOverrides(t *testing.T) {
+	t.Setenv("RATE_LIMIT_IP_ENABLED", "false")
+	t.Setenv("RATE_LIMIT_IP_REQUESTS", "100")
+	t.Setenv("RATE_LIMIT_IP_WINDOW", "30s")
+	t.Setenv("RATE_LIMIT_EMAIL_REQUESTS", "2")
+	t.Setenv("RATE_LIMIT_EMAIL_WINDOW", "1h")
+	t.Setenv("AUTH_CLEANUP_INTERVAL", "1h")
+	t.Setenv("AUTH_TRUSTED_PROXIES", "10.0.0.0/8, 192.168.1.5 ,fd00::/8, ::1")
+
+	cfg := load(t)
+	rl := cfg.RateLimit
+	if rl.IPEnabled || rl.IPRequests != 100 || rl.IPWindow != 30*time.Second ||
+		rl.EmailRequests != 2 || rl.EmailWindow != time.Hour {
+		t.Errorf("RateLimit = %+v", rl)
+	}
+	if cfg.Auth.CleanupInterval != time.Hour {
+		t.Errorf("CleanupInterval = %s, want 1h", cfg.Auth.CleanupInterval)
+	}
+	var got []string
+	for _, p := range cfg.Auth.TrustedProxies {
+		got = append(got, p.String())
+	}
+	if want := []string{"10.0.0.0/8", "192.168.1.5/32", "fd00::/8", "::1/128"}; !equal(got, want) {
+		t.Errorf("TrustedProxies = %v, want %v", got, want)
+	}
+}
+
+func TestLoadInvalidRateLimitAndCleanupRejected(t *testing.T) {
+	for _, tc := range []struct{ key, value string }{
+		{"RATE_LIMIT_IP_REQUESTS", "0"},
+		{"RATE_LIMIT_IP_REQUESTS", "-3"},
+		{"RATE_LIMIT_IP_REQUESTS", "many"},
+		{"RATE_LIMIT_EMAIL_REQUESTS", "0"},
+		{"RATE_LIMIT_IP_WINDOW", "0s"},
+		{"RATE_LIMIT_EMAIL_WINDOW", "soon"},
+		{"RATE_LIMIT_IP_ENABLED", "maybe"},
+		{"AUTH_CLEANUP_INTERVAL", "0s"},
+		{"AUTH_TRUSTED_PROXIES", "10.0.0.0/33"},
+		{"AUTH_TRUSTED_PROXIES", "not-an-ip"},
+	} {
+		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
+			t.Setenv(tc.key, tc.value)
+			if _, err := config.Load(); err == nil {
+				t.Fatalf("Load() accepted %s=%s", tc.key, tc.value)
+			}
+		})
+	}
 }

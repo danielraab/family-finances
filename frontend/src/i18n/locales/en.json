@@ -41,7 +41,12 @@
     "submitting": "Sending…",
     "checkInbox": "Check your inbox",
     "sentTo": "We sent a sign-in link to <bold>{{email}}</bold>. Open it on this device to finish signing in.",
-    "useDifferentAddress": "Use a different address"
+    "useDifferentAddress": "Use a different address",
+    "passkey": "Sign in with a passkey",
+    "passkeyWorking": "Waiting for your passkey…",
+    "passkeyFailed": "Passkey sign-in didn't work. Try another passkey or use an email link instead.",
+    "passkeyDisabled": "This account is disabled.",
+    "rateLimited": "Too many attempts — please wait a moment and try again."
   },
   "home": {
     "tagline": "Track the household's money in one place.",
@@ -139,6 +144,7 @@
     "title": "Settings",
     "tabs": {
       "profile": "Profile",
+      "passkeys": "Passkeys",
       "myInvitations": "My Invitations",
       "users": "Users"
     },
@@ -217,6 +223,33 @@
     "myInvitations": {
       "heading": "Invitations you've sent",
       "noInvites": "You haven't invited anyone yet."
+    },
+    "passkeys": {
+      "heading": "Your passkeys",
+      "intro": "Sign in with your fingerprint, face or device PIN instead of an email link. You can add several — one per device or password manager.",
+      "empty": "You haven't added a passkey yet.",
+      "thisSession": "This session",
+      "added": "Added {{date}}",
+      "lastUsed": "last used {{date}}",
+      "neverUsed": "never used",
+      "remove": "Remove",
+      "freshNotice": "For your security, adding a passkey requires a fresh sign-in from the last {{minutes}} minutes. Removing a passkey is always possible.",
+      "staleHint": "Your current sign-in is older than {{minutes}} minutes. Sign in again, then add the passkey right away.",
+      "unsupported": "This browser doesn't support passkeys.",
+      "add": "Add passkey",
+      "signInAgain": "Sign in again",
+      "signInWithOther": "Sign out and use another method",
+      "reauthError": "Signing in again didn't work. Try another passkey, or sign out and use an email link.",
+      "addTitle": "Add a passkey",
+      "nameLabel": "Name (optional)",
+      "namePlaceholder": "e.g. Laptop or Phone",
+      "addConfirm": "Continue",
+      "adding": "Waiting for your device…",
+      "addError": "The passkey couldn't be added. Please try again.",
+      "removeError": "The passkey couldn't be removed. Please try again.",
+      "confirmRemoveTitle": "Remove “{{name}}”?",
+      "confirmRemoveBody": "You won't be able to sign in with this passkey any more, and every session signed in with it will be signed out.",
+      "confirmRemoveCurrent": "You're signed in with this passkey. Removing it signs you out here, along with every other session signed in with it."
     }
   },
   "accounts": {

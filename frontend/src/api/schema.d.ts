@@ -335,6 +335,126 @@ export interface paths {
         patch: operations["patchAuthMe"];
         trace?: never;
     };
+    "/api/auth/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the authenticated user's passkeys
+         * @description Oldest first. Carries no key material. `current` marks the passkey that created the requesting session. Allowed on any session type.
+         */
+        get: operations["listAuthPasskeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/passkeys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete one of the caller's passkeys
+         * @description Always allowed, on any session of any age. Every session that this passkey created is revoked with it, and no other session. When the requesting session was created by this passkey, the ff_session cookie is cleared and the caller is signed out.
+         */
+        delete: operations["deleteAuthPasskey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/passkeys/login/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish signing in with a passkey
+         * @description On success sets the ff_session cookie (always a browser session, bound to the passkey) and returns the user. A session cookie already on the request is revoked. A passkey never creates or links an account. Every verification failure is the same 401.
+         */
+        post: operations["finishAuthPasskeyLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/passkeys/login/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin signing in with a passkey
+         * @description Discoverable credentials: the options carry no allow-list, so no email is needed. User verification is required.
+         */
+        post: operations["startAuthPasskeyLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/passkeys/register/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish registering a passkey
+         * @description Same session requirements as start, checked again. The ceremony must have been started by this same session, unused, and unexpired.
+         */
+        post: operations["finishAuthPasskeyRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/passkeys/register/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin registering a passkey
+         * @description Requires a web (cookie) session created within AUTH_PASSKEY_REAUTH_WINDOW (default 5 minutes) — re-authentication, so a stolen long-lived session cannot register a passkey. Bearer sessions are always refused. Returns WebAuthn creation options (resident key and user verification required, no attestation, the caller's existing credentials excluded).
+         */
+        post: operations["startAuthPasskeyRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/users": {
         parameters: {
             query?: never;
@@ -1318,6 +1438,18 @@ export interface components {
             amount: number;
             currency: string;
         };
+        /** @description The session the request authenticated with. */
+        CurrentSession: {
+            /** @enum {string} */
+            client: "web" | "api";
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Until when this session may register a passkey (its creation time plus AUTH_PASSKEY_REAUTH_WINDOW); null for an API session, which never may.
+             */
+            passkey_registration_until: string | null;
+        };
         DashboardCard: {
             config: components["schemas"]["DashboardCardConfig"];
             id: string;
@@ -1543,6 +1675,53 @@ export interface components {
             label: string;
             start_path: string;
         };
+        Passkey: {
+            /** @description The authenticator reports the passkey as synced/backed up. */
+            backed_up: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** @description The requesting session was created by this passkey. */
+            current: boolean;
+            id: string;
+            /** Format: date-time */
+            last_used_at: string | null;
+            name: string;
+        };
+        PasskeyCeremony: {
+            /** @description Echo on the matching finish call; single-use, expires after 5 minutes. */
+            ceremony_id: string;
+            /** @description WebAuthn options in their JSON form, for PublicKeyCredential.parseCreationOptionsFromJSON (registration) or parseRequestOptionsFromJSON (sign-in). */
+            options: {
+                [key: string]: unknown;
+            };
+        };
+        PasskeyLoginFinish: {
+            ceremony_id: string;
+            /** @description The PublicKeyCredential from navigator.credentials.get(), as toJSON() returns it. */
+            credential: {
+                [key: string]: unknown;
+            };
+        };
+        PasskeyLoginResult: {
+            user: {
+                /** Format: date-time */
+                created_at: string;
+                display_name?: string;
+                /** Format: email */
+                email: string;
+                id: string;
+                is_admin: boolean;
+            };
+        };
+        PasskeyRegistrationFinish: {
+            ceremony_id: string;
+            /** @description The PublicKeyCredential from navigator.credentials.create(), as toJSON() returns it. */
+            credential: {
+                [key: string]: unknown;
+            };
+            /** @description Trimmed; empty or absent stores "Passkey". */
+            name?: string;
+        };
         ProfileUpdate: {
             /** @description The user's full name. Trimmed of surrounding whitespace before it is stored; the trimmed value must match `^[\p{L} .'-]{0,150}$` (Unicode letters, spaces, `.`, `'`, `-`). An empty string is accepted and clears the name. */
             display_name: string;
@@ -1756,6 +1935,7 @@ export interface components {
              * @enum {string|null}
              */
             language: "en" | "de" | null;
+            session: components["schemas"]["CurrentSession"];
         };
         UserSettings: {
             default_currency: string;
@@ -1813,6 +1993,26 @@ export interface components {
         /** @description No such resource — including one that belongs to a different owner, which behaves identically to nonexistent (existence is not disclosed across owners). */
         NotFound: {
             headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Adding a passkey needs a fresh sign-in on a browser session: the session is older than AUTH_PASSKEY_REAUTH_WINDOW, or it is a bearer (API) session. */
+        ReauthRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Too many sign-in requests from this client IP (RATE_LIMIT_IP_REQUESTS per RATE_LIMIT_IP_WINDOW, shared across every unauthenticated sign-in endpoint). Nothing was done; retry after the indicated delay. */
+        TooManyRequests: {
+            headers: {
+                /** @description Seconds until the next request from this IP is allowed. */
+                "Retry-After"?: number;
                 [name: string]: unknown;
             };
             content: {
@@ -2240,6 +2440,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getAuthInvites: {
@@ -2465,6 +2666,148 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    listAuthPasskeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's passkeys. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Passkey"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deleteAuthPasskey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The passkey and its sessions are deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    finishAuthPasskeyLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyLoginFinish"];
+            };
+        };
+        responses: {
+            /** @description Signed in. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyLoginResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    startAuthPasskeyLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ceremony to complete in the browser. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyCeremony"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    finishAuthPasskeyRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegistrationFinish"];
+            };
+        };
+        responses: {
+            /** @description The registered passkey. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Passkey"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["ReauthRequired"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    startAuthPasskeyRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ceremony to complete in the browser. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyCeremony"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["ReauthRequired"];
         };
     };
     getAuthUsers: {

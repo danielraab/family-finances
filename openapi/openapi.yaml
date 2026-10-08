@@ -207,6 +207,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/invites:
     post:
@@ -351,6 +353,156 @@ paths:
                 $ref: "#/components/schemas/Error"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  /api/auth/passkeys:
+    get:
+      operationId: listAuthPasskeys
+      summary: List the authenticated user's passkeys
+      description: >-
+        Oldest first. Carries no key material. `current` marks the passkey
+        that created the requesting session. Allowed on any session type.
+      tags: [auth]
+      responses:
+        "200":
+          description: The caller's passkeys.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Passkey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/passkeys/{id}:
+    delete:
+      operationId: deleteAuthPasskey
+      summary: Delete one of the caller's passkeys
+      description: >-
+        Always allowed, on any session of any age. Every session that this
+        passkey created is revoked with it, and no other session. When the
+        requesting session was created by this passkey, the ff_session cookie
+        is cleared and the caller is signed out.
+      tags: [auth]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: The passkey and its sessions are deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/auth/passkeys/register/start:
+    post:
+      operationId: startAuthPasskeyRegistration
+      summary: Begin registering a passkey
+      description: >-
+        Requires a web (cookie) session created within
+        AUTH_PASSKEY_REAUTH_WINDOW (default 5 minutes) — re-authentication, so
+        a stolen long-lived session cannot register a passkey. Bearer sessions
+        are always refused. Returns WebAuthn creation options (resident key
+        and user verification required, no attestation, the caller's existing
+        credentials excluded).
+      tags: [auth]
+      responses:
+        "200":
+          description: The ceremony to complete in the browser.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyCeremony"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ReauthRequired"
+
+  /api/auth/passkeys/register/finish:
+    post:
+      operationId: finishAuthPasskeyRegistration
+      summary: Finish registering a passkey
+      description: >-
+        Same session requirements as start, checked again. The ceremony must
+        have been started by this same session, unused, and unexpired.
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasskeyRegistrationFinish"
+      responses:
+        "201":
+          description: The registered passkey.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passkey"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ReauthRequired"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/auth/passkeys/login/start:
+    post:
+      operationId: startAuthPasskeyLogin
+      summary: Begin signing in with a passkey
+      description: >-
+        Discoverable credentials: the options carry no allow-list, so no email
+        is needed. User verification is required.
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: The ceremony to complete in the browser.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyCeremony"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /api/auth/passkeys/login/finish:
+    post:
+      operationId: finishAuthPasskeyLogin
+      summary: Finish signing in with a passkey
+      description: >-
+        On success sets the ff_session cookie (always a browser session,
+        bound to the passkey) and returns the user. A session cookie already
+        on the request is revoked. A passkey never creates or links an
+        account. Every verification failure is the same 401.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasskeyLoginFinish"
+      responses:
+        "200":
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasskeyLoginResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/users:
     get:
@@ -2645,6 +2797,8 @@ paths:
           description: Signed in; redirect to a safe in-app path.
         "400":
           description: The token is missing, invalid, expired, or already used.
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/oidc/start:
     get:
@@ -2665,6 +2819,8 @@ paths:
           description: Redirect to the identity provider.
         "404":
           description: OIDC is not configured on this instance.
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/oidc/callback:
     get:
@@ -2698,6 +2854,8 @@ paths:
           description: Signed in; redirect to a safe in-app path.
         "400":
           description: Missing/unknown state, provider error, or id_token verification failed.
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
   /api/auth/invites/accept:
     get:
@@ -2721,6 +2879,8 @@ paths:
           description: Account created / signed in; redirect to a safe in-app path.
         "400":
           description: The invite token is missing, invalid, expired, or already used.
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 
 components:
   securitySchemes:
@@ -2756,6 +2916,30 @@ components:
         No such resource — including one that belongs to a different owner,
         which behaves identically to nonexistent (existence is not
         disclosed across owners).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: >-
+        Too many sign-in requests from this client IP (RATE_LIMIT_IP_REQUESTS
+        per RATE_LIMIT_IP_WINDOW, shared across every unauthenticated sign-in
+        endpoint). Nothing was done; retry after the indicated delay.
+      headers:
+        Retry-After:
+          description: Seconds until the next request from this IP is allowed.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ReauthRequired:
+      description: >-
+        Adding a passkey needs a fresh sign-in on a browser session: the
+        session is older than AUTH_PASSKEY_REAUTH_WINDOW, or it is a bearer
+        (API) session.
       content:
         application/json:
           schema:
@@ -2822,7 +3006,7 @@ components:
 
     User:
       type: object
-      required: [id, email, is_admin, created_at, language]
+      required: [id, email, is_admin, created_at, language, session]
       properties:
         id:
           type: string
@@ -2846,6 +3030,112 @@ components:
             GET /api/settings, whose language field is always resolved to a
             default when unset.
           enum: [en, de]
+        session:
+          $ref: "#/components/schemas/CurrentSession"
+
+    CurrentSession:
+      type: object
+      description: The session the request authenticated with.
+      required: [created_at, client, passkey_registration_until]
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        client:
+          type: string
+          enum: [web, api]
+        passkey_registration_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Until when this session may register a passkey (its creation time
+            plus AUTH_PASSKEY_REAUTH_WINDOW); null for an API session, which
+            never may.
+
+    Passkey:
+      type: object
+      required: [id, name, created_at, last_used_at, backed_up, current]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        backed_up:
+          type: boolean
+          description: The authenticator reports the passkey as synced/backed up.
+        current:
+          type: boolean
+          description: The requesting session was created by this passkey.
+
+    PasskeyCeremony:
+      type: object
+      required: [ceremony_id, options]
+      properties:
+        ceremony_id:
+          type: string
+          description: Echo on the matching finish call; single-use, expires after 5 minutes.
+        options:
+          type: object
+          additionalProperties: true
+          description: >-
+            WebAuthn options in their JSON form, for
+            PublicKeyCredential.parseCreationOptionsFromJSON (registration) or
+            parseRequestOptionsFromJSON (sign-in).
+
+    PasskeyRegistrationFinish:
+      type: object
+      required: [ceremony_id, credential]
+      properties:
+        ceremony_id:
+          type: string
+        name:
+          type: string
+          maxLength: 100
+          description: Trimmed; empty or absent stores "Passkey".
+        credential:
+          type: object
+          additionalProperties: true
+          description: The PublicKeyCredential from navigator.credentials.create(), as toJSON() returns it.
+
+    PasskeyLoginFinish:
+      type: object
+      required: [ceremony_id, credential]
+      properties:
+        ceremony_id:
+          type: string
+        credential:
+          type: object
+          additionalProperties: true
+          description: The PublicKeyCredential from navigator.credentials.get(), as toJSON() returns it.
+
+    PasskeyLoginResult:
+      type: object
+      required: [user]
+      properties:
+        user:
+          type: object
+          required: [id, email, is_admin, created_at]
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+              format: email
+            display_name:
+              type: string
+            is_admin:
+              type: boolean
+            created_at:
+              type: string
+              format: date-time
 
     AdminUser:
       type: object

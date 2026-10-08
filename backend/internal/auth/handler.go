@@ -2,10 +2,13 @@ package auth
 
 import (
 	"encoding/json"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // RenderError writes a JSON error response with the right status for a
@@ -20,6 +23,13 @@ type HandlerOptions struct {
 	RenderError RenderError
 	// CookieSecure sets the Secure attribute on the session cookie.
 	CookieSecure bool
+	// ClientIP resolves the client address recorded on new sessions and used
+	// as the per-IP rate-limit key — internal/clientip's trusted-proxy
+	// resolver in production. Nil uses the request's direct peer.
+	ClientIP func(*http.Request) string
+	// IPLimiter throttles the unauthenticated sign-in endpoints per client
+	// IP, one budget shared across all of them. Nil disables it.
+	IPLimiter Limiter
 }
 
 // Handler is the auth HTTP surface, mounted by internal/httpapi at
@@ -29,6 +39,8 @@ type Handler struct {
 	svc          *Service
 	renderError  RenderError
 	cookieSecure bool
+	clientIP     func(*http.Request) string
+	ipLimiter    Limiter
 	mux          *http.ServeMux
 }
 
@@ -41,13 +53,18 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 		svc:          svc,
 		renderError:  opts.RenderError,
 		cookieSecure: opts.CookieSecure,
+		clientIP:     opts.ClientIP,
+		ipLimiter:    opts.IPLimiter,
 		mux:          http.NewServeMux(),
 	}
+	if h.clientIP == nil {
+		h.clientIP = peerIP
+	}
 
-	h.mux.HandleFunc("POST /api/auth/email/start", h.emailStart)
-	h.mux.HandleFunc("GET /api/auth/email/callback", h.emailCallback)
-	h.mux.HandleFunc("GET /api/auth/oidc/start", h.oidcStart)
-	h.mux.HandleFunc("GET /api/auth/oidc/callback", h.oidcCallback)
+	h.mux.HandleFunc("POST /api/auth/email/start", h.throttle(h.emailStart))
+	h.mux.HandleFunc("GET /api/auth/email/callback", h.throttle(h.emailCallback))
+	h.mux.HandleFunc("GET /api/auth/oidc/start", h.throttle(h.oidcStart))
+	h.mux.HandleFunc("GET /api/auth/oidc/callback", h.throttle(h.oidcCallback))
 	h.mux.HandleFunc("GET /api/auth/config", h.config)
 	h.mux.HandleFunc("GET /api/auth/me", h.me)
 	h.mux.HandleFunc("PATCH /api/auth/me", h.patchMe)
@@ -55,13 +72,19 @@ func NewHandler(svc *Service, opts HandlerOptions) *Handler {
 	h.mux.HandleFunc("POST /api/auth/invites", h.createInvite)
 	h.mux.HandleFunc("GET /api/auth/invites", h.listInvites)
 	h.mux.HandleFunc("GET /api/auth/invites/mine", h.listMyInvites)
-	h.mux.HandleFunc("GET /api/auth/invites/accept", h.acceptInvite)
+	h.mux.HandleFunc("GET /api/auth/invites/accept", h.throttle(h.acceptInvite))
 	h.mux.HandleFunc("POST /api/auth/invites/{id}/revoke", h.revokeInvite)
 	h.mux.HandleFunc("DELETE /api/auth/invites/{id}", h.deleteInvite)
 	h.mux.HandleFunc("GET /api/auth/users", h.listUsers)
 	h.mux.HandleFunc("POST /api/auth/users/{id}/disable", h.disableUser)
 	h.mux.HandleFunc("POST /api/auth/users/{id}/enable", h.enableUser)
 	h.mux.HandleFunc("DELETE /api/auth/users/{id}", h.deleteUser)
+	h.mux.HandleFunc("GET /api/auth/passkeys", h.listPasskeys)
+	h.mux.HandleFunc("DELETE /api/auth/passkeys/{id}", h.deletePasskey)
+	h.mux.HandleFunc("POST /api/auth/passkeys/register/start", h.passkeyRegisterStart)
+	h.mux.HandleFunc("POST /api/auth/passkeys/register/finish", h.passkeyRegisterFinish)
+	h.mux.HandleFunc("POST /api/auth/passkeys/login/start", h.throttle(h.passkeyLoginStart))
+	h.mux.HandleFunc("POST /api/auth/passkeys/login/finish", h.throttle(h.passkeyLoginFinish))
 
 	return h
 }
@@ -101,7 +124,7 @@ func (h *Handler) emailCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonClient := wantsJSON(r)
-	user, session, err := h.svc.CompleteEmailLogin(r.Context(), token, sessionContext(r, jsonClient))
+	user, session, err := h.svc.CompleteEmailLogin(r.Context(), token, h.sessionContext(r, jsonClient))
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -132,7 +155,7 @@ func (h *Handler) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonClient := wantsJSON(r)
-	user, session, returnTo, err := h.svc.CompleteOIDC(r.Context(), state, code, currentUserID(r), sessionContext(r, jsonClient))
+	user, session, returnTo, err := h.svc.CompleteOIDC(r.Context(), state, code, currentUserID(r), h.sessionContext(r, jsonClient))
 	if err != nil {
 		h.renderError(w, r, err)
 		return
@@ -165,7 +188,29 @@ func (h *Handler) config(w http.ResponseWriter, r *http.Request) {
 // value while GET /api/settings carries the resolved one.
 type meResponse struct {
 	User
-	Language *string `json:"language"`
+	Language *string    `json:"language"`
+	Session  *meSession `json:"session"`
+}
+
+// meSession describes the requesting session, so the client can explain the
+// passkey re-authentication rule: a passkey may be registered until
+// PasskeyRegistrationUntil (null for an API session, which never may).
+type meSession struct {
+	CreatedAt                time.Time     `json:"created_at"`
+	Client                   SessionClient `json:"client"`
+	PasskeyRegistrationUntil *time.Time    `json:"passkey_registration_until"`
+}
+
+func (h *Handler) meSession(r *http.Request) *meSession {
+	sess, ok := SessionFromContext(r.Context())
+	if !ok {
+		return nil
+	}
+	return &meSession{
+		CreatedAt:                sess.CreatedAt,
+		Client:                   sess.Client,
+		PasskeyRegistrationUntil: h.svc.PasskeyRegistrationUntil(sess),
+	}
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +222,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, meResponse{
 		User:     user,
 		Language: h.svc.UserLanguage(r.Context(), user.ID),
+		Session:  h.meSession(r),
 	})
 }
 
@@ -205,6 +251,7 @@ func (h *Handler) patchMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, meResponse{
 		User:     updated,
 		Language: h.svc.UserLanguage(r.Context(), updated.ID),
+		Session:  h.meSession(r),
 	})
 }
 
@@ -384,12 +431,133 @@ func (h *Handler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonClient := wantsJSON(r)
-	user, session, err := h.svc.AcceptInvite(r.Context(), token, sessionContext(r, jsonClient))
+	user, session, err := h.svc.AcceptInvite(r.Context(), token, h.sessionContext(r, jsonClient))
 	if err != nil {
 		h.renderError(w, r, err)
 		return
 	}
 	h.completeSignIn(w, r, user, session, jsonClient, "")
+}
+
+// --- passkeys ----------------------------------------------------------
+
+// sessionUser is the authenticated user and the session they authenticated
+// with, or a 401 already written.
+func (h *Handler) sessionUser(w http.ResponseWriter, r *http.Request) (User, Session, bool) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return User{}, Session{}, false
+	}
+	sess, ok := SessionFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return User{}, Session{}, false
+	}
+	return user, sess, true
+}
+
+func (h *Handler) listPasskeys(w http.ResponseWriter, r *http.Request) {
+	user, sess, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	list, err := h.svc.ListPasskeys(r.Context(), user.ID, sess)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// deletePasskey needs no fresh session: removing a passkey must always be
+// possible. Deleting the passkey behind the current session signs it out.
+func (h *Handler) deletePasskey(w http.ResponseWriter, r *http.Request) {
+	user, sess, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	endedCurrent, err := h.svc.DeletePasskey(r.Context(), user.ID, r.PathValue("id"), sess)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	if endedCurrent {
+		if _, err := r.Cookie(CookieName); err == nil {
+			h.clearCookie(w)
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) passkeyRegisterStart(w http.ResponseWriter, r *http.Request) {
+	user, sess, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	ceremony, err := h.svc.StartPasskeyRegistration(r.Context(), user, sess)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ceremony)
+}
+
+func (h *Handler) passkeyRegisterFinish(w http.ResponseWriter, r *http.Request) {
+	user, sess, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		CeremonyID string          `json:"ceremony_id"`
+		Name       string          `json:"name"`
+		Credential json.RawMessage `json:"credential"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		h.renderError(w, r, ErrPasskeyInvalid)
+		return
+	}
+	info, err := h.svc.FinishPasskeyRegistration(r.Context(), user, sess, body.CeremonyID, body.Name, body.Credential)
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, info)
+}
+
+func (h *Handler) passkeyLoginStart(w http.ResponseWriter, r *http.Request) {
+	ceremony, err := h.svc.StartPasskeyLogin(r.Context())
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ceremony)
+}
+
+// passkeyLoginFinish always establishes a cookie session — the ceremony is
+// browser-only — and answers 200 with the user, since it is called by fetch
+// rather than navigated to. A session cookie already on the request is
+// revoked once the new one is issued: re-authenticating replaces the
+// session instead of stacking a second one.
+func (h *Handler) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		CeremonyID string          `json:"ceremony_id"`
+		Credential json.RawMessage `json:"credential"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		h.renderError(w, r, ErrPasskeyAuthFailed)
+		return
+	}
+	user, token, err := h.svc.CompletePasskeyLogin(r.Context(), body.CeremonyID, body.Credential, h.sessionContext(r, false))
+	if err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	if old, err := r.Cookie(CookieName); err == nil && old.Value != "" {
+		_ = h.svc.Logout(r.Context(), old.Value)
+	}
+	h.setSessionCookie(w, token)
+	writeJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 
 // --- shared helpers -------------------------------------------------
@@ -405,6 +573,11 @@ func (h *Handler) completeSignIn(w http.ResponseWriter, r *http.Request, user Us
 		})
 		return
 	}
+	h.setSessionCookie(w, session)
+	http.Redirect(w, r, safeRelativePathOrRoot(returnTo), http.StatusFound)
+}
+
+func (h *Handler) setSessionCookie(w http.ResponseWriter, session string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieName,
 		Value:    session,
@@ -413,7 +586,6 @@ func (h *Handler) completeSignIn(w http.ResponseWriter, r *http.Request, user Us
 		Secure:   h.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
-	http.Redirect(w, r, safeRelativePathOrRoot(returnTo), http.StatusFound)
 }
 
 func (h *Handler) clearCookie(w http.ResponseWriter) {
@@ -437,15 +609,35 @@ func wantsJSON(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "application/json")
 }
 
-func sessionContext(r *http.Request, jsonClient bool) SessionContext {
+// throttle applies the per-IP limit to an unauthenticated sign-in endpoint.
+// It runs before the body is read, so a refused request has no side effect.
+func (h *Handler) throttle(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.ipLimiter != nil {
+			if ok, retryAfter := h.ipLimiter.Allow("ip:" + h.clientIP(r)); !ok {
+				secs := int(math.Ceil(retryAfter.Seconds()))
+				if secs < 1 {
+					secs = 1
+				}
+				w.Header().Set("Retry-After", strconv.Itoa(secs))
+				h.renderError(w, r, ErrRateLimited)
+				return
+			}
+		}
+		next(w, r)
+	}
+}
+
+func (h *Handler) sessionContext(r *http.Request, jsonClient bool) SessionContext {
 	client := ClientWeb
 	if jsonClient {
 		client = ClientAPI
 	}
-	return SessionContext{Client: client, UserAgent: r.UserAgent(), IP: clientIP(r)}
+	return SessionContext{Client: client, UserAgent: r.UserAgent(), IP: h.clientIP(r)}
 }
 
-func clientIP(r *http.Request) string {
+// peerIP is the default ClientIP: the direct peer, no proxy headers.
+func peerIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

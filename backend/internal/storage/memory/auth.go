@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"bytes"
 	"context"
 	"sort"
 	"strconv"
@@ -22,6 +23,8 @@ type AuthStore struct {
 	magic      map[string]magicRow
 	invites    map[string]inviteRow
 	oidc       map[string]auth.OIDCState
+	passkeys   map[string]auth.Passkey
+	challenges map[string]auth.WebAuthnChallenge
 
 	seq int
 }
@@ -52,6 +55,8 @@ func NewAuthStore() *AuthStore {
 		magic:      map[string]magicRow{},
 		invites:    map[string]inviteRow{},
 		oidc:       map[string]auth.OIDCState{},
+		passkeys:   map[string]auth.Passkey{},
+		challenges: map[string]auth.WebAuthnChallenge{},
 	}
 }
 
@@ -178,6 +183,7 @@ func (a *AuthStore) DeleteSessionsByUserID(_ context.Context, userID string) err
 	for id, row := range a.sessions {
 		if row.s.UserID == userID {
 			delete(a.sessions, id)
+			a.deleteChallengesForSessionLocked(id)
 		}
 	}
 	return nil
@@ -365,6 +371,7 @@ func (a *AuthStore) DeleteSessionByTokenHash(_ context.Context, tokenHash []byte
 	for id, row := range a.sessions {
 		if auth.ConstantTimeEqualHash(row.hash, tokenHash) {
 			delete(a.sessions, id)
+			a.deleteChallengesForSessionLocked(id)
 			return nil
 		}
 	}
@@ -524,4 +531,177 @@ func (a *AuthStore) ConsumeOIDCState(_ context.Context, state string, now time.T
 		return auth.OIDCState{}, auth.ErrTokenExpired
 	}
 	return st, nil
+}
+
+// --- passkeys ---------------------------------------------------------
+
+func copyPasskey(p auth.Passkey) auth.Passkey {
+	p.CredentialID = append([]byte(nil), p.CredentialID...)
+	p.PublicKey = append([]byte(nil), p.PublicKey...)
+	p.AAGUID = append([]byte(nil), p.AAGUID...)
+	p.Transports = append([]string{}, p.Transports...)
+	if p.LastUsedAt != nil {
+		t := *p.LastUsedAt
+		p.LastUsedAt = &t
+	}
+	return p
+}
+
+func (a *AuthStore) CreatePasskey(_ context.Context, p auth.Passkey) (auth.Passkey, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, existing := range a.passkeys {
+		if bytes.Equal(existing.CredentialID, p.CredentialID) {
+			return auth.Passkey{}, auth.ErrPasskeyConflict
+		}
+	}
+	p.ID = a.nextID("pk")
+	p = copyPasskey(p)
+	a.passkeys[p.ID] = p
+	return copyPasskey(p), nil
+}
+
+func (a *AuthStore) PasskeyByCredentialID(_ context.Context, credentialID []byte) (auth.Passkey, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, p := range a.passkeys {
+		if bytes.Equal(p.CredentialID, credentialID) {
+			return copyPasskey(p), nil
+		}
+	}
+	return auth.Passkey{}, auth.ErrNotFound
+}
+
+func (a *AuthStore) ListPasskeysByUser(_ context.Context, userID string) ([]auth.Passkey, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := []auth.Passkey{}
+	for _, p := range a.passkeys {
+		if p.UserID == userID {
+			out = append(out, copyPasskey(p))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.Before(out[j].CreatedAt)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (a *AuthStore) UpdatePasskeyUsage(_ context.Context, id string, signCount uint32, backupState bool, usedAt time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	p, ok := a.passkeys[id]
+	if !ok {
+		return auth.ErrNotFound
+	}
+	p.SignCount = signCount
+	p.BackupState = backupState
+	p.LastUsedAt = &usedAt
+	a.passkeys[id] = p
+	return nil
+}
+
+// DeletePasskey mirrors the Postgres ON DELETE CASCADE from
+// sessions.passkey_credential_id: the passkey's sessions go with it.
+func (a *AuthStore) DeletePasskey(_ context.Context, userID, id string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	p, ok := a.passkeys[id]
+	if !ok || p.UserID != userID {
+		return auth.ErrNotFound
+	}
+	delete(a.passkeys, id)
+	for sid, row := range a.sessions {
+		if row.s.PasskeyCredentialID == id {
+			delete(a.sessions, sid)
+			a.deleteChallengesForSessionLocked(sid)
+		}
+	}
+	return nil
+}
+
+// --- passkey ceremony challenges ----------------------------------------
+
+func (a *AuthStore) CreateWebAuthnChallenge(_ context.Context, ch auth.WebAuthnChallenge) (auth.WebAuthnChallenge, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	ch.ID = a.nextID("ch")
+	ch.Data = append([]byte(nil), ch.Data...)
+	a.challenges[ch.ID] = ch
+	return ch, nil
+}
+
+func (a *AuthStore) ConsumeWebAuthnChallenge(_ context.Context, id string, kind auth.ChallengeKind) (auth.WebAuthnChallenge, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	ch, ok := a.challenges[id]
+	if !ok || ch.Kind != kind {
+		return auth.WebAuthnChallenge{}, auth.ErrNotFound
+	}
+	delete(a.challenges, id)
+	return ch, nil
+}
+
+func (a *AuthStore) DeleteExpiredWebAuthnChallenges(_ context.Context, now time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.deleteExpiredChallengesLocked(now)
+	return nil
+}
+
+func (a *AuthStore) deleteExpiredChallengesLocked(now time.Time) {
+	for id, ch := range a.challenges {
+		if ch.ExpiresAt.Before(now) {
+			delete(a.challenges, id)
+		}
+	}
+}
+
+// deleteChallengesForSessionLocked mirrors webauthn_challenges.session_id's
+// ON DELETE CASCADE.
+func (a *AuthStore) deleteChallengesForSessionLocked(sessionID string) {
+	for id, ch := range a.challenges {
+		if ch.SessionID == sessionID {
+			delete(a.challenges, id)
+		}
+	}
+}
+
+// --- cleanup ---------------------------------------------------------
+
+func (a *AuthStore) DeleteExpiredSessions(_ context.Context, now, createdBefore time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for id, row := range a.sessions {
+		if row.s.ExpiresAt.Before(now) || row.s.CreatedAt.Before(createdBefore) {
+			delete(a.sessions, id)
+			a.deleteChallengesForSessionLocked(id)
+		}
+	}
+	return nil
+}
+
+func (a *AuthStore) DeleteStaleMagicLinkTokens(_ context.Context, now time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for hash, row := range a.magic {
+		if row.consumedAt != nil || row.expiresAt.Before(now) {
+			delete(a.magic, hash)
+		}
+	}
+	return nil
+}
+
+func (a *AuthStore) DeleteExpiredOIDCState(_ context.Context, now time.Time) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for state, st := range a.oidc {
+		if st.ExpiresAt.Before(now) {
+			delete(a.oidc, state)
+		}
+	}
+	return nil
 }

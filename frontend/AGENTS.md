@@ -49,10 +49,10 @@ git-ignored. Build-script allow-listing lives in `pnpm-workspace.yaml`
   open/close the off-canvas drawer below it). `Sidebar` is presentational.
   Router devtools render only in dev.
 - `src/routes/index.tsx` → `/`. `src/routes/login.tsx` → `/login`.
-  `src/routes/settings.tsx` (+ `settings.index.tsx`, `settings.invitations.tsx`,
-  `settings.users.tsx`, `settings.tags.tsx`) →
-  `/settings`, `/settings/invitations`, `/settings/users`, and
-  `/settings/tags`
+  `src/routes/settings.tsx` (+ `settings.index.tsx`, `settings.passkeys.tsx`,
+  `settings.invitations.tsx`, `settings.users.tsx`, `settings.tags.tsx`) →
+  `/settings`, `/settings/passkeys`, `/settings/invitations`,
+  `/settings/users`, and `/settings/tags`
   — see "Settings" below. `src/routes/categories.tsx` → `/categories` — a
   single self-contained route (no nested children — everything happens on
   one page via dialogs) doing its own auth gate rather than splitting into
@@ -127,8 +127,19 @@ that check is informational only and never blocks merging.
 - `src/components/AuthProvider.tsx` resolves the session once on mount via
   `api.GET("/api/auth/me")` and exposes `useAuth() → { status, user, logout }`
   (`status ∈ loading | anonymous | authenticated`; `user` is the generated
-  `components["schemas"]["User"]`). No polling, no focus-refetch. `logout()`
-  calls `api.POST("/api/auth/logout")` and flips to `anonymous` in place.
+  `components["schemas"]["User"]`, which carries the current `session` and
+  its `passkey_registration_until`). No polling, no focus-refetch. `logout()`
+  calls `api.POST("/api/auth/logout")` and flips to `anonymous` in place;
+  `refresh()` re-resolves `/me` (after an in-place passkey sign-in, which sets
+  the cookie via `fetch` rather than a page load); `signOutLocally()` flips to
+  `anonymous` without a request (the session is already gone server-side).
+- Passkeys: `src/lib/webauthn.ts` wraps `navigator.credentials` — native
+  `parse*OptionsFromJSON`/`toJSON` with a base64url fallback for older
+  browsers, and a dismissed prompt (`NotAllowedError`/`AbortError`) reported
+  as `cancelled`, never an error. `src/lib/passkeys.ts` runs the
+  start → prompt → finish ceremonies against `/api/auth/passkeys/*`. Passkeys
+  only work when the browser origin equals `AUTH_BASE_URL` — not on the Vite
+  dev port; test them against the embedded build.
 - `src/components/SidebarUser.tsx` renders the footer user control (initials
   monogram + a `@headlessui/react` menu: "Settings" → `/settings`, then
   "Log out").
@@ -136,7 +147,10 @@ that check is informational only and never blocks merging.
   `api.GET("/api/auth/config")`; when the response's `oidc` is non-null it
   renders a provider button (a plain `<a href={oidc.start_path}>` — a full-page
   navigation, not `fetch`) above the email field with an "or" divider. A null
-  `oidc` or a failed request just shows the email form.
+  `oidc` or a failed request just shows the email form. When the browser has
+  WebAuthn, a "Sign in with a passkey" button sits above everything (no email
+  field — discoverable credentials); success calls `refresh()` and the
+  existing authenticated-visitor redirect takes over.
 - Data fetching is plain `fetch`/`api` calls in effects — no query library yet.
 - **Never** open a database connection from the frontend.
 
@@ -154,6 +168,16 @@ Invitations, and Tags for everyone; Users only when `user.is_admin`) plus
   interaction); a successful language change also calls
   `i18n.changeLanguage()` so the running app switches immediately. A failed
   update reverts the field and shows an inline error.
+- `settings.passkeys.tsx` (`/settings/passkeys`, every authenticated
+  visitor) — lists the visitor's passkeys (`GET /api/auth/passkeys`, the
+  current session's one marked "This session"), adds one (optional name, in a
+  `Modal`) only while `user.session.passkey_registration_until` is in the
+  future — a timer flips the tab to stale on screen, as does a `403` from the
+  server — and otherwise offers "Sign in again": an in-place passkey sign-in
+  when the visitor has one, else sign out → `/login`. Removal is always
+  available behind a confirmation that warns more strongly for the current
+  session's passkey; removing that one calls `signOutLocally()` and navigates
+  to `/login`.
 - `settings.invitations.tsx` (`/settings/invitations`, "My Invitations" tab,
   every authenticated user) — lists the invitations the visitor personally
   created (`GET /api/auth/invites/mine`), with a Revoke action per row

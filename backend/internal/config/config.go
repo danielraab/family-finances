@@ -6,7 +6,9 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,6 +31,10 @@ type Config struct {
 
 	// OIDC holds the single configured OpenID Connect provider.
 	OIDC OIDCConfig
+
+	// RateLimit holds the in-process limits on unauthenticated sign-in
+	// requests (per client IP) and on magic-link mails (per recipient).
+	RateLimit RateLimitConfig
 
 	// AnalyticsScript is an optional, raw HTML snippet (e.g. a
 	// <script>...</script> tag) injected into the served index.html
@@ -74,6 +80,33 @@ type AuthConfig struct {
 
 	// MagicLinkTTL is how long a magic-link token stays valid.
 	MagicLinkTTL time.Duration
+
+	// PasskeyReauthWindow is the maximum age of a web session that may
+	// register a new passkey — a stolen cookie must not be able to plant a
+	// credential. Defaults to 5m; must be positive.
+	PasskeyReauthWindow time.Duration
+
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For is
+	// believed when resolving a client's IP. Empty (the default) means the
+	// header is ignored and the direct peer is the client.
+	TrustedProxies []netip.Prefix
+
+	// CleanupInterval is how often expired sessions, used or expired tokens,
+	// stale OIDC state and passkey challenges are deleted. Defaults to 15m.
+	CleanupInterval time.Duration
+}
+
+// RateLimitConfig is the in-process rate limiting of sign-in endpoints.
+// Limits are per process: several replicas multiply them.
+type RateLimitConfig struct {
+	// IPEnabled turns per-IP limiting on (the default).
+	IPEnabled bool
+	// IPRequests sign-in requests are allowed per client IP per IPWindow.
+	IPRequests int
+	IPWindow   time.Duration
+	// EmailRequests magic-link mails are sent per recipient per EmailWindow.
+	EmailRequests int
+	EmailWindow   time.Duration
 }
 
 // SMTPTLSMode is one of the accepted SMTP_TLS values.
@@ -153,6 +186,30 @@ func Load() (Config, error) {
 	if cfg.Auth.MagicLinkTTL, err = durationEnv("AUTH_MAGIC_LINK_TTL", 15*time.Minute); err != nil {
 		return Config{}, err
 	}
+	if cfg.Auth.PasskeyReauthWindow, err = positiveDurationEnv("AUTH_PASSKEY_REAUTH_WINDOW", 5*time.Minute); err != nil {
+		return Config{}, err
+	}
+	if cfg.Auth.CleanupInterval, err = positiveDurationEnv("AUTH_CLEANUP_INTERVAL", 15*time.Minute); err != nil {
+		return Config{}, err
+	}
+	if cfg.Auth.TrustedProxies, err = prefixListEnv("AUTH_TRUSTED_PROXIES"); err != nil {
+		return Config{}, err
+	}
+	if cfg.RateLimit.IPEnabled, err = boolEnv("RATE_LIMIT_IP_ENABLED", true); err != nil {
+		return Config{}, err
+	}
+	if cfg.RateLimit.IPRequests, err = positiveIntEnv("RATE_LIMIT_IP_REQUESTS", 20); err != nil {
+		return Config{}, err
+	}
+	if cfg.RateLimit.IPWindow, err = positiveDurationEnv("RATE_LIMIT_IP_WINDOW", time.Minute); err != nil {
+		return Config{}, err
+	}
+	if cfg.RateLimit.EmailRequests, err = positiveIntEnv("RATE_LIMIT_EMAIL_REQUESTS", 5); err != nil {
+		return Config{}, err
+	}
+	if cfg.RateLimit.EmailWindow, err = positiveDurationEnv("RATE_LIMIT_EMAIL_WINDOW", 15*time.Minute); err != nil {
+		return Config{}, err
+	}
 	if cfg.Auth.CookieSecure, err = boolEnv("AUTH_COOKIE_SECURE", true); err != nil {
 		return Config{}, err
 	}
@@ -212,6 +269,54 @@ func durationEnv(key string, fallback time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("config: %s: %w", key, err)
 	}
 	return d, nil
+}
+
+// positiveDurationEnv is durationEnv for settings where zero or a negative
+// value would be meaningless rather than "disabled".
+func positiveDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
+	d, err := durationEnv(key, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if d <= 0 {
+		return 0, fmt.Errorf("config: %s: must be a positive duration, got %s", key, d)
+	}
+	return d, nil
+}
+
+func positiveIntEnv(key string, fallback int) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("config: %s: must be a positive integer, got %q", key, raw)
+	}
+	return n, nil
+}
+
+// prefixListEnv parses a comma-separated list of CIDRs; a bare IP is taken
+// as a single-host prefix (/32 or /128).
+func prefixListEnv(key string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, item := range splitList(os.Getenv(key)) {
+		if strings.Contains(item, "/") {
+			p, err := netip.ParsePrefix(item)
+			if err != nil {
+				return nil, fmt.Errorf("config: %s: %w", key, err)
+			}
+			out = append(out, p.Masked())
+			continue
+		}
+		a, err := netip.ParseAddr(item)
+		if err != nil {
+			return nil, fmt.Errorf("config: %s: %w", key, err)
+		}
+		a = a.Unmap()
+		out = append(out, netip.PrefixFrom(a, a.BitLen()))
+	}
+	return out, nil
 }
 
 func boolEnv(key string, fallback bool) (bool, error) {

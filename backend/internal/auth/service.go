@@ -70,6 +70,13 @@ type NewUserHook interface {
 	SeedDefaults(ctx context.Context, ownerID string) error
 }
 
+// Limiter is an in-process rate limiter: Allow records an attempt for key
+// and reports whether it is within the limit, or how long until it would be.
+// internal/ratelimit implements it.
+type Limiter interface {
+	Allow(key string) (ok bool, retryAfter time.Duration)
+}
+
 // Params is the slice of configuration the service needs, mapped from
 // config.Config by package main.
 type Params struct {
@@ -83,6 +90,9 @@ type Params struct {
 	MagicLinkTTL        time.Duration
 	OIDCIssuer          string
 	OIDCLabel           string
+	// PasskeyReauthWindow is the maximum age of a web session that may
+	// register a passkey.
+	PasskeyReauthWindow time.Duration
 }
 
 // Service is the auth use-case layer. It depends only on the Store interface
@@ -91,6 +101,9 @@ type Service struct {
 	store        Store
 	mailer       Mailer
 	oidc         OIDCClient     // nil when no provider is configured
+	webauthn     WebAuthn       // nil when not wired; passkey ceremonies then fail
+	mailLimiter  Limiter        // nil: no per-recipient limit on magic-link mails
+	evicters     []Evicter      // limiters whose idle keys Cleanup drops
 	lang         LanguageLookup // nil when not wired
 	newUserHooks []NewUserHook
 	p            Params
@@ -106,6 +119,18 @@ func WithClock(fn func() time.Time) Option { return func(s *Service) { s.now = f
 // WithLanguageLookup wires the raw-language-preference source for
 // GET /api/auth/me. package main passes internal/settings' Service.
 func WithLanguageLookup(l LanguageLookup) Option { return func(s *Service) { s.lang = l } }
+
+// Evicter is a limiter that can drop the keys it no longer needs.
+// internal/ratelimit's Limiter satisfies it.
+type Evicter interface{ Evict() }
+
+// WithEvicters registers limiters for Cleanup to evict idle keys from.
+func WithEvicters(e ...Evicter) Option {
+	return func(s *Service) { s.evicters = append(s.evicters, e...) }
+}
+
+// WithMailLimiter limits magic-link mails per recipient address.
+func WithMailLimiter(l Limiter) Option { return func(s *Service) { s.mailLimiter = l } }
 
 // WithNewUserHooks wires hooks to run once each brand-new user account is
 // created. package main passes internal/account's and internal/category's
@@ -147,6 +172,16 @@ func (s *Service) StartEmailLogin(ctx context.Context, rawEmail string) error {
 	}
 	if !permitted {
 		return nil
+	}
+	// Per-recipient budget, consulted only for addresses that would really
+	// get a mail: unpermitted ones can neither probe nor drain it. Over
+	// budget is the same silent nil as every other no-mail outcome.
+	if s.mailLimiter != nil {
+		if ok, _ := s.mailLimiter.Allow("mail:" + email); !ok {
+			slog.InfoContext(ctx, "magic-link mail suppressed: recipient rate limit",
+				"recipient_sha256", fmt.Sprintf("%x", sha256.Sum256([]byte(email))))
+			return nil
+		}
 	}
 
 	token, hash, err := newToken()
@@ -431,25 +466,62 @@ func checkAccountUsable(u User) error {
 	return nil
 }
 
+// --- cleanup -------------------------------------------------------------
+
+// Cleanup deletes every short-lived auth record that can never be used again
+// — expired or over-age sessions, consumed or expired magic-link tokens,
+// expired OIDC login state and passkey challenges — and evicts idle
+// rate-limit keys. Each step runs even when an earlier one fails; the
+// failures are returned joined. Invites, users, identities and passkeys are
+// never touched.
+func (s *Service) Cleanup(ctx context.Context) error {
+	now := s.now()
+	err := errors.Join(
+		wrapStep("sessions", s.store.DeleteExpiredSessions(ctx, now, now.Add(-s.p.SessionMaxTTL))),
+		wrapStep("magic-link tokens", s.store.DeleteStaleMagicLinkTokens(ctx, now)),
+		wrapStep("oidc state", s.store.DeleteExpiredOIDCState(ctx, now)),
+		wrapStep("passkey challenges", s.store.DeleteExpiredWebAuthnChallenges(ctx, now)),
+	)
+	for _, e := range s.evicters {
+		e.Evict()
+	}
+	return err
+}
+
+func wrapStep(step string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("cleanup %s: %w", step, err)
+}
+
 // --- sessions -----------------------------------------------------------
 
 // Authenticate resolves a presented session token to its user, applying the
 // sliding-expiry bump and the absolute cap. It returns ErrNotFound for any
 // missing, expired, or over-age session.
 func (s *Service) Authenticate(ctx context.Context, token string) (User, error) {
+	user, _, err := s.AuthenticateSession(ctx, token)
+	return user, err
+}
+
+// AuthenticateSession is Authenticate that also returns the session itself —
+// its creation time, client, and passkey are what the passkey endpoints
+// authorize on. internal/httpapi's middleware calls this one.
+func (s *Service) AuthenticateSession(ctx context.Context, token string) (User, Session, error) {
 	if token == "" {
-		return User{}, ErrNotFound
+		return User{}, Session{}, ErrNotFound
 	}
 	hash := hashToken(token)
 	sess, err := s.store.SessionByTokenHash(ctx, hash)
 	if err != nil {
-		return User{}, err
+		return User{}, Session{}, err
 	}
 
 	now := s.now()
 	if now.After(sess.ExpiresAt) || now.Sub(sess.CreatedAt) >= s.p.SessionMaxTTL {
 		_ = s.store.DeleteSessionByTokenHash(ctx, hash)
-		return User{}, ErrNotFound
+		return User{}, Session{}, ErrNotFound
 	}
 
 	// Sliding expiry: once past half the sliding window since last activity,
@@ -460,19 +532,20 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 			newExpiry = cap
 		}
 		_ = s.store.TouchSession(ctx, sess.ID, now, newExpiry)
+		sess.LastSeenAt, sess.ExpiresAt = now, newExpiry
 	}
 
 	user, err := s.store.UserByID(ctx, sess.UserID)
 	if err != nil {
-		return User{}, err
+		return User{}, Session{}, err
 	}
 	// Belt-and-suspenders: disable/delete already revoke sessions
 	// immediately, but a session row can outlive that in a race — reject it
 	// here too rather than trusting the row alone.
 	if user.Disabled || user.DeletedAt != nil {
-		return User{}, ErrNotFound
+		return User{}, Session{}, ErrNotFound
 	}
-	return user, nil
+	return user, sess, nil
 }
 
 // Logout revokes the session identified by token. It is idempotent: an unknown
@@ -838,6 +911,12 @@ func (s *Service) issueSession(ctx context.Context, user User, sc SessionContext
 }
 
 func (s *Service) issueSessionToken(ctx context.Context, user User, sc SessionContext) (string, error) {
+	return s.issueSessionTokenWith(ctx, user, sc, "")
+}
+
+// issueSessionTokenWith issues a session, recording the passkey that created
+// it ("" for any other sign-in method) so deleting that passkey revokes it.
+func (s *Service) issueSessionTokenWith(ctx context.Context, user User, sc SessionContext, passkeyID string) (string, error) {
 	token, hash, err := newToken()
 	if err != nil {
 		return "", err
@@ -855,6 +934,8 @@ func (s *Service) issueSessionToken(ctx context.Context, user User, sc SessionCo
 		CreatedAt:  now,
 		LastSeenAt: now,
 		ExpiresAt:  now.Add(s.p.SessionTTL),
+
+		PasskeyCredentialID: passkeyID,
 	}, hash)
 	if err != nil {
 		return "", err

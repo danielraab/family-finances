@@ -10,8 +10,11 @@ import (
 	"time"
 
 	"at.draab/familyfinances/internal/auth"
+	"at.draab/familyfinances/internal/clientip"
 	"at.draab/familyfinances/internal/httpapi"
 	"at.draab/familyfinances/internal/openapicheck"
+	"at.draab/familyfinances/internal/passkeyauth"
+	"at.draab/familyfinances/internal/ratelimit"
 	"at.draab/familyfinances/internal/storage/memory"
 )
 
@@ -27,6 +30,7 @@ type harness struct {
 	svc    *auth.Service
 	store  *memory.AuthStore
 	mailer *stubMailer
+	clock  *clock
 }
 
 func newHarness(t *testing.T, opts ...svcOpt) *harness {
@@ -39,15 +43,41 @@ func newHarness(t *testing.T, opts ...svcOpt) *harness {
 	}
 	p := baseParams()
 	p.OIDCLabel = cfg.label
-	svc := auth.NewService(store, mailer, cfg.oidc, p, auth.WithClock(cfg.clock.Now))
-	h := auth.NewHandler(svc, auth.HandlerOptions{RenderError: httpapi.WriteError, CookieSecure: true})
-	return &harness{h: h, svc: svc, store: store, mailer: mailer}
+	if cfg.reauthWindow != 0 {
+		p.PasskeyReauthWindow = cfg.reauthWindow
+	}
+	wa, err := passkeyauth.New(p.BaseURL)
+	if err != nil {
+		t.Fatalf("passkeyauth.New: %v", err)
+	}
+	svcOpts := []auth.Option{auth.WithClock(cfg.clock.Now), auth.WithWebAuthn(wa)}
+	if cfg.mailLimit > 0 {
+		svcOpts = append(svcOpts, auth.WithMailLimiter(ratelimit.New(cfg.mailLimit, 15*time.Minute, cfg.clock.Now)))
+	}
+	svc := auth.NewService(store, mailer, cfg.oidc, p, svcOpts...)
+	hopts := auth.HandlerOptions{
+		RenderError:  httpapi.WriteError,
+		CookieSecure: true,
+		ClientIP:     clientip.Resolver{Trusted: cfg.trusted}.String,
+	}
+	if cfg.ipLimit > 0 {
+		hopts.IPLimiter = ratelimit.New(cfg.ipLimit, time.Minute, cfg.clock.Now)
+	}
+	h := auth.NewHandler(svc, hopts)
+	return &harness{h: h, svc: svc, store: store, mailer: mailer, clock: cfg.clock}
 }
 
+// do runs req as user (anonymous when nil). A user gets a fresh web session
+// on the context too, as the httpapi middleware would attach; tests that
+// need a real, stored session use doToken instead.
 func (hr *harness) do(t *testing.T, req *http.Request, user *auth.User) *httptest.ResponseRecorder {
 	t.Helper()
 	if user != nil {
-		req = req.WithContext(auth.WithUser(req.Context(), *user))
+		ctx := auth.WithUser(req.Context(), *user)
+		ctx = auth.WithSession(ctx, auth.Session{
+			ID: "test-session", UserID: user.ID, Client: auth.ClientWeb, CreatedAt: hr.clock.Now(),
+		})
+		req = req.WithContext(ctx)
 	}
 	rec := httptest.NewRecorder()
 	hr.h.ServeHTTP(rec, req)

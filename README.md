@@ -49,8 +49,8 @@ It ships as a Go HTTP API (`backend/`) plus a client-only web app
 - **Sharing** — invite other registered users to an account, category, or
   tag with tiered permissions.
 - **Multi-user administration** — invites, admin roles, disable/soft-delete.
-- **Magic-link + optional OIDC authentication**, English/German i18n, and a
-  light/dark/system theme.
+- **Magic-link, passkey, and optional OIDC authentication**, English/German
+  i18n, and a light/dark/system theme.
 
 See **[docs/FEATURES.md](docs/FEATURES.md)** for a full walkthrough with
 screenshots of every feature above.
@@ -110,6 +110,22 @@ pnpm dev                 # http://localhost:3000
 
 Sign in at `http://localhost:3000` — magic-link emails land in mailpit at
 `http://localhost:8025` in local dev (no real SMTP required).
+
+### Passkeys
+
+Once signed in, a user can add passkeys under **Settings → Passkeys** and then
+use **Sign in with a passkey** on the login page — no email address needed
+(discoverable credentials). Adding a passkey requires a sign-in from the last
+`AUTH_PASSKEY_REAUTH_WINDOW` (default 5 minutes), so a stolen session cookie
+can't register an attacker's passkey; removing one is always allowed and signs
+out every session that passkey created.
+
+The WebAuthn relying party is derived from `AUTH_BASE_URL`: its host is the
+relying-party ID and its origin is the only accepted one. Passkeys therefore
+only work when the browser opens the app at exactly that origin — the
+embedded build (`http://localhost:8080` with `AUTH_BASE_URL` set to it) works,
+the Vite dev server on `:3000` does not. Changing `AUTH_BASE_URL`'s host later
+makes existing passkeys stop working; users sign in by email and add new ones.
 
 ## Architecture
 
