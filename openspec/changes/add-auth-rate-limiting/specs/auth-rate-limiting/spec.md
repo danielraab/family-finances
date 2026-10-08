@@ -81,6 +81,13 @@ requests SHALL get `429` with `Retry-After` and SHALL have no side effect.
 - **THEN** further requests receive `429` with a `Retry-After` header in
   seconds, and no mail is sent and no session is created
 
+#### Scenario: Refusal is logged with the client IP
+
+- **WHEN** a request is refused by the per-IP limiter
+- **THEN** the backend logs one line naming the resolved client IP (the
+  forwarded client behind a trusted proxy), the method, the path and the
+  retry delay in seconds; allowed requests log no such line
+
 #### Scenario: Budget recovers after the window
 
 - **WHEN** a throttled client IP waits until its window has passed

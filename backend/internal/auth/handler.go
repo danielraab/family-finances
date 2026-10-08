@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"log/slog"
 	"math"
 	"net"
 	"net/http"
@@ -614,11 +615,17 @@ func wantsJSON(r *http.Request) bool {
 func (h *Handler) throttle(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if h.ipLimiter != nil {
-			if ok, retryAfter := h.ipLimiter.Allow("ip:" + h.clientIP(r)); !ok {
+			ip := h.clientIP(r)
+			if ok, retryAfter := h.ipLimiter.Allow("ip:" + ip); !ok {
 				secs := int(math.Ceil(retryAfter.Seconds()))
 				if secs < 1 {
 					secs = 1
 				}
+				// The resolved client IP (behind trusted proxies, the
+				// forwarded one), so an operator can see who is hammering
+				// sign-in — the counterpart of the per-recipient log line.
+				slog.InfoContext(r.Context(), "sign-in request refused: client IP rate limit",
+					"ip", ip, "method", r.Method, "path", r.URL.Path, "retry_after_s", secs)
 				w.Header().Set("Retry-After", strconv.Itoa(secs))
 				h.renderError(w, r, ErrRateLimited)
 				return
