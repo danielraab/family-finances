@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"at.draab/familyfinances/internal/aaguid"
 	"at.draab/familyfinances/internal/account"
 	"at.draab/familyfinances/internal/auth"
 	"at.draab/familyfinances/internal/category"
@@ -264,6 +265,7 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, mail
 		passkeyOption(cfg.Auth.BaseURL),
 		auth.WithMailLimiter(mailLimiter),
 		auth.WithEvicters(mailLimiter),
+		auth.WithPasskeyProviders(passkeyProvider),
 	}
 	handlerOpts := auth.HandlerOptions{
 		RenderError:  httpapi.WriteError,
@@ -291,6 +293,13 @@ func buildAuth(ctx context.Context, cfg config.Config, pool *postgres.Pool, mail
 	}, opts...)
 
 	return svc, auth.NewHandler(svc, handlerOpts), nil
+}
+
+// passkeyProvider adapts internal/aaguid's embedded provider list to
+// auth.ProviderLookup.
+func passkeyProvider(id []byte) (auth.PasskeyProvider, bool) {
+	p, ok := aaguid.Lookup(id)
+	return auth.PasskeyProvider{Name: p.Name, IconLight: p.IconLight, IconDark: p.IconDark}, ok
 }
 
 // passkeyOption wires the WebAuthn relying party for AUTH_BASE_URL. Without a

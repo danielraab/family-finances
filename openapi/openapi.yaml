@@ -3055,7 +3055,7 @@ components:
 
     Passkey:
       type: object
-      required: [id, name, created_at, last_used_at, backed_up, current]
+      required: [id, name, created_at, last_used_at, backed_up, current, provider]
       properties:
         id:
           type: string
@@ -3074,6 +3074,29 @@ components:
         current:
           type: boolean
           description: The requesting session was created by this passkey.
+        provider:
+          description: >-
+            Who made the passkey, from its authenticator AAGUID and the
+            community passkey-provider list embedded in the backend — display
+            only, never a trust signal. Null when the authenticator reported no
+            AAGUID (all zeros) or an unknown one.
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/PasskeyProvider"
+
+    PasskeyProvider:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: Google Password Manager
+        icon_light:
+          type: string
+          description: SVG data URI (`data:image/svg+xml;base64,…`) for light backgrounds.
+        icon_dark:
+          type: string
+          description: SVG data URI (`data:image/svg+xml;base64,…`) for dark backgrounds.
 
     PasskeyCeremony:
       type: object

@@ -1686,6 +1686,8 @@ export interface components {
             /** Format: date-time */
             last_used_at: string | null;
             name: string;
+            /** @description Who made the passkey, from its authenticator AAGUID and the community passkey-provider list embedded in the backend — display only, never a trust signal. Null when the authenticator reported no AAGUID (all zeros) or an unknown one. */
+            provider: components["schemas"]["PasskeyProvider"] | null;
         };
         PasskeyCeremony: {
             /** @description Echo on the matching finish call; single-use, expires after 5 minutes. */
@@ -1712,6 +1714,14 @@ export interface components {
                 id: string;
                 is_admin: boolean;
             };
+        };
+        PasskeyProvider: {
+            /** @description SVG data URI (`data:image/svg+xml;base64,…`) for dark backgrounds. */
+            icon_dark?: string;
+            /** @description SVG data URI (`data:image/svg+xml;base64,…`) for light backgrounds. */
+            icon_light?: string;
+            /** @example Google Password Manager */
+            name: string;
         };
         PasskeyRegistrationFinish: {
             ceremony_id: string;

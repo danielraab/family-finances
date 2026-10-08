@@ -86,7 +86,8 @@ and origin derived from `AUTH_BASE_URL`, and user verification.
 
 #### Scenario: Default name
 
-- **WHEN** finish is called without a name, or with only whitespace
+- **WHEN** finish is called without a name, or with only whitespace, and the
+  passkey's provider is unknown (see `show-passkey-provider`)
 - **THEN** the passkey is stored with the default name `"Passkey"`
 
 #### Scenario: Over-long name is rejected

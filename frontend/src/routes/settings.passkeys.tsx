@@ -17,6 +17,36 @@ export const Route = createFileRoute("/settings/passkeys")({
   component: PasskeysTab,
 });
 
+type PasskeyProvider = NonNullable<Passkey["provider"]>;
+
+/**
+ * The passkey's provider logo — the light or dark variant to match the theme
+ * (either one when only one exists) — or the generic key glyph when the
+ * provider is unknown. The icons are SVG data URIs from the backend's
+ * embedded AAGUID list; an <img> renders them without running any script.
+ */
+function ProviderIcon({ provider }: { provider: PasskeyProvider | null }) {
+  const light = provider?.icon_light ?? provider?.icon_dark;
+  const dark = provider?.icon_dark ?? provider?.icon_light;
+  if (!light || !dark) {
+    // Same 20px box as the logos, so names line up across rows.
+    return (
+      <span className="flex size-5 shrink-0 items-center justify-center">
+        <KeyRound
+          aria-hidden="true"
+          className="size-4 text-zinc-500 dark:text-zinc-400"
+        />
+      </span>
+    );
+  }
+  return (
+    <>
+      <img src={light} alt="" className="size-5 shrink-0 dark:hidden" />
+      <img src={dark} alt="" className="hidden size-5 shrink-0 dark:block" />
+    </>
+  );
+}
+
 function formatDate(iso: string, lang: string): string {
   return new Intl.DateTimeFormat(lang, { dateStyle: "medium" }).format(
     new Date(iso),
@@ -200,10 +230,7 @@ function PasskeysTab() {
                 className="flex items-center justify-between gap-3 rounded-md border border-black/10 px-3 py-2 text-sm dark:border-white/10"
               >
                 <span className="flex items-center gap-3">
-                  <KeyRound
-                    aria-hidden="true"
-                    className="size-4 shrink-0 text-zinc-500 dark:text-zinc-400"
-                  />
+                  <ProviderIcon provider={p.provider} />
                   <span className="flex flex-col gap-0.5 leading-tight">
                     <span className="flex flex-wrap items-center gap-2 font-medium">
                       {p.name}
@@ -214,6 +241,12 @@ function PasskeysTab() {
                       )}
                     </span>
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {p.provider && p.provider.name !== p.name && (
+                        <>
+                          {p.provider.name}
+                          {" · "}
+                        </>
+                      )}
                       {t("settings.passkeys.added", {
                         date: formatDate(p.created_at, lang),
                       })}
