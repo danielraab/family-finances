@@ -5,6 +5,7 @@
 - [x] 1.1 Replace the persistent amount-bound grid wrapper with a compact popover trigger and small overlay containing both controls; verify the pair opens and closes together.
 - [x] 1.2 Add a precision-trimmed stored-amount display helper within the component and verify whole and fractional values preserve meaningful digits without trailing zeroes.
 - [x] 1.3 Add translated trigger summary and placeholder text in English and German, and verify no new hardcoded user-facing text is introduced.
+- [x] 1.4 Add accessible clear actions for each bound and the full range, and verify each removes the corresponding URL filter state.
 
 ## 2. Verification
 
