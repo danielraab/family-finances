@@ -50,6 +50,9 @@ func main() {
 		slog.Error("load config", "error", err)
 		os.Exit(1)
 	}
+	// LOG_LEVEL: raise or lower the default logger's floor without swapping
+	// its handler, so the line format stays as it is.
+	slog.SetLogLoggerLevel(cfg.Log.Level)
 
 	if cfg.DatabaseURL == "" {
 		slog.Error("DATABASE_URL is required and unset")

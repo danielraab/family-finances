@@ -1,8 +1,10 @@
 package auth_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -54,6 +56,43 @@ func TestIPLimitRefusesOverBudget(t *testing.T) {
 	conforms(t, "POST", "/api/auth/email/start", rec)
 	if hr.mailer.count() != sent {
 		t.Fatal("a refused request still sent a mail")
+	}
+}
+
+func TestIPLimitRefusalIsLoggedWithTheClientIP(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	hr := newHarness(t, withIPLimit(1), withTrustedProxies("10.0.0.0/8"))
+	viaProxy := func() *httptest.ResponseRecorder {
+		req := emailStart("a@example.com")
+		req.Header.Set("X-Forwarded-For", "198.51.100.1")
+		return hr.fromIP(t, req, "10.0.0.2")
+	}
+	viaProxy()
+	if strings.Contains(buf.String(), "client IP rate limit") {
+		t.Fatal("an allowed request was logged as refused")
+	}
+	if rec := viaProxy(); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+
+	var entry map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		if strings.Contains(line, "client IP rate limit") {
+			if err := json.Unmarshal([]byte(line), &entry); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if entry == nil {
+		t.Fatalf("no refusal log line in %q", buf.String())
+	}
+	if entry["ip"] != "198.51.100.1" || entry["path"] != "/api/auth/email/start" ||
+		entry["method"] != "POST" || entry["retry_after_s"] == nil {
+		t.Fatalf("log entry = %v, want the forwarded client IP, method, path and retry_after_s", entry)
 	}
 }
 

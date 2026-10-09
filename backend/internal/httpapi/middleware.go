@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"at.draab/familyfinances/internal/config"
 )
 
 type ctxKey int
@@ -36,9 +38,14 @@ func Logger(ctx context.Context) *slog.Logger {
 // withMiddleware wraps h with the standard chain, outermost first:
 // requestContext (assigns the request id, request-scoped logger, and
 // X-Request-Id header), recoverPanic (turns a panic in any inner layer into a
-// 500), then logRequests (one structured access-log line per request).
-func withMiddleware(h http.Handler) http.Handler {
-	return requestContext(recoverPanic(logRequests(h)))
+// 500), then logRequests (one structured access-log line per request, per
+// LOG_REQUESTS: every request, only status >= 400, or — for off — no
+// logRequests at all).
+func withMiddleware(h http.Handler, requests config.RequestLogMode) http.Handler {
+	if requests == config.RequestLogOff {
+		return requestContext(recoverPanic(h))
+	}
+	return requestContext(recoverPanic(logRequests(h, requests == config.RequestLogErrors)))
 }
 
 func requestContext(next http.Handler) http.Handler {
@@ -53,12 +60,19 @@ func requestContext(next http.Handler) http.Handler {
 	})
 }
 
-func logRequests(next http.Handler) http.Handler {
+// logRequests writes the access line at Info (so LOG_LEVEL above info hides
+// it too). With errorsOnly (LOG_REQUESTS=errors) a response below 400 is not
+// logged.
+func logRequests(next http.Handler, errorsOnly bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
 
 		next.ServeHTTP(rec, r)
+
+		if errorsOnly && rec.status < http.StatusBadRequest {
+			return
+		}
 
 		Logger(r.Context()).LogAttrs(r.Context(), slog.LevelInfo, "request",
 			slog.String("method", r.Method),

@@ -147,6 +147,6 @@ func New(cfg config.Config, deps Deps) *http.Server {
 	}
 	return &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: withMiddleware(handler),
+		Handler: withMiddleware(handler, cfg.Log.Requests),
 	}
 }

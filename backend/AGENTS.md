@@ -151,8 +151,13 @@ to status codes in the one place — `httpapi/respond.go`.
   below). Go does not auto-load `.env` — export the vars or use direnv.
   `config.Load()` returns `(Config, error)` and rejects a malformed duration,
   bool, or `SMTP_TLS` value.
-- Logging via `log/slog` to stderr; one structured line per request from the
-  logging middleware.
+- Logging via `log/slog` to stderr, through the default logger (`main.go`
+  never replaces its handler, so the line format is stable). `LOG_LEVEL`
+  (`debug|info|warn|error`, default `info`) sets its floor via
+  `slog.SetLogLoggerLevel`; `LOG_REQUESTS` (`all|errors|off`, default `all`)
+  decides which requests get the middleware's `Info` access line — `errors`
+  means status >= 400, `off` drops the logging middleware. A level above
+  `info` hides access lines too.
 
 ## Persistence
 
@@ -237,13 +242,15 @@ to status codes in the one place — `httpapi/respond.go`.
 - **Rate limiting and cleanup.** The seven unauthenticated sign-in routes
   (magic-link start/callback, OIDC start/callback, invite acceptance, passkey
   login start/finish) share one per-IP budget (`Handler.throttle`, before the
-  body is read; `429` + `Retry-After`, `ErrRateLimited`), keyed on
+  body is read; `429` + `Retry-After`, `ErrRateLimited`, and an `Info` log line
+  with the resolved client `ip`, method, path and `retry_after_s`), keyed on
   `internal/clientip`'s resolution of the client — `X-Forwarded-For` is walked
   right to left and believed only from `AUTH_TRUSTED_PROXIES`; the same
   resolved IP is recorded on new sessions. `RATE_LIMIT_IP_ENABLED=false`
   leaves the limiter nil. Magic-link mails are limited per normalized
   recipient inside `StartEmailLogin`, consulted only for permitted addresses;
-  over budget is the same silent `200`. Both limiters (`internal/ratelimit`)
+  over budget is the same silent `200`, logged with a SHA-256 of the address
+  (never the address itself). Both limiters (`internal/ratelimit`)
   are in memory and per process. `main.go`'s `runCleanup` calls
   `Service.Cleanup` at startup and every `AUTH_CLEANUP_INTERVAL` on the
   server's shutdown context: idempotent `DELETE`s of expired/over-age
