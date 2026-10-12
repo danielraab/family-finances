@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-12
+
+### Upgrade notes
+
+- **Behind a reverse proxy, set `AUTH_TRUSTED_PROXIES`** to the proxy's
+  address or CIDR. Per-IP rate limiting of the sign-in endpoints is on by
+  default, and without this setting every visitor appears to come from the
+  proxy and shares one budget. `RATE_LIMIT_IP_ENABLED=false` switches it
+  off.
+- **Passkeys need the browser origin to equal `AUTH_BASE_URL`**: its host
+  is the WebAuthn relying-party ID and its origin the only accepted one.
+  Changing the host later makes existing passkeys stop working.
+- Database migration `0032_passkeys` runs automatically at startup.
+- Every new setting is optional; unset keeps the documented default (see
+  `backend/.env.example`). An invalid value makes the backend refuse to
+  start.
+
+### Added
+
+- **Passkey sign-in.** Signed-in users can add one or more passkeys under
+  Settings → Passkeys and then use "Sign in with a passkey" on the login
+  page, with no email address needed (discoverable credentials, user
+  verification required). Adding a passkey requires a sign-in from the last
+  `AUTH_PASSKEY_REAUTH_WINDOW` (default 5 minutes) on a browser session, so
+  a stolen session cookie can't register an attacker's passkey; the tab
+  explains the rule and offers "Sign in again". Removing a passkey is
+  always allowed and signs out every session that passkey created (and
+  only those).
+- Passkeys show which provider made them — Apple Passwords, Google
+  Password Manager, Windows Hello, 1Password and others — with a logo
+  matched to the light or dark theme, from an embedded copy of the
+  community AAGUID list (no requests to third parties). A passkey added
+  without a name is named after its provider.
+- **Rate limiting of sign-in.** The unauthenticated sign-in endpoints
+  (magic link, OIDC, invite acceptance, passkey sign-in) share a per-IP
+  limit (default 20 requests per minute; `RATE_LIMIT_IP_*`); over it, the
+  response is `429` with `Retry-After` and the login page says "Too many
+  attempts". Magic-link mails are limited per recipient (default 5 per
+  15 minutes; `RATE_LIMIT_EMAIL_*`) — extra requests still answer `200` but
+  send nothing, so the limit can't be used to discover accounts. Both
+  refusals are logged, the per-IP one with the client's IP and the
+  per-recipient one with a hash of the address.
+- `AUTH_TRUSTED_PROXIES`: `X-Forwarded-For` is believed only from these
+  proxies, walked right to left so a client can't forge its address.
+- A cleanup job, at startup and every `AUTH_CLEANUP_INTERVAL` (default
+  15 minutes), deletes expired sessions, used or expired magic-link
+  tokens, stale OIDC sign-in state and expired passkey challenges.
+  Invites, users and passkeys are never touched.
+- `LOG_LEVEL` (`debug`/`info`/`warn`/`error`) and `LOG_REQUESTS`
+  (`all`/`errors`/`off`) control log volume; `errors` keeps only request
+  lines for responses with status 400 or above. The log line format is
+  unchanged.
+- The `/entries` ledger can be filtered by amount. The range matches the
+  amount's magnitude, so "50 to 100" finds both income and expenses of that
+  size, and it sits in one compact control with a short summary, per-bound
+  and combined clear actions, and no trailing zeroes.
+
+### Changed
+
+- Sessions now record the real client IP (the forwarded one behind a
+  trusted proxy) instead of the proxy's address.
+- `GET /api/auth/me` also returns the current `session`: its creation time,
+  client type, and until when it may register a passkey.
+
+### Build
+
+- CI builds the production container image on pull requests and runs the
+  PR validation jobs after changes merge to `master`; the contract check
+  now also runs when frontend tooling changes.
+- New backend dependency `github.com/go-webauthn/webauthn` for passkey
+  verification. TypeScript is pinned to a version compatible with
+  `openapi-typescript`, and other frontend dependencies were updated.
+
 ## [0.4.6] - 2026-09-22
 
 ### Added
@@ -418,7 +491,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Initial tagged snapshot of the project.
 
-[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/danielraab/family-finances/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/danielraab/family-finances/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/danielraab/family-finances/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/danielraab/family-finances/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/danielraab/family-finances/compare/v0.4.3...v0.4.4
