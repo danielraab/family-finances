@@ -50,20 +50,28 @@ services:
       db:
         condition: service_healthy
 
-
-  adminer:  # pgAdmin would be an alternative 
-    image: adminer:latest
+  dbgate:
+    image: dbgate/dbgate:latest
     profiles:
       - "dev"
       - "dev-only"
     environment:
-      ADMINER_DEFAULT_SERVER: db
+      # Preconfigured connection to the compose database.
+      CONNECTIONS: familyfinances
+      LABEL_familyfinances: family-finances (local)
+      ENGINE_familyfinances: postgres@dbgate-plugin-postgres
+      SERVER_familyfinances: db
+      PORT_familyfinances: "5432"
+      USER_familyfinances: familyfinances
+      PASSWORD_familyfinances: familyfinances
+      DATABASE_familyfinances: familyfinances
     ports:
-      - "8081:8080" # web UI (8080 on the host is the app's port)
+      - "8081:3000" # web UI (3000 on the host is the Vite dev server, 8080 the app)
+    volumes:
+      - dbgate-dev:/root/.dbgate
     depends_on:
       db:
         condition: service_healthy
-
 
   mailpit:
     image: axllent/mailpit:latest
@@ -90,4 +98,5 @@ services:
 
 volumes:
   pgdata:
+  dbgate-dev:
   mailpit-dev:

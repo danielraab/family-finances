@@ -91,10 +91,21 @@ production they ship as a single Docker image — see [Architecture](#architectu
 
 ### Run it
 
-Start PostgreSQL, then the backend:
+The quickest way is the dev script at the repo root:
 
 ```bash
-docker compose --profile dev up -d # PostgreSQL on localhost:5432, adminer on 8081, mailpit on 8025
+./dev.sh                 # dev containers + backend + frontend in one terminal
+```
+
+It starts the compose `dev` profile (PostgreSQL, dbgate, mailpit), copies
+`backend/.env.example` to `backend/.env` if it's missing, then runs the Go
+backend and the Vite dev server. Ctrl+C stops everything (containers are
+stopped, not removed — `docker compose --profile dev down` removes them).
+
+To run the pieces by hand instead, start PostgreSQL, then the backend:
+
+```bash
+docker compose --profile dev up -d # PostgreSQL on localhost:5432, dbgate on 8081, mailpit on 8025
 cd backend
 set -a && source .env && set +a  # or: export DATABASE_URL=postgres://familyfinances:familyfinances@localhost:5432/familyfinances?sslmode=disable
 go run .                 # http://localhost:8080
