@@ -7,7 +7,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.10.0
 	github.com/getkin/kin-openapi v0.153.0
 	github.com/go-webauthn/webauthn v0.18.2
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	golang.org/x/oauth2 v0.38.0
 )
 
